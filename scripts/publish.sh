@@ -69,7 +69,9 @@ json.dump(entries, open(path, "w"), indent=2)
 open(path, "a").write("\n")
 PY
 
-echo "version set in Cargo.toml, pyproject.toml, DESCRIPTION, package.json, config.json"
+cargo update --workspace --manifest-path core/Cargo.toml --quiet
+
+echo "version set in Cargo.toml, Cargo.lock, pyproject.toml, DESCRIPTION, package.json, config.json"
 echo
 
 make --no-print-directory check-version
