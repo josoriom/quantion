@@ -29,7 +29,7 @@ from quantion.file import SampleFile
 from quantion._pack import pack_peak_options, encode_target_ids, unpack_targets
 from quantion._shared import to_cores
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "Quantion",
