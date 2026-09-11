@@ -1,12 +1,14 @@
-<p align="center">
-  <img src="assets/logo.svg" alt="Quantion logo" height="120">
-  &nbsp;&nbsp;&nbsp;
-  <img src="assets/icon.svg" alt="Quantion icon" height="120">
-</p>
-
-[![test](https://github.com/josoriom/msutils/actions/workflows/test.yml/badge.svg)](https://github.com/josoriom/msutils/actions/workflows/test.yml)
-
 # Quant·ion
+
+<img src="assets/icon.svg" align="right" width="200" alt="Quantion icon">
+
+[![test](https://github.com/josoriom/quantion/actions/workflows/test.yml/badge.svg)](https://github.com/josoriom/quantion/actions/workflows/test.yml)
+
+**Ionic Toolkit for LCMS data processing.**
+
+A Rust core with bindings for R, Python and JavaScript.
+
+<br clear="right">
 
 ## Install
 
