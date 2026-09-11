@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="Quantion logo" height="120">
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/icon.svg" alt="Quantion icon" height="120">
+</p>
+
 [![test](https://github.com/josoriom/msutils/actions/workflows/test.yml/badge.svg)](https://github.com/josoriom/msutils/actions/workflows/test.yml)
 
 # Quant·ion
