@@ -1,6 +1,6 @@
 {
   "name": "quantion",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "quantion: Rust core with WASM bindings",
   "license": "MIT",
   "type": "module",

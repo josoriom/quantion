@@ -1,6 +1,6 @@
 [package]
 name = "quantion"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [lib]
@@ -17,7 +17,7 @@ strip = "symbols"
 
 [dependencies]
 bytes = "1.12.1"
-ionic = { git = "https://github.com/josoriom/ionic", branch = "main", version = "0.1.0" }
+ionic = { git = "https://github.com/phenological/ionic", branch = "main", version = "0.1.0" }
 memmap2 = "0.9.11"
 serde = { version = "1.0.229", features = ["derive", "rc"] }
 

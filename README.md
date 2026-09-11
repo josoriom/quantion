@@ -3,6 +3,7 @@
 <img src="assets/icon.svg" align="right" width="200" alt="Quantion icon">
 
 [![test](https://github.com/phenological/quantion/actions/workflows/test.yml/badge.svg)](https://github.com/phenological/quantion/actions/workflows/test.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22700673.svg)](https://doi.org/10.5281/zenodo.22700673)
 
 **Ionic Toolkit for LCMS data processing.**
 
