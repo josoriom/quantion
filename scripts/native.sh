@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# build for the machine you are on, into artifacts/<version>/<platform>/
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,7 +46,6 @@ mkdir -p "$out"
 built="core/target/release/$library"
 [ -f "$built" ] || { echo "cargo did not produce $built"; exit 1; }
 
-# every wrapper looks for libquantion.dll on Windows, but cargo emits quantion.dll
 case "$platform" in
   windows-*) cp "$built" "$out/libquantion.dll" ;;
   *)         cp "$built" "$out/$library" ;;

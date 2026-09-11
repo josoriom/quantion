@@ -13,7 +13,7 @@ A \emph{sample file} is a pointer to a parsed mzML held in memory, or to an ion 
 \emph{XY data} is a pair of numeric vectors, where \code{x} is retention time and \code{y} is intensity.
 }
 \section{Install}{
-\code{remotes::install_github("josoriom/quantion", subdir = "wrappers/r")}
+\code{remotes::install_github("phenological/quantion", subdir = "wrappers/r")}
 }
 \section{Load a file}{
 \code{\link{parse_mzml}()} — load an mzML into a sample file.

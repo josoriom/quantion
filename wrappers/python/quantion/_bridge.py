@@ -537,7 +537,7 @@ def load_library(path: Optional[str] = None) -> tuple[ctypes.CDLL, _ABI]:
     if path is None:
         raise FileNotFoundError(
             f"quantion: no library for {_platform_dir()}. "
-            f"Build one with 'make {_platform_dir()}', "
+            "Build one with 'make native', "
             "or set QUANTION_LIB to a library file, "
             "or QUANTION_ARTIFACTS_ROOT to the artifacts folder."
         )

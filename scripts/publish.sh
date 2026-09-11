@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# set the version everywhere, release, commit, tag, push. takes VERSION=X.Y.Z
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -73,29 +72,16 @@ PY
 echo "version set in Cargo.toml, pyproject.toml, DESCRIPTION, package.json, config.json"
 echo
 
-make --no-print-directory release
-
-echo
-echo "verifying artifact checksums against manifest.json..."
-OUT="artifacts/$version" python3 - <<'PY'
-import json, hashlib, os, sys
-directory = os.environ["OUT"]
-manifest = json.load(open(os.path.join(directory, "manifest.json")))
-bad = [
-    name for name, want in manifest["files"].items()
-    if "sha256:" + hashlib.sha256(open(os.path.join(directory, name), "rb").read()).hexdigest() != want
-]
-sys.exit("checksum mismatch: " + ", ".join(bad)) if bad else print("checksums match")
-PY
+make --no-print-directory check-version
 
 echo
 git add core/Cargo.toml core/Cargo.lock wrappers/python/pyproject.toml \
         wrappers/python/quantion/__init__.py wrappers/r/DESCRIPTION \
-        wrappers/js/package.json config.json "artifacts/$version"
-git commit -m "$message"
+        wrappers/js/package.json config.json
+git diff --cached --quiet || git commit -m "$message"
 git tag -a "v$version" -m "$message"
 git push origin HEAD
 git push origin "v$version"
 
 echo
-echo "published v$version"
+echo "pushed v$version; the release workflow builds the binaries and attaches them to the GitHub release"

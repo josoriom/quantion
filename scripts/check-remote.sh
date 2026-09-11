@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# fail if a wrapper reads a remote ion file wrongly, or reads more than it needs
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

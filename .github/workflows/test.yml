@@ -3,7 +3,6 @@ name: test
 on:
   push:
     branches: ["main"]
-    tags: ["v*"]
   pull_request:
 
 jobs:
@@ -103,29 +102,3 @@ jobs:
           npm run tsc-cjs
           npm run build
           npx jest
-
-  release:
-    name: release is clear
-    needs: [check, wasm]
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: The tag matches the version in the tree
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          version="$(sed -n 's/^version = "\(.*\)"/\1/p' core/Cargo.toml | head -1)"
-          [ "$tag" = "$version" ] || { echo "tag $GITHUB_REF_NAME does not match $version"; exit 1; }
-
-      - name: Every released artifact matches its checksum
-        run: |
-          python3 - <<'PY'
-          import json, hashlib, os, sys
-          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
-          directory = os.path.join("artifacts", version)
-          manifest = json.load(open(os.path.join(directory, "manifest.json")))
-          bad = [name for name, want in manifest["files"].items()
-                 if "sha256:" + hashlib.sha256(open(os.path.join(directory, name), "rb").read()).hexdigest() != want]
-          sys.exit("checksum mismatch: " + ", ".join(bad)) if bad else print("checksums match")
-          PY

@@ -20,7 +20,7 @@ fn main() {
         .write_to_file(&generated);
 
     let copies = [
-        root.join("artifacts/include/quantion.h"),
+        root.join("core/include/quantion.h"),
         root.join("wrappers/js/src/include/quantion.h"),
         root.join("wrappers/r/src/include/quantion.h"),
     ];

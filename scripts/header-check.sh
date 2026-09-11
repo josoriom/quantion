@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# fail if a fresh build changes any copy of quantion.h
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
 copies=(
-  artifacts/include/quantion.h
+  core/include/quantion.h
   wrappers/js/src/include/quantion.h
   wrappers/r/src/include/quantion.h
 )

@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish, for example v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  native:
+    name: native (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos-arm64
+            extension: .dylib
+
+          - os: macos-15-intel
+            platform: macos-x86_64
+            extension: .dylib
+
+          - os: ubuntu-latest
+            platform: linux-x86_64
+            extension: .so
+
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            extension: .so
+
+          - os: windows-latest
+            platform: windows-x86_64
+            extension: .dll
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Use the Rust that ships with the runner
+        run: rustup update stable && rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+          key: release-${{ matrix.platform }}
+
+      - name: The tag matches the version in the tree
+        run: |
+          make check-version
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' core/Cargo.toml | head -1)"
+          if [ "$RELEASE_TAG" != "v$version" ]; then
+            echo "tag $RELEASE_TAG does not match version $version"
+            exit 1
+          fi
+
+      - name: Build the native library
+        run: make native
+
+      - name: Name the asset after its platform
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' core/Cargo.toml | head -1)"
+          mkdir -p upload
+          cp "artifacts/$version/${{ matrix.platform }}/libquantion${{ matrix.extension }}" \
+             "upload/libquantion-${{ matrix.platform }}${{ matrix.extension }}"
+
+      - name: Keep the asset for the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: libquantion-${{ matrix.platform }}
+          path: upload/*
+          if-no-files-found: error
+
+  wasm:
+    name: wasm
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - run: rustup update stable && rustup default stable && rustup target add wasm32-unknown-unknown
+
+      - name: Build the wasm artifact and collect the header
+        run: |
+          make wasm LLVM_PREFIX=/usr/lib/llvm-18
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' core/Cargo.toml | head -1)"
+          mkdir -p upload
+          cp "artifacts/$version/wasm/quantion.wasm" upload/quantion.wasm
+          cp core/include/quantion.h upload/quantion.h
+
+      - name: Keep the assets for the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantion-wasm-and-header
+          path: upload/*
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: [native, wasm]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Collect the assets
+        uses: actions/download-artifact@v4
+        with:
+          path: upload
+          merge-multiple: true
+
+      - name: Write checksums
+        run: cd upload && sha256sum libquantion-* quantion.wasm quantion.h > SHA256SUMS.txt
+
+      - name: Create or update the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: upload/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true

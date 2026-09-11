@@ -25,7 +25,7 @@ if (clean) {
   for (const [platform, file] of platforms) {
     const source = join(artifacts, platform, file);
     if (!existsSync(source)) {
-      throw new Error(`quantion: ${source} is missing. Run 'make all' at the repo root first.`);
+      throw new Error(`quantion: ${source} is missing. Run 'make release' at the repo root first.`);
     }
   }
 

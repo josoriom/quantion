@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# fail if the 5 version numbers disagree, or format.current != the ABI version
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

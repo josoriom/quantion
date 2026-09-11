@@ -5,8 +5,10 @@ R wrappers for the quantion library for LC-MS data processing.
 ## Install
 
 ```r
-remotes::install_github("josoriom/quantion", subdir = "wrappers/r")
+remotes::install_github("phenological/quantion", subdir = "wrappers/r")
 ```
+
+The install downloads the native library for your platform from the GitHub release that matches the package version.
 
 ## Concepts
 

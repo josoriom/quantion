@@ -81,10 +81,10 @@
     rust_path <- normalizePath(rust_path, winslash = "\\", mustWork = FALSE)
   }
   if (!nzchar(rust_path) || !file.exists(rust_path)) {
-    stop(sprintf(paste0("quantion: no library for '%s'. Build one with 'make %s', ",
+    stop(sprintf(paste0("quantion: no library for '%s'. Build one with 'make native', ",
                         "or set QUANTION_LIB to a library file, ",
                         "or QUANTION_ARTIFACTS_ROOT to the artifacts folder."),
-                 .quantion_find_arch_dir(), .quantion_find_arch_dir()))
+                 .quantion_find_arch_dir()))
   }
   dyn.load(rust_path, local = FALSE, now = TRUE)
   .Call("C_bind_rust", rust_path, PACKAGE = "quantion")

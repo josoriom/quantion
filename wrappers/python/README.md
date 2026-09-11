@@ -5,8 +5,10 @@ Python wrappers for the quantion Rust library for LC-MS data processing.
 ## Install
 
 ```bash
-pip install git+https://github.com/josoriom/quantion#subdirectory=wrappers/python
+pip install git+https://github.com/phenological/quantion#subdirectory=wrappers/python
 ```
+
+The install downloads the native library for your platform from the GitHub release that matches the package version.
 
 ## Concepts
 

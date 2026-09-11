@@ -63,36 +63,57 @@ find_local_files <- function(platform) {
   ""
 }
 
+release_url <- function(version, asset) {
+  base <- Sys.getenv("QUANTION_RELEASE_URL", "https://github.com/phenological/quantion/releases/download")
+  sprintf("%s/v%s/%s", base, version, asset)
+}
+
+library_extension <- function(platform) {
+  if (startsWith(platform, "windows")) ".dll"
+  else if (startsWith(platform, "macos")) ".dylib"
+  else ".so"
+}
+
+download_to <- function(url, destination) {
+  status <- tryCatch(utils::download.file(url, destination, mode = "wb", quiet = TRUE), error = function(e) 1L)
+  identical(status, 0L) && file.exists(destination) && file.size(destination) > 0
+}
+
+expected_checksum <- function(version, asset) {
+  listing <- tempfile("quantion-sums-")
+  on.exit(unlink(listing), add = TRUE)
+  if (!download_to(release_url(version, "SHA256SUMS.txt"), listing)) return("")
+  for (line in readLines(listing, warn = FALSE)) {
+    parts <- strsplit(trimws(line), "\\s+")[[1]]
+    if (length(parts) == 2 && parts[2] == asset) return(parts[1])
+  }
+  ""
+}
+
+checksum_matches <- function(path, expected) {
+  if (!nzchar(expected)) return(TRUE)
+  if (!exists("sha256sum", envir = asNamespace("tools"))) return(TRUE)
+  actual <- unname(tools::sha256sum(path))
+  identical(tolower(actual), tolower(expected))
+}
+
 download_files <- function(platform, target) {
-  sha <- read_value("RemoteSha")
-  user <- read_value("RemoteUsername")
-  repo <- read_value("RemoteRepo")
-  if (!nzchar(sha) || !nzchar(user) || !nzchar(repo)) {
-    stop_install("quantion: missing GitHub metadata and no local artifacts found")
+  version <- read_value("Version")
+  if (!nzchar(version)) stop_install("quantion: DESCRIPTION has no Version")
+  extension <- library_extension(platform)
+  asset <- paste0("libquantion-", platform, extension)
+  url <- release_url(version, asset)
+  dir.create(target, recursive = TRUE, showWarnings = FALSE)
+  destination <- file.path(target, paste0("libquantion", extension))
+  if (!download_to(url, destination)) {
+    unlink(destination)
+    stop_install("quantion: failed to download ", url)
   }
-  temp <- tempfile("quantion-")
-  dir.create(temp)
-  on.exit(unlink(temp, recursive = TRUE), add = TRUE)
-  archive <- file.path(temp, "repo.tar.gz")
-  url <- sprintf("https://codeload.github.com/%s/%s/tar.gz/%s", user, repo, sha)
-  status <- tryCatch(utils::download.file(url, archive, mode = "wb", quiet = TRUE), error = function(e) 1L)
-  if (!identical(status, 0L) || !file.exists(archive)) stop_install("quantion: failed to download ", url)
-  untar_ok <- tryCatch({
-    utils::untar(archive, exdir = temp)
-    TRUE
-  }, error = function(e) FALSE)
-  if (!untar_ok) stop_install("quantion: failed to unpack ", archive)
-  roots <- list.dirs(temp, recursive = FALSE, full.names = TRUE)
-  source <- ""
-  for (root in roots) {
-    path <- find_platform_dir(file.path(root, "artifacts"), platform)
-    if (nzchar(path)) {
-      source <- path
-      break
-    }
+  if (!checksum_matches(destination, expected_checksum(version, asset))) {
+    unlink(destination)
+    stop_install("quantion: checksum mismatch for ", asset)
   }
-  if (!nzchar(source)) stop_install("quantion: artifacts/", platform, " not found for ", sha)
-  copy_files(source, target, platform)
+  message("quantion: downloaded ", asset, " into ", target)
 }
 
 repo_artifacts <- function() {
