@@ -9,7 +9,7 @@ get_peak_options(range = 0, find_peaks = find_peaks_options())
 }
 \arguments{
   \item{range}{Half-width of the search window around rt. 0 searches the whole trace.}
-  \item{find_peaks}{Peak-picking settings. See \code{\link{find_peaks_options}()}.}
+  \item{find_peaks}{Settings for peak picking. See \code{\link{find_peaks_options}()}.}
 }
 \value{
 An options object for \code{\link{get_peak}()}.

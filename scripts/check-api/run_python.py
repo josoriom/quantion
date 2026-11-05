@@ -158,6 +158,15 @@ def main():
 
     scans = quantion.get_scans(file, rt=FROM_TO)
     out.append(f"parse_ion.scans = {len(scans)}")
+    out.append(f"get_scans.first.index = {scans[0]['index']}")
+    out.append(f"get_scans.last.index = {scans[-1]['index']}")
+    rows = quantion.get_scan_metadata(file, scans[-1]["index"])
+    out.append(f"get_scan_metadata.count = {len(rows)}")
+    for position, row in enumerate(rows):
+        fields = [row["path"], row["kind"].value, row["accession"], row["name"], row["value"], row["unit"], row["unit_accession"]]
+        out.append(f"get_scan_metadata.{position} = {' | '.join('NA' if field is None else field for field in fields)}")
+    scan_rows = quantion.get_scan_metadata(file, scans[-1]["index"], {"tags": ["scan"]})
+    out.append(f"get_scan_metadata.scan.count = {len(scan_rows)}")
 
     for channel in CHANNELS:
         report_channel(file, transitions, channel, out)
@@ -182,15 +191,16 @@ def main():
         out.append(f"{name}.n_points = {int(feature['n_points'])}")
 
     consensus = quantion.match_features(directory, feature_options)
-    out.append(f"match_features.count = {len(consensus)}")
-    for index, feature in enumerate(consensus):
-        name = f"match_features[{index}]"
-        out.append(f"{name}.mz = {number(feature['mz'])}")
-        out.append(f"{name}.rt = {number(feature['rt'])}")
-        out.append(f"{name}.from = {number(feature['from'])}")
-        out.append(f"{name}.to = {number(feature['to'])}")
-        out.append(f"{name}.integral = {number(feature['integral'])}")
-        out.append(f"{name}.intensity = {number(feature['intensity'])}")
+    for label, features in (("match_features", consensus), ("deisotope_features", quantion.deisotope_features(consensus))):
+        out.append(f"{label}.count = {len(features)}")
+        for index, feature in enumerate(features):
+            name = f"{label}[{index}]"
+            out.append(f"{name}.mz = {number(feature['mz'])}")
+            out.append(f"{name}.rt = {number(feature['rt'])}")
+            out.append(f"{name}.from = {number(feature['from'])}")
+            out.append(f"{name}.to = {number(feature['to'])}")
+            out.append(f"{name}.integral = {number(feature['integral'])}")
+            out.append(f"{name}.intensity = {number(feature['intensity'])}")
 
     warp = quantion.load_warp(quantion.load_model(os.path.join(directory, "..", "shift_model.onnx")))
     targets = [

@@ -70,6 +70,10 @@ class _ABI:
              POINTER(_Buf)], c_int32),
         "plan_scans": ([c_void_p, c_uint8, c_double, c_double, c_uint8, c_uint8,
              POINTER(_Buf)], c_int32),
+        "plan_scans_with_arrays": ([c_void_p, c_uint8, c_double, c_double, c_uint8, c_uint8,
+             POINTER(c_uint32), c_size_t, POINTER(_Buf)], c_int32),
+        "get_scans_with_arrays": ([c_void_p, c_uint8, c_double, c_double, c_uint8, c_uint8,
+             POINTER(c_uint32), c_size_t, POINTER(_Buf)], c_int32),
         "plan_image": ([c_void_p, c_double, c_double, c_uint8, POINTER(_Buf)], c_int32),
         "plan_find_targets": ([c_void_p, POINTER(c_double), c_size_t, c_double, c_double,
              c_double, c_double, c_uint8, POINTER(_Buf)], c_int32),
@@ -77,7 +81,7 @@ class _ABI:
              c_double, c_double, c_double, POINTER(_Buf)], c_int32),
         "free_mzml": ([c_void_p], None),
         "free_": ([POINTER(c_uint8), c_size_t], None),
-        "write_ion": ([c_void_p, ctypes.c_char_p, c_uint8, c_uint8, c_uint8,
+        "write_ion": ([c_void_p, ctypes.c_char_p, c_uint8, c_uint8, c_uint8, c_uint32, c_uint32,
              POINTER(c_uint8), c_size_t, POINTER(_Buf)], c_int32),
         "write_mzml": ([c_void_p, ctypes.c_char_p, c_uint8, POINTER(_Buf)], c_int32),
         "find_peaks": ([POINTER(c_double), POINTER(c_double), c_size_t,
@@ -96,6 +100,8 @@ class _ABI:
              POINTER(_Buf), POINTER(_Buf)], c_int32),
         "get_scans": ([c_void_p, c_uint8, c_double, c_double, c_uint8, c_uint8,
              POINTER(_Buf)], c_int32),
+        "get_scan_metadata": ([c_void_p, c_size_t, ctypes.c_char_p, POINTER(_Buf)], c_int32),
+        "plan_scan_metadata": ([c_void_p, c_size_t, POINTER(_Buf)], c_int32),
         "get_ion_image": ([c_void_p, c_double, c_double, c_uint8, POINTER(_Buf)], c_int32),
         "image_begin": ([c_void_p, c_double, c_double, c_uint8, POINTER(c_size_t)], c_int32),
         "image_scan_count": ([c_void_p, POINTER(c_size_t)], c_int32),
@@ -115,6 +121,7 @@ class _ABI:
              c_double, c_double, c_double, c_double, c_uint8,
              c_double, c_double, c_double,
              POINTER(PeakOptions), c_size_t, POINTER(_Buf)], c_int32),
+        "deisotope_features": ([POINTER(c_double), c_size_t, c_double, c_double, POINTER(_Buf)], c_int32),
         "match_features": ([ctypes.c_char_p,
              c_double, c_double, c_double, c_double, c_uint8,
              c_double, c_double, c_double,
@@ -203,6 +210,9 @@ SECTION_POSITION_Z = 14
 SECTION_IMAGE_SHAPE = 15
 SECTION_IMAGE_DATA = 16
 SECTION_IMAGE_COUNTS = 17
+SECTION_SCAN_ARRAY_STARTS = 88
+SECTION_SCAN_ARRAY_VALUES = 89
+SECTION_SCAN_INDEX = 90
 
 _ELEMENT_SIZES = {ELEMENT_F64: 8, ELEMENT_U32: 4, ELEMENT_U64: 8, ELEMENT_U8: 1}
 
@@ -224,6 +234,9 @@ _SECTION_TYPES = {
     SECTION_IMAGE_SHAPE: ELEMENT_U32,
     SECTION_IMAGE_DATA: ELEMENT_F64,
     SECTION_IMAGE_COUNTS: ELEMENT_U32,
+    SECTION_SCAN_ARRAY_STARTS: ELEMENT_U64,
+    SECTION_SCAN_ARRAY_VALUES: ELEMENT_F64,
+    SECTION_SCAN_INDEX: ELEMENT_F64,
 }
 
 _SCAN_NUMBERS = (
@@ -326,6 +339,7 @@ def read_scans_bridge(raw: bytes) -> list:
     mz = read_section(bridge, SECTION_MZ, np.float64)
     intensity = read_section(bridge, SECTION_INTENSITY, np.float64)
     rt = read_section(bridge, SECTION_RT, np.float64)
+    scan_index = read_section(bridge, SECTION_SCAN_INDEX, np.float64)
 
     count = bridge.record_count
     if len(point_starts) != count + 1:
@@ -345,6 +359,7 @@ def read_scans_bridge(raw: bytes) -> list:
         start = int(point_starts[index])
         stop = int(point_starts[index + 1])
         scan = {
+            "index": int(scan_index[index]),
             "rt": float(rt[index]),
             "mz": mz[start:stop].copy(),
             "intensity": intensity[start:stop].copy(),
@@ -358,6 +373,27 @@ def read_scans_bridge(raw: bytes) -> list:
 
 def buf_to_scans(abi: _ABI, buf: _Buf) -> list:
     return read_scans_bridge(_read_and_free(abi, buf))
+
+
+def read_scan_arrays_bridge(raw: bytes, keys: list) -> list:
+    scans = read_scans_bridge(raw)
+    bridge = read_bridge(raw)
+    starts = read_section(bridge, SECTION_SCAN_ARRAY_STARTS, np.uint64)
+    values = read_section(bridge, SECTION_SCAN_ARRAY_VALUES, np.float64)
+    if len(starts) != len(scans) * len(keys) + 1:
+        _fail("array starts do not match the scans and arrays")
+    if int(starts[-1]) != len(values):
+        _fail("array starts do not span the array values")
+    position = 0
+    for scan in scans:
+        for key in keys:
+            scan[key] = values[int(starts[position]):int(starts[position + 1])].copy()
+            position += 1
+    return scans
+
+
+def buf_to_scan_arrays(abi: _ABI, buf: _Buf, keys: list) -> list:
+    return read_scan_arrays_bridge(_read_and_free(abi, buf), keys)
 
 
 def read_image_bridge(raw: bytes) -> dict:
@@ -389,8 +425,9 @@ PAYLOAD_FIT_RESULT = 6
 PAYLOAD_CONSENSUS_FEATURES = 8
 PAYLOAD_WARP_TARGETS = 10
 PAYLOAD_MODEL_METADATA = 11
+PAYLOAD_SCAN_METADATA = 12
 
-_NUMBER, _COUNT, _TEXT = "number", "count", "text"
+_NUMBER, _COUNT, _TEXT, _OPTIONAL_TEXT = "number", "count", "text", "optional text"
 
 _RECORD_COLUMNS = {
     PAYLOAD_PEAKS: [
@@ -418,6 +455,12 @@ _RECORD_COLUMNS = {
     PAYLOAD_MODEL_METADATA: [
         ("key", (83, 84), _TEXT), ("value", (85, 86), _TEXT),
     ],
+    PAYLOAD_SCAN_METADATA: [
+        ("path", (91, 92), _TEXT), ("kind", (93, 94), _TEXT),
+        ("accession", (95, 96, 97), _OPTIONAL_TEXT), ("name", (98, 99), _TEXT),
+        ("value", (100, 101, 102), _OPTIONAL_TEXT), ("unit", (103, 104, 105), _OPTIONAL_TEXT),
+        ("unit_accession", (106, 107, 108), _OPTIONAL_TEXT),
+    ],
 }
 
 
@@ -430,20 +473,23 @@ def read_records(raw: bytes) -> list:
     taken = []
     for name, where, kind in columns:
         if kind == _NUMBER:
-            taken.append((name, read_section(bridge, where, np.float64), None))
+            taken.append((name, read_section(bridge, where, np.float64), None, None))
         elif kind == _COUNT:
-            taken.append((name, read_section(bridge, where, np.uint32), None))
+            taken.append((name, read_section(bridge, where, np.uint32), None, None))
         else:
             starts = read_section(bridge, where[0], np.uint64)
             _, offset, length = _take_section(bridge, where[1])
-            taken.append((name, starts, raw[offset:offset + length]))
+            missing = read_section(bridge, where[2], np.uint8) if kind == _OPTIONAL_TEXT else None
+            taken.append((name, starts, raw[offset:offset + length], missing))
 
     rows = []
     for index in range(bridge.record_count):
         row = {}
-        for name, values, text_bytes in taken:
+        for name, values, text_bytes, missing in taken:
             if text_bytes is None:
                 row[name] = values[index].item()
+            elif missing is not None and missing[index]:
+                row[name] = None
             else:
                 row[name] = text_bytes[int(values[index]):int(values[index + 1])].decode("utf-8")
         rows.append(row)

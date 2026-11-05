@@ -225,7 +225,7 @@ describe("fetchRangeParts", () => {
 
     expect(calls.length).toBe(3);
     expect(bytes.length).toBe(size);
-    expect(bytes).toEqual(data);
+    expect(Buffer.compare(bytes, data)).toBe(0);
 
     globalThis.fetch = original;
   });
@@ -240,7 +240,9 @@ describe("fetchRangeParts", () => {
     await prefetchRanges(source, [{ offset: 0n, length: BigInt(size) }]);
 
     expect(calls.length).toBe(2);
-    expect(source.cache.read(0n, BigInt(size))).toEqual(data);
+    const cached = source.cache.read(0n, BigInt(size));
+    expect(cached).not.toBeNull();
+    expect(Buffer.compare(cached as Uint8Array, data)).toBe(0);
 
     globalThis.fetch = original;
   });

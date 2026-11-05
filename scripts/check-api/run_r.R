@@ -167,6 +167,18 @@ main <- function() {
 
   scans <- get_scans(file, rt = c(FROM_RT, TO_RT))
   out <- c(out, sprintf("parse_ion.scans = %d", nrow(scans)))
+  last_index <- scans$index[nrow(scans)]
+  out <- c(out, sprintf("get_scans.first.index = %.0f", scans$index[1]),
+           sprintf("get_scans.last.index = %.0f", last_index))
+  rows <- get_scan_metadata(file, last_index)
+  out <- c(out, sprintf("get_scan_metadata.count = %d", nrow(rows)))
+  for (position in seq_len(nrow(rows))) {
+    fields <- unlist(rows[position, ], use.names = FALSE)
+    fields[is.na(fields)] <- "NA"
+    out <- c(out, sprintf("get_scan_metadata.%d = %s", position - 1, paste(fields, collapse = " | ")))
+  }
+  scan_rows <- get_scan_metadata(file, last_index, get_scan_metadata_options(tags = "scan"))
+  out <- c(out, sprintf("get_scan_metadata.scan.count = %d", nrow(scan_rows)))
 
   for (channel in CHANNELS) {
     out <- report_channel(file, transitions, channel, out)
@@ -179,6 +191,7 @@ main <- function() {
   consensus <- match_features(directory, match_features_options(
     eic = window_options(), grid = grid(), find_peaks = feature_peak_options(), threads = THREADS))
   out <- feature_lines("match_features", consensus, out, FALSE)
+  out <- feature_lines("deisotope_features", deisotope_features(consensus), out, FALSE)
 
   warp <- load_warp(load_model(file.path(directory, "..", "shift_model.onnx")))
   ids <- unlist(lapply(CHANNELS, function(channel)

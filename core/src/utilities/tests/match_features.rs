@@ -23,6 +23,7 @@ mod tests {
 
     fn make_scan(rt: f64, mz: Vec<f64>, intensity: Vec<f64>) -> CentroidScan {
         CentroidScan {
+            index: 0,
             rt,
             mz: Arc::from(mz.as_slice()),
             intensity: Arc::from(intensity.as_slice()),

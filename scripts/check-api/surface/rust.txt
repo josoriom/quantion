@@ -20,11 +20,14 @@ pub struct QuantionError
 impl fmt::Display for QuantionError
 impl std::error::Error for QuantionError
 
+pub fn deisotope_features(features: Vec<Feature>, options: DeisotopeFeaturesOptions) -> Result<Vec<Feature>, QuantionError>
+
 pub fn find_features(file: &mut SampleFile, options: FindFeaturesOptions) -> Result<Vec<Feature>, QuantionError>
 
 pub fn match_features(directory: impl AsRef<Path>, options: MatchFeaturesOptions) -> Result<Vec<Feature>, QuantionError>
 
 pub struct Scan
+    pub index: usize
     pub rt: f64
     pub mz: Vec<f64>
     pub intensity: Vec<f64>
@@ -38,10 +41,27 @@ pub struct Scan
     pub y: u32
     pub z: u32
 impl From<CentroidScan> for Scan
+impl Index<&str> for Scan
+
+pub struct ScanParam
+    pub path: String
+    pub kind: ScanParamKind
+    pub accession: Option<String>
+    pub name: String
+    pub value: Option<String>
+    pub unit: Option<String>
+    pub unit_accession: Option<String>
+
+pub enum ScanParamKind
+    ATTRIBUTE
+    CV
+    USER
 
 pub fn calculate_eic(file: &mut SampleFile, mz: f64, options: CalculateEicOptions) -> Result<DataXY, QuantionError>
 
 pub fn get_ion_image(file: &mut SampleFile, mz: f64, options: GetIonImageOptions) -> Result<IonImage, QuantionError>
+
+pub fn get_scan_metadata(file: &mut SampleFile, index: usize, options: GetScanMetadataOptions) -> Result<Vec<ScanParam>, QuantionError>
 
 pub fn get_scans(file: &mut SampleFile, query: ScanQuery, options: GetScansOptions) -> Result<Vec<Scan>, QuantionError>
 
@@ -69,6 +89,11 @@ pub struct CalculateEicOptions
     pub mz_tolerance: f64
     pub time_unit: TimeUnit
 impl Default for CalculateEicOptions: from: 0.0, to: f64::INFINITY, ppm_tolerance: 20.0, mz_tolerance: 0.005, time_unit: TimeUnit::MINUTES
+
+pub struct DeisotopeFeaturesOptions
+    pub rt_tolerance: f64
+    pub mz_tolerance: f64
+impl Default for DeisotopeFeaturesOptions: rt_tolerance: 0.02, mz_tolerance: 0.005
 
 pub struct DrawPeaksOptions
     pub from: f64
@@ -125,10 +150,14 @@ pub struct GetPeakOptions
     pub range: f64
     pub find_peaks: FindPeaksOptions
 
+pub struct GetScanMetadataOptions
+    pub tags: Vec<String>
+
 pub struct GetScansOptions
     pub level: u8
     pub time_unit: TimeUnit
-impl Default for GetScansOptions: level: 1, time_unit: TimeUnit::MINUTES
+    pub arrays: Vec<ScanArray>
+impl Default for GetScansOptions: level: 1, time_unit: TimeUnit::MINUTES, arrays: default_scan_arrays()
 
 pub struct GridOptions
     pub start: f64
@@ -165,13 +194,19 @@ impl Default for MatchFeaturesOptions: eic: CalculateEicOptions::default(), grid
 pub struct ParseIonOptions
     pub max_cache_size: usize
 
+pub struct ScanArray
+    pub key: String
+    pub accession: String
+
 pub struct WriteIonOptions
     pub out: Option<IonOutput>
     pub overwrite: bool
     pub level: u8
     pub f32_compress: bool
+    pub block_size: u32
+    pub mz_window: u32
     pub headers: Vec<Header>
-impl Default for WriteIonOptions: out: None, overwrite: false, level: 12, f32_compress: false, headers: Vec::new()
+impl Default for WriteIonOptions: out: None, overwrite: false, level: 12, f32_compress: false, block_size: 8, mz_window: 20, headers: Vec::new()
 
 pub struct WriteMzmlOptions
     pub out: Option<PathBuf>

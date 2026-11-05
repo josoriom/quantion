@@ -17,6 +17,7 @@ pub const QUANTION_PAYLOAD_CONSENSUS_FEATURES: u16 = 8;
 pub const QUANTION_PAYLOAD_FOUND_FEATURES: u16 = 9;
 pub const QUANTION_PAYLOAD_WARP_TARGETS: u16 = 10;
 pub const QUANTION_PAYLOAD_MODEL_METADATA: u16 = 11;
+pub const QUANTION_PAYLOAD_SCAN_METADATA: u16 = 12;
 
 pub const QUANTION_ELEMENT_F64: u32 = 1;
 pub const QUANTION_ELEMENT_U32: u32 = 2;
@@ -93,6 +94,29 @@ pub const QUANTION_SECTION_MODEL_METADATA_KEY_BYTES: u32 = 84;
 pub const QUANTION_SECTION_MODEL_METADATA_VALUE_STARTS: u32 = 85;
 pub const QUANTION_SECTION_MODEL_METADATA_VALUE_BYTES: u32 = 86;
 pub const QUANTION_SECTION_CONSENSUS_POINT_COUNT: u32 = 87;
+
+pub const QUANTION_SECTION_SCAN_ARRAY_STARTS: u32 = 88;
+pub const QUANTION_SECTION_SCAN_ARRAY_VALUES: u32 = 89;
+pub const QUANTION_SECTION_SCAN_INDEX: u32 = 90;
+
+pub const QUANTION_SECTION_SCAN_METADATA_PATH_STARTS: u32 = 91;
+pub const QUANTION_SECTION_SCAN_METADATA_PATH_BYTES: u32 = 92;
+pub const QUANTION_SECTION_SCAN_METADATA_KIND_STARTS: u32 = 93;
+pub const QUANTION_SECTION_SCAN_METADATA_KIND_BYTES: u32 = 94;
+pub const QUANTION_SECTION_SCAN_METADATA_ACCESSION_STARTS: u32 = 95;
+pub const QUANTION_SECTION_SCAN_METADATA_ACCESSION_BYTES: u32 = 96;
+pub const QUANTION_SECTION_SCAN_METADATA_ACCESSION_MISSING: u32 = 97;
+pub const QUANTION_SECTION_SCAN_METADATA_NAME_STARTS: u32 = 98;
+pub const QUANTION_SECTION_SCAN_METADATA_NAME_BYTES: u32 = 99;
+pub const QUANTION_SECTION_SCAN_METADATA_VALUE_STARTS: u32 = 100;
+pub const QUANTION_SECTION_SCAN_METADATA_VALUE_BYTES: u32 = 101;
+pub const QUANTION_SECTION_SCAN_METADATA_VALUE_MISSING: u32 = 102;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_STARTS: u32 = 103;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_BYTES: u32 = 104;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_MISSING: u32 = 105;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS: u32 = 106;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES: u32 = 107;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING: u32 = 108;
 
 const ALIGNMENT: u64 = 8;
 
@@ -260,6 +284,16 @@ impl Bridge {
         self.copy_into(section.byte_offset, source);
     }
 
+    pub fn write_u8_section(&mut self, id: u32, values: &[u8]) {
+        let section = self.find_section(id, QUANTION_ELEMENT_U8);
+        assert_eq!(
+            section.element_count,
+            values.len() as u64,
+            "bridge u8 section written with the wrong element count"
+        );
+        self.copy_into(section.byte_offset, values);
+    }
+
     pub fn write_text_section(&mut self, id: u32, values: &[&str]) {
         let section = self.find_section(id, QUANTION_ELEMENT_U8);
         let mut at = section.byte_offset;
@@ -299,6 +333,12 @@ pub enum Column<'a> {
         bytes_id: u32,
         values: &'a [&'a str],
     },
+    OptionalText {
+        starts_id: u32,
+        bytes_id: u32,
+        missing_id: u32,
+        values: &'a [Option<&'a str>],
+    },
 }
 
 pub fn build_record_bridge(
@@ -327,6 +367,20 @@ pub fn build_record_bridge(
                 builder.add_section(*starts_id, QUANTION_ELEMENT_U64, values.len() as u64 + 1);
                 builder.add_section(*bytes_id, QUANTION_ELEMENT_U8, total);
             }
+            Column::OptionalText {
+                starts_id,
+                bytes_id,
+                missing_id,
+                values,
+            } => {
+                let mut total: u64 = 0;
+                for text in values.iter().flatten() {
+                    total = total.checked_add(text.len() as u64)?;
+                }
+                builder.add_section(*starts_id, QUANTION_ELEMENT_U64, values.len() as u64 + 1);
+                builder.add_section(*bytes_id, QUANTION_ELEMENT_U8, total);
+                builder.add_section(*missing_id, QUANTION_ELEMENT_U8, values.len() as u64);
+            }
         }
     }
     let mut bridge = builder.build()?;
@@ -349,6 +403,25 @@ pub fn build_record_bridge(
                 }
                 bridge.write_u64_section(*starts_id, &starts);
                 bridge.write_text_section(*bytes_id, values);
+            }
+            Column::OptionalText {
+                starts_id,
+                bytes_id,
+                missing_id,
+                values,
+            } => {
+                let texts: Vec<&str> = values.iter().map(|text| text.unwrap_or_default()).collect();
+                let missing: Vec<u8> = values.iter().map(|text| u8::from(text.is_none())).collect();
+                let mut starts = Vec::with_capacity(texts.len() + 1);
+                let mut next: u64 = 0;
+                starts.push(0u64);
+                for text in &texts {
+                    next += text.len() as u64;
+                    starts.push(next);
+                }
+                bridge.write_u64_section(*starts_id, &starts);
+                bridge.write_text_section(*bytes_id, &texts);
+                bridge.write_u8_section(*missing_id, &missing);
             }
         }
     }

@@ -93,7 +93,7 @@ impl From<FastError> for FeatureError {
 /// - `from`: Start of the peak.
 /// - `to`: End of the peak.
 /// - `intensity`: Apex intensity.
-/// - `integral`: Peak area.
+/// - `integral`: Area of the peak.
 /// - `n_points`: Points across the peak.
 /// - `frequency`: match_features only: fraction of samples where it was found (0–1). Optional.
 ///

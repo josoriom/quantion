@@ -92,6 +92,14 @@ describeWithNode("enums and errors are exported from the entry point", () => {
     expect(quantion.PeakShape).toEqual({ GAUSSIAN: "GAUSSIAN", EMG: "EMG" });
   });
 
+  test("ScanParamKind is uppercase", () => {
+    expect(quantion.ScanParamKind).toEqual({
+      ATTRIBUTE: "ATTRIBUTE",
+      CV: "CV",
+      USER: "USER",
+    });
+  });
+
   test("QuantionError is exported", () => {
     expect(typeof quantion.QuantionError).toBe("function");
   });

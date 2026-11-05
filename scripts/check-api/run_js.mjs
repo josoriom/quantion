@@ -210,6 +210,17 @@ async function main() {
     rt: { from: FROM_RT, to: TO_RT },
   });
   out.push(`parse_ion.scans = ${scans.length}`);
+  const lastIndex = scans[scans.length - 1].index;
+  out.push(`get_scans.first.index = ${scans[0].index}`);
+  out.push(`get_scans.last.index = ${lastIndex}`);
+  const rows = await quantion.getScanMetadata(file, lastIndex);
+  out.push(`get_scan_metadata.count = ${rows.length}`);
+  rows.forEach((row, position) => {
+    const fields = [row.path, row.kind, row.accession, row.name, row.value, row.unit, row.unitAccession];
+    out.push(`get_scan_metadata.${position} = ${fields.map((field) => field ?? "NA").join(" | ")}`);
+  });
+  const scanRows = await quantion.getScanMetadata(file, lastIndex, { tags: ["scan"] });
+  out.push(`get_scan_metadata.scan.count = ${scanRows.length}`);
 
   for (const channel of CHANNELS) {
     await reportChannel(file, transitions, channel, out);
@@ -228,6 +239,7 @@ async function main() {
 
   const consensus = quantion.matchFeatures(directory, featureOptions);
   featureLines("match_features", consensus, out, false);
+  featureLines("deisotope_features", quantion.deisotopeFeatures(consensus), out, false);
 
   const warp = quantion.loadWarp(await quantion.loadModel(path.join(directory, "..", "shift_model.onnx")));
   const targets = CHANNELS.flatMap((channel) =>

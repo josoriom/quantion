@@ -1,11 +1,14 @@
 pub mod calculate_eic;
 pub mod ion;
+pub(crate) mod get_scan_metadata;
 pub mod ion_image;
 pub mod parse_ion;
 
 pub mod parallel;
 
 pub mod find_features;
+
+pub mod deisotope_features;
 
 pub mod find_masses;
 

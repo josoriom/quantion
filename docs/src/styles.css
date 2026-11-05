@@ -427,6 +427,11 @@ a:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 
+.version-history li {
+  grid-template-columns: 70px 100px minmax(0, 1fr) 100px;
+  align-items: center;
+}
+
 .group-list-name {
   font-size: 14px;
 }
@@ -442,8 +447,29 @@ a:focus-visible {
   color: var(--accent-strong);
 }
 
-.version-history-message {
-  grid-column: 2;
+.version-history li.version-history-head {
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.version-history-commit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.copy-icon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .summary {
@@ -542,6 +568,10 @@ table.details th {
   border-bottom: 1px solid var(--line);
 }
 
+table.details td:last-child {
+  min-width: 240px;
+}
+
 table.details td {
   padding: 7px 12px 7px 0;
   vertical-align: top;
@@ -557,7 +587,7 @@ table.details td {
 
 .name { color: var(--token-function); white-space: nowrap; }
 .type { color: var(--token-type); }
-.default { color: var(--token-number); white-space: nowrap; }
+.default { color: var(--token-number); white-space: pre; }
 
 .returns {
   display: flex;
@@ -656,8 +686,8 @@ table.details td {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .version-history-message {
-    grid-column: 1;
+  .version-history li.version-history-head {
+    display: none;
   }
 
   .sidebar {

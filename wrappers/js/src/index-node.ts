@@ -19,6 +19,7 @@ export {
   loadModel,
   loadWarp,
   getScans,
+  getScanMetadata,
   calculateEic,
   getIonImage,
   findPeaks,
@@ -31,6 +32,7 @@ export {
   findTransitions,
   findFeatures,
   matchFeatures,
+  deisotopeFeatures,
 } from "./utilities/api";
 export { SampleFile } from "./utilities/sampleFile";
 export { Model } from "./utilities/model";

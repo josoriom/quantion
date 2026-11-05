@@ -53,7 +53,7 @@ pub struct FromTo {
 /// - `from`: Start of the peak.
 /// - `to`: End of the peak.
 /// - `intensity`: Apex intensity.
-/// - `integral`: Peak area.
+/// - `integral`: Area of the peak.
 /// - `n_points`: Points across the peak.
 ///
 /// [Documentation](https://phenological.github.io/quantion/?language=rust#Peak)

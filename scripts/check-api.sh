@@ -42,6 +42,19 @@ compare() {
   python3 "$here/compare.py" "$left" "$right" "$name" "$label"
 }
 
+use_python_with_numpy() {
+  if python3 -c 'import numpy' >/dev/null 2>&1; then
+    return
+  fi
+  local venv="$root/.venv-check-api"
+  if ! "$venv/bin/python3" -c 'import numpy' >/dev/null 2>&1; then
+    echo "python3 has no numpy, installing it in .venv-check-api..."
+    python3 -m venv --clear "$venv"
+    "$venv/bin/python3" -m pip install --quiet numpy
+  fi
+  export PATH="$venv/bin:$PATH"
+}
+
 echo "check-api — one fixture, nine calls, every language must agree"
 echo
 
@@ -51,6 +64,8 @@ if [ ! -f "$fixture_dir/api.ion" ]; then
   echo "   cargo run --bin chromatogram2ion -- $fixture_dir/api.ion 89.04768 data/sarcosine.ion 90.05550 data/alanine.ion"
   exit 1
 fi
+
+use_python_with_numpy
 
 echo "running Rust (the reference)..."
 run_rust

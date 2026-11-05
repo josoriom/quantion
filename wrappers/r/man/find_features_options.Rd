@@ -11,7 +11,7 @@ find_features_options(eic = calculate_eic_options(), grid = grid_options(),
 \arguments{
   \item{eic}{EIC retention-time range (from, to), tolerances and time unit. See \code{\link{calculate_eic_options}()}.}
   \item{grid}{The m/z grid. See \code{\link{grid_options}()}.}
-  \item{find_peaks}{Peak-picking settings. See \code{\link{find_peaks_options}()}.}
+  \item{find_peaks}{Settings for peak picking. See \code{\link{find_peaks_options}()}.}
   \item{threads}{Number of threads.}
 }
 \value{

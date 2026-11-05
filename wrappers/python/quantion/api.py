@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 
 from quantion._bridge import (
+    buf_to_scan_arrays,
     PeakOptions,
     READ_RANGE,
     _ABI,
@@ -21,7 +22,11 @@ from quantion._bridge import (
 )
 from quantion._errors import QuantionError, _check, _invalid, _missing, _unknown_option
 from quantion._options import (
+    DEFAULT_SCAN_ARRAYS,
+    read_scan_arrays,
+    read_scan_metadata_tags,
     BASELINE,
+    DEISOTOPE_FEATURES,
     DRAW_PEAKS,
     EIC,
     FIND_FEATURES,
@@ -30,6 +35,7 @@ from quantion._options import (
     FIND_TRANSITIONS,
     FIT_PEAK,
     GET_PEAK,
+    GET_SCAN_METADATA,
     GET_SCANS,
     ION_IMAGE,
     MATCH_FEATURES,
@@ -57,9 +63,11 @@ from quantion._types import (
     FitPeakOptions,
     FromTo,
     GetPeakOptions,
+    GetScanMetadataOptions,
     GetScansOptions,
     IonImage,
     GetIonImageOptions,
+    DeisotopeFeaturesOptions,
     MatchFeaturesOptions,
     NoiseLevel,
     ParseIonOptions,
@@ -67,6 +75,8 @@ from quantion._types import (
     PeakParameters,
     PredictedRt,
     Scan,
+    ScanParam,
+    ScanParamKind,
     Target,
     Transition,
     WriteIonOptions,
@@ -122,6 +132,23 @@ def _get_level(function: str, argument: str, value: Any) -> int:
     if level > _MAX_LEVEL:
         raise _invalid(function, argument, f"must be between 0 and {_MAX_LEVEL}, got {value!r}")
     return level
+
+
+_LARGEST_U32 = 2**32 - 1
+
+
+def _get_block_size(function: str, value: Any) -> int:
+    size = get_count(function, "block_size", value)
+    if size < 1 or size > _LARGEST_U32:
+        raise _invalid(function, "block_size", f"must be a whole number from 1 to {_LARGEST_U32} MB, got {value!r}")
+    return size
+
+
+def _get_mz_window(function: str, value: Any) -> int:
+    window = get_count(function, "mz_window", value)
+    if window > _LARGEST_U32:
+        raise _invalid(function, "mz_window", f"must be a whole number from 0 to {_LARGEST_U32}, got {value!r}")
+    return window
 
 
 def _read_record(
@@ -309,7 +336,7 @@ def write_ion(file: SampleFile, options: Optional[WriteIonOptions] = None) -> Op
 
     Args:
         file: The sample to write.
-        options: Optional settings: out = None, overwrite = False, level = 12, f32_compress = False, headers = []. See WriteIonOptions: https://phenological.github.io/quantion/?language=python#WriteIonOptions
+        options: Optional settings: out = None, overwrite = False, level = 12, f32_compress = False, block_size = 8, mz_window = 20, headers = []. See WriteIonOptions: https://phenological.github.io/quantion/?language=python#WriteIonOptions
 
     Returns:
         The bytes when out is left out; nothing when it is written or uploaded.
@@ -320,6 +347,8 @@ def write_ion(file: SampleFile, options: Optional[WriteIonOptions] = None) -> Op
     settings = read_options(function, options, WRITE_ION)
     out = _encode_out(function, settings["out"])
     level = _get_level(function, "level", settings["level"])
+    block_size = _get_block_size(function, settings["block_size"])
+    mz_window = _get_mz_window(function, settings["mz_window"])
     headers = _encode_headers(function, settings["headers"])
     headers_pointer, headers_array = _as_u8_ptr(headers) if headers else (None, None)
     abi = file._abi
@@ -329,6 +358,7 @@ def write_ion(file: SampleFile, options: Optional[WriteIonOptions] = None) -> Op
         c_uint8(get_flag(function, "overwrite", settings["overwrite"])),
         c_uint8(level),
         c_uint8(get_flag(function, "f32_compress", settings["f32_compress"])),
+        c_uint32(block_size), c_uint32(mz_window),
         headers_pointer, c_size_t(len(headers)), ctypes.byref(buffer),
     ))
     if out is not None and _is_url(os.fsdecode(out)):
@@ -402,7 +432,7 @@ def get_scans(
             Example: window: FromTo = {"from": 1.0, "to": 2.5}
         mz: Or by precursor m/z: a range or one value. Give rt or mz, not both. Each FromTo has from, to. See FromTo: https://phenological.github.io/quantion/?language=python#FromTo
             Example: window: FromTo = {"from": 1.0, "to": 2.5}
-        options: Optional settings: level = 1, time_unit = MINUTES. See GetScansOptions: https://phenological.github.io/quantion/?language=python#GetScansOptions
+        options: Optional settings: level = 1, time_unit = MINUTES, arrays = {"key": "mz", "accession": "MS:1000514"}, {"key": "intensity", "accession": "MS:1000515"}. See GetScansOptions: https://phenological.github.io/quantion/?language=python#GetScansOptions
 
     Returns:
         The scans found, in rt order.
@@ -421,7 +451,19 @@ def get_scans(
         query, start, end = _get_scan_query(function, "mz", mz, _QUERY_MZ_RANGE, _QUERY_CLOSEST_MZ)
     level = _get_level(function, "level", settings["level"])
     time_unit = get_time_unit(function, "time_unit", settings["time_unit"])
+    keys, numbers = read_scan_arrays(function, settings["arrays"])
     abi = file._abi
+    if settings["arrays"] != DEFAULT_SCAN_ARRAYS:
+        accessions = (c_uint32 * len(numbers))(*numbers)
+        count = c_size_t(len(numbers))
+        _prefetch(file, function, lambda out: abi.plan_scans_with_arrays(
+            file.handle, c_uint8(query), c_double(start), c_double(end), c_uint8(level), c_uint8(time_unit),
+            accessions, count, out))
+        buffer = _Buf()
+        _check(abi, function, abi.get_scans_with_arrays(
+            file.handle, c_uint8(query), c_double(start), c_double(end), c_uint8(level), c_uint8(time_unit),
+            accessions, count, ctypes.byref(buffer)))
+        return buf_to_scan_arrays(abi, buffer, keys)
     _prefetch(file, function, lambda out: abi.plan_scans(
         file.handle, c_uint8(query), c_double(start), c_double(end), c_uint8(level), c_uint8(time_unit), out))
     buffer = _Buf()
@@ -429,6 +471,43 @@ def get_scans(
         file.handle, c_uint8(query), c_double(start), c_double(end), c_uint8(level), c_uint8(time_unit),
         ctypes.byref(buffer)))
     return buf_to_scans(abi, buffer)
+
+
+_LARGEST_SIZE = c_size_t(-1).value
+
+
+def get_scan_metadata(file: SampleFile, index: int, options: Optional[GetScanMetadataOptions] = None) -> List[ScanParam]:
+    """get_scan_metadata · Metadata
+
+    Read the attributes, cvParams and userParams of one scan, one row each, parents before children. Find the scan with get_scans, then pass its index.
+
+    Args:
+        file: The sample to read, from parse_ion or parse_mzml.
+        index: Position of the scan in the spectrum list, from 0: the index of a scan from get_scans.
+        options: Optional settings: tags = []. See GetScanMetadataOptions: https://phenological.github.io/quantion/?language=python#GetScanMetadataOptions
+
+    Returns:
+        One row per attribute or param, in the order of the mzML tree. Values are text. A field the file does not give is missing: None in Rust and Python, null in JS, NA in R.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#get_scan_metadata
+    """
+    function = "get_scan_metadata"
+    settings = read_options(function, options, GET_SCAN_METADATA)
+    tags = ctypes.c_char_p(read_scan_metadata_tags(function, settings["tags"]))
+    if isinstance(index, str):
+        raise _invalid(function, "index", f"must be a whole number 0 or more, got {index!r}")
+    whole_number = get_count(function, "index", index)
+    if whole_number > _LARGEST_SIZE:
+        raise _invalid(function, "index", f"must be less than the scan count, got {index!r}")
+    position = c_size_t(whole_number)
+    abi = file._abi
+    _prefetch(file, function, lambda out: abi.plan_scan_metadata(file.handle, position, out))
+    buffer = _Buf()
+    _check(abi, function, abi.get_scan_metadata(file.handle, position, tags, ctypes.byref(buffer)))
+    rows = buf_to_records(abi, buffer)
+    for row in rows:
+        row["kind"] = ScanParamKind(row["kind"])
+    return rows
 
 
 def calculate_eic(file: SampleFile, mz: float, options: Optional[CalculateEicOptions] = None) -> DataXY:
@@ -707,6 +786,9 @@ def calculate_baseline(y: Sequence, options: Optional[CalculateBaselineOptions] 
     return buf_to_f64(abi, buffer)
 
 
+FEATURE_KEYS = ("mz", "rt", "from", "to", "intensity", "integral", "n_points")
+
+
 def _read_targets(function: str, targets: Sequence[Target]):
     if not isinstance(targets, (list, tuple)):
         raise _invalid(function, "targets", "must be a list of targets")
@@ -867,6 +949,47 @@ def match_features(directory, options: Optional[MatchFeaturesOptions] = None) ->
         c_double(get_number(function, "grouping.rt_tolerance", grouping["rt_tolerance"])),
         c_double(get_number(function, "grouping.min_frequency", grouping["min_frequency"])),
         ctypes.byref(packed), c_size_t(threads), ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
+
+
+def _read_feature_values(function: str, features: Sequence[Feature]) -> np.ndarray:
+    if not isinstance(features, (list, tuple)):
+        raise _invalid(function, "features", "must be a list of features")
+    values = np.empty((len(features), len(FEATURE_KEYS) + 1), dtype=np.float64)
+    for index, feature in enumerate(features):
+        argument = f"features[{index}]"
+        record = _read_record(function, argument, feature, FEATURE_KEYS, ("frequency",))
+        for position, key in enumerate(FEATURE_KEYS):
+            values[index, position] = get_number(function, f"{argument}.{key}", record[key])
+        frequency = record.get("frequency")
+        values[index, -1] = math.nan if frequency is None else get_number(function, f"{argument}.frequency", frequency)
+    return values
+
+
+def deisotope_features(features: Sequence[Feature], options: Optional[DeisotopeFeaturesOptions] = None) -> List[Feature]:
+    """deisotope_features · Untargeted
+
+    Remove 13C isotope peaks from a feature list, keeping the monoisotopic peak (M) of each compound. A feature is an isotope when it sits 1.00335/charge above the previous peak (charge = 1 or 2), has the same rt as M, and its intensity is not too high: M+1 at most M × mz × charge / 12 × 0.0108157.
+
+    Args:
+        features: The features to clean, from find_features or match_features.
+        options: Optional settings: rt_tolerance = 0.02, mz_tolerance = 0.005. See DeisotopeFeaturesOptions: https://phenological.github.io/quantion/?language=python#DeisotopeFeaturesOptions
+
+    Returns:
+        The features that are not isotopes, sorted by m/z.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#deisotope_features
+    """
+    function = "deisotope_features"
+    settings = read_options(function, options, DEISOTOPE_FEATURES)
+    values = _read_feature_values(function, features)
+    abi = _get_abi()
+    buffer = _Buf()
+    _check(abi, function, abi.deisotope_features(
+        _as_f64_ptr(values), c_size_t(len(values)),
+        c_double(get_number(function, "rt_tolerance", settings["rt_tolerance"])),
+        c_double(get_number(function, "mz_tolerance", settings["mz_tolerance"])),
+        ctypes.byref(buffer)))
     return buf_to_records(abi, buffer)
 
 

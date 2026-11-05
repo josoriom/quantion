@@ -309,6 +309,22 @@ impl ScanSource for ParsedFile {
             FileSource::Remote(ion) => ion.load_scan(index, mz, intensity),
         }
     }
+
+    fn load_array(&mut self, index: usize, accession: u32, values: &mut Vec<f64>) -> bool {
+        match &mut self.file.source {
+            FileSource::Full(mzml) => mzml.load_array(index, accession, values),
+            FileSource::Lazy(file) => file.load_array(index, accession, values),
+            FileSource::Remote(ion) => ion.load_array(index, accession, values),
+        }
+    }
+
+    fn load_metadata(&mut self, index: usize) -> ionic::IonResult<Vec<crate::files::ScanParam>> {
+        match &mut self.file.source {
+            FileSource::Full(mzml) => mzml.load_metadata(index),
+            FileSource::Lazy(file) => file.load_metadata(index),
+            FileSource::Remote(ion) => ion.load_metadata(index),
+        }
+    }
 }
 
 /// Free a `ParsedFile` handle.
@@ -740,6 +756,59 @@ pub unsafe extern "C" fn image_free(session: *mut crate::utilities::ion_image::I
 }
 
 
+fn build_scan_arrays_bridge(found: Vec<crate::utilities::calculate_eic::ScanArrays>) -> Option<Box<[u8]>> {
+    let scan_count = found.len() as u64;
+    let array_count: usize = found.iter().map(|scan| scan.arrays.len()).sum();
+    let value_count: u64 = found.iter().flat_map(|scan| &scan.arrays).map(|values| values.len() as u64).sum();
+    let scans: Vec<crate::Scan> = found.iter().map(|scan| crate::Scan::from(scan.scan.clone())).collect();
+
+    let mut builder = BridgeBuilder::new(QUANTION_PAYLOAD_SCANS, scan_count);
+    builder.add_section(QUANTION_SECTION_POINT_STARTS, QUANTION_ELEMENT_U64, scan_count + 1);
+    builder.add_section(QUANTION_SECTION_MZ, QUANTION_ELEMENT_F64, 0);
+    builder.add_section(QUANTION_SECTION_INTENSITY, QUANTION_ELEMENT_F64, 0);
+    for id in SCAN_DETAIL_SECTIONS {
+        builder.add_section(id, QUANTION_ELEMENT_F64, scan_count);
+    }
+    builder.add_section(QUANTION_SECTION_SCAN_ARRAY_STARTS, QUANTION_ELEMENT_U64, array_count as u64 + 1);
+    builder.add_section(QUANTION_SECTION_SCAN_ARRAY_VALUES, QUANTION_ELEMENT_F64, value_count);
+    let mut bridge = builder.build()?;
+
+    for (index, scan) in scans.iter().enumerate() {
+        write_scan_details(&mut bridge, index as u64, scan);
+    }
+    bridge.write_u64_section(QUANTION_SECTION_POINT_STARTS, &vec![0u64; scans.len() + 1]);
+
+    let mut array_starts = Vec::with_capacity(array_count + 1);
+    array_starts.push(0u64);
+    let mut next_value: u64 = 0;
+    for values in found.iter().flat_map(|scan| &scan.arrays) {
+        bridge.write_f64_at(QUANTION_SECTION_SCAN_ARRAY_VALUES, next_value, values);
+        next_value += values.len() as u64;
+        array_starts.push(next_value);
+    }
+    bridge.write_u64_section(QUANTION_SECTION_SCAN_ARRAY_STARTS, &array_starts);
+    Some(bridge.into_bytes())
+}
+
+fn write_scan_details(bridge: &mut Bridge, position: u64, scan: &crate::Scan) {
+    let details = [
+        (QUANTION_SECTION_SCAN_INDEX, scan.index as f64),
+        (QUANTION_SECTION_RT, scan.rt),
+        (QUANTION_SECTION_MS_LEVEL, f64::from(scan.level)),
+        (QUANTION_SECTION_SELECTED_ION_MZ, scan.precursor_mz),
+        (QUANTION_SECTION_BASE_PEAK_MZ, scan.base_peak_mz),
+        (QUANTION_SECTION_BASE_PEAK_INT, scan.base_peak_intensity),
+        (QUANTION_SECTION_TOTAL_ION_CURRENT, scan.total_ion_current),
+        (QUANTION_SECTION_POLARITY, f64::from(scan.polarity)),
+        (QUANTION_SECTION_POSITION_X, f64::from(scan.x)),
+        (QUANTION_SECTION_POSITION_Y, f64::from(scan.y)),
+        (QUANTION_SECTION_POSITION_Z, f64::from(scan.z)),
+    ];
+    for (id, value) in details {
+        bridge.write_f64_at(id, position, &[value]);
+    }
+}
+
 fn build_scans_bridge(scans: &[crate::Scan]) -> Option<Box<[u8]>> {
     let scan_count = scans.len() as u64;
     let mut total_points: u64 = 0;
@@ -763,21 +832,7 @@ fn build_scans_bridge(scans: &[crate::Scan]) -> Option<Box<[u8]>> {
         let position = index as u64;
         bridge.write_f64_at(QUANTION_SECTION_MZ, next_point, &scan.mz);
         bridge.write_f64_at(QUANTION_SECTION_INTENSITY, next_point, &scan.intensity);
-        let details = [
-            (QUANTION_SECTION_RT, scan.rt),
-            (QUANTION_SECTION_MS_LEVEL, f64::from(scan.level)),
-            (QUANTION_SECTION_SELECTED_ION_MZ, scan.precursor_mz),
-            (QUANTION_SECTION_BASE_PEAK_MZ, scan.base_peak_mz),
-            (QUANTION_SECTION_BASE_PEAK_INT, scan.base_peak_intensity),
-            (QUANTION_SECTION_TOTAL_ION_CURRENT, scan.total_ion_current),
-            (QUANTION_SECTION_POLARITY, f64::from(scan.polarity)),
-            (QUANTION_SECTION_POSITION_X, f64::from(scan.x)),
-            (QUANTION_SECTION_POSITION_Y, f64::from(scan.y)),
-            (QUANTION_SECTION_POSITION_Z, f64::from(scan.z)),
-        ];
-        for (id, value) in details {
-            bridge.write_f64_at(id, position, &[value]);
-        }
+        write_scan_details(&mut bridge, position, scan);
         next_point += scan.mz.len() as u64;
         point_starts.push(next_point);
     }
@@ -990,7 +1045,6 @@ fn build_features_bridge(
     )
 }
 
-#[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
 fn build_consensus_bridge(
     features: &[crate::utilities::find_features::Feature],
 ) -> Option<Box<[u8]>> {
@@ -1049,7 +1103,8 @@ fn build_consensus_bridge(
     )
 }
 
-const SCAN_DETAIL_SECTIONS: [u32; 10] = [
+const SCAN_DETAIL_SECTIONS: [u32; 11] = [
+    QUANTION_SECTION_SCAN_INDEX,
     QUANTION_SECTION_RT,
     QUANTION_SECTION_MS_LEVEL,
     QUANTION_SECTION_SELECTED_ION_MZ,
@@ -1930,7 +1985,7 @@ mod tests {
             let reader = Arc::new(RecordingReader::new(windowed_ion_bytes()));
             let mut ion = open_recording_ion(&reader);
 
-            let plan = plan_scan_ranges(&mut ion, query, TimeUnit::MINUTES, 0)
+            let plan = plan_scan_ranges(&mut ion, query, TimeUnit::MINUTES, 0, &ionic::ByteRangesOptions::default())
                 .expect("plan_scan_ranges failed");
 
             reader.clear_reads();
@@ -2025,7 +2080,7 @@ mod tests {
             )
             .expect("IonReader::new failed");
 
-            let plan = plan_scan_ranges(&mut served, query, TimeUnit::MINUTES, 0)
+            let plan = plan_scan_ranges(&mut served, query, TimeUnit::MINUTES, 0, &ionic::ByteRangesOptions::default())
                 .expect("plan_scan_ranges failed");
             gate.allow_only(plan.iter().map(|r| (r.offset, r.length)).collect());
 

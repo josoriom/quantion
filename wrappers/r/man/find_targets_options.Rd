@@ -10,7 +10,7 @@ find_targets_options(eic = calculate_eic_options(), find_peaks = find_peaks_opti
 }
 \arguments{
   \item{eic}{EIC retention-time range (from, to), tolerances and time unit. See \code{\link{calculate_eic_options}()}.}
-  \item{find_peaks}{Peak-picking settings. See \code{\link{find_peaks_options}()}.}
+  \item{find_peaks}{Settings for peak picking. See \code{\link{find_peaks_options}()}.}
   \item{threads}{Number of threads.}
 }
 \value{

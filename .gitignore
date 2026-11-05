@@ -26,3 +26,4 @@ wrappers/r/src/*.dll
 
 playground/
 .claude/
+.venv-check-api/

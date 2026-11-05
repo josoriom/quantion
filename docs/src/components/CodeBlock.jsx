@@ -1,29 +1,12 @@
-import { useState } from "react";
-
 import { splitIntoTokens } from "../highlight";
-
-function getCopyLabel(copied) {
-  if (copied) return "Copied";
-  return "Copy";
-}
+import { CopyButton } from "./CopyButton";
 
 export function CodeBlock({ title, code, language }) {
-  const [copied, setCopied] = useState(false);
-
-  function copyCode() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    });
-  }
-
   return (
     <section className="block">
       <h3>
         {title}
-        <button type="button" className="copy" onClick={copyCode}>
-          {getCopyLabel(copied)}
-        </button>
+        <CopyButton text={code} label={`Copy ${title}`} />
       </h3>
       <pre>
         {splitIntoTokens(code, language).map((token, index) =>

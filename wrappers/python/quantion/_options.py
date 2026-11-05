@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 from typing import Any, Dict, Mapping, Optional
 
 from quantion._errors import _invalid, _unknown_option
@@ -35,13 +36,19 @@ GET_PEAK = {"range": 0.0, "find_peaks": FIND_PEAKS}
 FIT_PEAK = {"shape": "EMG", "intensity": 0.0}
 DRAW_PEAKS = {"from": 0.0, "to": 0.0, "points": 1000}
 BASELINE = {"lambda": 20.0, "max_iterations": 4}
+DEISOTOPE_FEATURES = {"rt_tolerance": 0.02, "mz_tolerance": 0.005}
 FIND_TARGETS = {"eic": EIC, "find_peaks": FIND_PEAKS, "threads": 1}
 FIND_TRANSITIONS = {"find_peaks": FIND_PEAKS, "threads": 1}
 FIND_FEATURES = {"eic": EIC, "grid": GRID, "find_peaks": FIND_PEAKS, "threads": 1}
 MATCH_FEATURES = {"eic": EIC, "grid": GRID, "grouping": GROUPING, "find_peaks": FIND_PEAKS, "threads": 1}
-GET_SCANS = {"level": 1, "time_unit": "MINUTES"}
+DEFAULT_SCAN_ARRAYS = [
+    {"key": "mz", "accession": "MS:1000514"},
+    {"key": "intensity", "accession": "MS:1000515"},
+]
+GET_SCANS = {"level": 1, "time_unit": "MINUTES", "arrays": DEFAULT_SCAN_ARRAYS}
+GET_SCAN_METADATA = {"tags": []}
 PARSE_ION = {"max_cache_size": 0}
-WRITE_ION = {"out": None, "overwrite": False, "level": 12, "f32_compress": False, "headers": []}
+WRITE_ION = {"out": None, "overwrite": False, "level": 12, "f32_compress": False, "block_size": 8, "mz_window": 20, "headers": []}
 WRITE_MZML = {"out": None, "overwrite": False}
 ION_IMAGE = {"tolerance": 0.125, "level": 1, "on_progress": None}
 
@@ -138,3 +145,79 @@ def pack_peak_options(function: str, options: Mapping[str, Any], prefix: str = "
     packed.min_r2 = number("min_r2")
     packed.kernel_size = count("kernel_size")
     return packed
+
+
+_RESERVED_SCAN_KEYS = {
+    "index",
+    "rt",
+    "level",
+    "precursor_mz",
+    "precursorMz",
+    "base_peak_mz",
+    "basePeakMz",
+    "base_peak_intensity",
+    "basePeakIntensity",
+    "total_ion_current",
+    "totalIonCurrent",
+    "polarity",
+    "x",
+    "y",
+    "z",
+}
+_SCAN_ARRAY_FIELDS = ("key", "accession")
+_ACCESSION = re.compile(r"MS:[0-9]+")
+_MAX_ACCESSION = 2**32 - 1
+
+
+def _read_accession_number(function: str, accession: Any) -> int:
+    if not isinstance(accession, str) or not _ACCESSION.fullmatch(accession):
+        raise _invalid(function, "arrays.accession", f"must look like MS:1000514, got {accession!r}")
+    number = int(accession[3:])
+    if number > _MAX_ACCESSION:
+        raise _invalid(function, "arrays.accession", f"must look like MS:1000514, got {accession!r}")
+    return number
+
+
+def read_scan_arrays(function: str, arrays: Any) -> "tuple[list[str], list[int]]":
+    if not isinstance(arrays, (list, tuple)) or len(arrays) == 0:
+        raise _invalid(function, "arrays", "must have at least one array")
+    keys: "list[str]" = []
+    numbers: "list[int]" = []
+    for array in arrays:
+        if not isinstance(array, Mapping):
+            raise _invalid(function, "arrays", "must hold dicts with key and accession")
+        for field in array:
+            if field not in _SCAN_ARRAY_FIELDS:
+                raise _unknown_option(function, f"arrays.{field}", list(_SCAN_ARRAY_FIELDS))
+        key = array.get("key")
+        accession = array.get("accession")
+        if not isinstance(key, str) or not key:
+            raise _invalid(function, "arrays.key", "must not be empty")
+        if key in _RESERVED_SCAN_KEYS:
+            raise _invalid(function, "arrays.key", f"cannot be {key!r}: a scan already has that field")
+        number = _read_accession_number(function, accession)
+        for pair in DEFAULT_SCAN_ARRAYS:
+            if (key == pair["key"]) != (accession == pair["accession"]):
+                raise _invalid(function, "arrays", f"{pair['key']} and {pair['accession']} must go together")
+        if key in keys:
+            raise _invalid(function, "arrays.key", f"repeats {key!r}")
+        keys.append(key)
+        numbers.append(number)
+    return keys, numbers
+
+
+SCAN_METADATA_TAGS = (
+    "spectrum", "referenceableParamGroupRef", "spectrumDescription", "scanList", "scan", "scanWindowList",
+    "scanWindow", "precursorList", "precursor", "isolationWindow", "selectedIonList", "selectedIon",
+    "activation", "productList", "product", "binaryDataArrayList", "binaryDataArray",
+)
+_TAG_SEPARATOR = "\x1f"
+
+
+def read_scan_metadata_tags(function: str, tags: Any) -> bytes:
+    if not isinstance(tags, (list, tuple)):
+        raise _invalid(function, "tags", f"must be a list of tag names, got {tags!r}")
+    for tag in tags:
+        if not isinstance(tag, str) or tag not in SCAN_METADATA_TAGS:
+            raise _invalid(function, "tags", f"must be one of {', '.join(SCAN_METADATA_TAGS)}, got {tag!r}")
+    return _TAG_SEPARATOR.join(tags).encode("utf-8")

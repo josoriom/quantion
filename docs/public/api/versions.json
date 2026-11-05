@@ -1,11 +1,67 @@
 {
-  "latest": "0.2.0",
+  "latest": "0.2.1",
   "versions": [
+    {
+      "version": "0.2.1",
+      "api": "0.2.1",
+      "date": "2026-11-04",
+      "message": "feat: read scan metadata + custom arrays from .ion files"
+    },
     {
       "version": "0.2.0",
       "api": "0.2.0",
       "date": "2026-10-30",
-      "message": "feat: release v0.2.0"
+      "message": "feat: release v0.2.0",
+      "commit": "790687ce54115201c568783be2bf58e01dac0e44"
+    },
+    {
+      "version": "0.1.6",
+      "api": "0.2.0",
+      "date": "2026-10-28",
+      "message": "feat: release v0.1.6",
+      "commit": "ebd8debddb44415ec66dd0bbad83b094880cd113"
+    },
+    {
+      "version": "0.1.5",
+      "api": "0.2.0",
+      "date": "2026-10-12",
+      "message": "feat: release v0.1.5",
+      "commit": "f2b35d3b5934076e3b5e5cca7cb3f95ce35d0435"
+    },
+    {
+      "version": "0.1.4",
+      "api": "0.2.0",
+      "date": "2026-09-29",
+      "message": "feat: release v0.1.4",
+      "commit": "4623cd217f7541af97740e0182449abdd4eb4ca4"
+    },
+    {
+      "version": "0.1.3",
+      "api": "0.2.0",
+      "date": "2026-09-25",
+      "message": "feat: release v0.1.3",
+      "commit": "97c7c93a29ef23d7e685f094876743a8ebe262c4"
+    },
+    {
+      "version": "0.1.2",
+      "api": "0.2.0",
+      "date": "2026-09-17",
+      "message": "feat: release v0.1.2",
+      "commit": "f79e83b264a6af3cc42a39c38a9b112b9f3db02e"
+    },
+    {
+      "version": "0.1.1",
+      "api": "0.2.0",
+      "date": "2026-09-11",
+      "message": "feat: release v0.1.1",
+      "commit": "2c3a734b9d99d6d80d2c2d8c45146d19b9f2aa21"
+    },
+    {
+      "version": "0.1.0",
+      "api": "0.2.0",
+      "date": "2026-09-11",
+      "message": "feat: release v0.1.0",
+      "commit": "c67972f99fc0ff7b2d1ee2bcbf21bc9324586f64"
     }
   ]
 }

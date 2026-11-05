@@ -116,8 +116,8 @@ class Header(TypedDict):
     One HTTP header sent with an upload in write_ion. Values are never printed. A line break, or Host, Content-Length or Transfer-Encoding, gives an invalid_argument error.
 
     Fields:
-        name: Header name, such as Authorization.
-        value: Header value.
+        name: Name of the header, such as Authorization.
+        value: Value of the header.
 
     Example:
         header: Header = {"name": "Authorization", "value": "Bearer <token>"}
@@ -173,7 +173,7 @@ class GetPeakOptions(TypedDict, total=False):
 
     Fields:
         range: Half-width of the search window around rt. 0 searches the whole trace. Default 0.
-        find_peaks: Peak-picking settings. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
+        find_peaks: Settings for peak picking. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
 
     Documentation: https://phenological.github.io/quantion/?language=python#GetPeakOptions
     """
@@ -295,7 +295,7 @@ class FindTargetsOptions(TypedDict, total=False):
 
     Fields:
         eic: EIC retention-time range (from, to), tolerances and time unit. See CalculateEicOptions: https://phenological.github.io/quantion/?language=python#CalculateEicOptions
-        find_peaks: Peak-picking settings. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
+        find_peaks: Settings for peak picking. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
         threads: Number of threads. Default 1.
 
     Documentation: https://phenological.github.io/quantion/?language=python#FindTargetsOptions
@@ -311,7 +311,7 @@ class FindTransitionsOptions(TypedDict, total=False):
     Settings for find_transitions.
 
     Fields:
-        find_peaks: Peak-picking settings. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
+        find_peaks: Settings for peak picking. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
         threads: Number of threads. Default 1.
 
     Documentation: https://phenological.github.io/quantion/?language=python#FindTransitionsOptions
@@ -328,7 +328,7 @@ class FindFeaturesOptions(TypedDict, total=False):
     Fields:
         eic: EIC retention-time range (from, to), tolerances and time unit. See CalculateEicOptions: https://phenological.github.io/quantion/?language=python#CalculateEicOptions
         grid: The m/z grid. See GridOptions: https://phenological.github.io/quantion/?language=python#GridOptions
-        find_peaks: Peak-picking settings. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
+        find_peaks: Settings for peak picking. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
         threads: Number of threads. Default 1.
 
     Documentation: https://phenological.github.io/quantion/?language=python#FindFeaturesOptions
@@ -337,6 +337,21 @@ class FindFeaturesOptions(TypedDict, total=False):
     grid: GridOptions
     find_peaks: FindPeaksOptions
     threads: int
+
+
+class DeisotopeFeaturesOptions(TypedDict, total=False):
+    """DeisotopeFeaturesOptions · Options
+
+    How deisotope_features links isotope peaks.
+
+    Fields:
+        rt_tolerance: Same compound when rt is within this many minutes of M. Default 0.02.
+        mz_tolerance: Isotope peak when m/z is within this many Da of the expected position. Default 0.005.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#DeisotopeFeaturesOptions
+    """
+    rt_tolerance: float
+    mz_tolerance: float
 
 
 class MatchFeaturesOptions(TypedDict, total=False):
@@ -348,7 +363,7 @@ class MatchFeaturesOptions(TypedDict, total=False):
         eic: EIC retention-time range (from, to), tolerances and time unit. See CalculateEicOptions: https://phenological.github.io/quantion/?language=python#CalculateEicOptions
         grid: The m/z grid. See GridOptions: https://phenological.github.io/quantion/?language=python#GridOptions
         grouping: How features are matched across samples. See GroupingOptions: https://phenological.github.io/quantion/?language=python#GroupingOptions
-        find_peaks: Peak-picking settings. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
+        find_peaks: Settings for peak picking. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
         threads: Number of threads. Default 1.
 
     Documentation: https://phenological.github.io/quantion/?language=python#MatchFeaturesOptions
@@ -360,6 +375,37 @@ class MatchFeaturesOptions(TypedDict, total=False):
     threads: int
 
 
+class ScanArray(TypedDict):
+    """ScanArray · Options
+
+    One array to read from each scan in get_scans.
+
+    Fields:
+        key: Name of the array in the result, as a field of the scan.
+        accession: Accession of the array in the file, such as MS:1000514 for m/z.
+
+    Example:
+        array: ScanArray = {"key": "mz", "accession": "MS:1000514"}
+
+    Documentation: https://phenological.github.io/quantion/?language=python#ScanArray
+    """
+    key: str
+    accession: str
+
+
+class GetScanMetadataOptions(TypedDict, total=False):
+    """GetScanMetadataOptions · Options
+
+    Settings for get_scan_metadata.
+
+    Fields:
+        tags: Which tags to keep, by name. A row is kept when the last tag of its path matches, so scan keeps spectrum/scanList/scan[0] but not its scanWindow. Empty keeps every tag. The names are: spectrum, referenceableParamGroupRef, spectrumDescription, scanList, scan, scanWindowList, scanWindow, precursorList, precursor, isolationWindow, selectedIonList, selectedIon, activation, productList, product, binaryDataArrayList, binaryDataArray. Default [].
+
+    Documentation: https://phenological.github.io/quantion/?language=python#GetScanMetadataOptions
+    """
+    tags: List[str]
+
+
 class GetScansOptions(TypedDict, total=False):
     """GetScansOptions · Options
 
@@ -368,11 +414,13 @@ class GetScansOptions(TypedDict, total=False):
     Fields:
         level: MS level. 0 = every level. Default 1.
         time_unit: Unit of rt in the query. Default MINUTES.
+        arrays: Which arrays to read from each scan, as keys with accessions. Every other field of Scan always comes back. Default {"key": "mz", "accession": "MS:1000514"}, {"key": "intensity", "accession": "MS:1000515"}. See ScanArray: https://phenological.github.io/quantion/?language=python#ScanArray
 
     Documentation: https://phenological.github.io/quantion/?language=python#GetScansOptions
     """
     level: int
     time_unit: Union[TimeUnit, str]
+    arrays: List[ScanArray]
 
 
 class ParseIonOptions(TypedDict, total=False):
@@ -398,6 +446,8 @@ class WriteIonOptions(TypedDict, total=False):
         overwrite: Replace an existing file. Default False.
         level: Compression level, 0 to 22. Default 12.
         f32_compress: Store intensities as 32-bit floats. Default False.
+        block_size: Size of each data block before compression, in MB. A whole number, 1 or more. Default 8.
+        mz_window: Width of the m/z windows the spectra are split into, in Da, so a query reads only the windows it needs. A whole number, 0 or more; 0 keeps each spectrum whole. Default 20.
         headers: Extra HTTP headers. Only with a URL. Default [].
 
     Documentation: https://phenological.github.io/quantion/?language=python#WriteIonOptions
@@ -406,6 +456,8 @@ class WriteIonOptions(TypedDict, total=False):
     overwrite: bool
     level: int
     f32_compress: bool
+    block_size: int
+    mz_window: int
     headers: List[Header]
 
 
@@ -458,7 +510,7 @@ Fields:
     from: Start of the peak.
     to: End of the peak.
     intensity: Apex intensity.
-    integral: Peak area.
+    integral: Area of the peak.
     n_points: Points across the peak.
 
 Documentation: https://phenological.github.io/quantion/?language=python#Peak
@@ -487,7 +539,7 @@ class Feature(_FeatureFields, total=False):
         from: Start of the peak.
         to: End of the peak.
         intensity: Apex intensity.
-        integral: Peak area.
+        integral: Area of the peak.
         n_points: Points across the peak.
         frequency: match_features only: fraction of samples where it was found (0–1). Optional.
 
@@ -568,12 +620,55 @@ class PredictedRt(TypedDict):
     uncertainty: float
 
 
+class ScanParamKind(str, Enum):
+    """ScanParamKind · Enums
+
+    What a row from get_scan_metadata holds.
+
+    Fields:
+        ATTRIBUTE: An attribute of the tag, such as id or defaultArrayLength.
+        CV: A cvParam: a param from the controlled vocabulary, with an accession.
+        USER: A userParam: a param the software that wrote the file named itself.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#ScanParamKind
+    """
+    ATTRIBUTE = "ATTRIBUTE"
+    CV = "CV"
+    USER = "USER"
+
+
+class ScanParam(TypedDict):
+    """ScanParam · Results
+
+    One row from get_scan_metadata: an attribute, cvParam or userParam of one tag in a spectrum.
+
+    Fields:
+        path: Where the tag sits, from spectrum down. Repeated tags carry their position from 0, such as spectrum/precursorList/precursor[0]/selectedIonList/selectedIon[0].
+        kind: What the row holds: ATTRIBUTE, CV or USER. See ScanParamKind.
+        accession: Accession of a cvParam, such as MS:1000511. Missing for attributes and userParams.
+        name: Name of the attribute or param, such as ms level.
+        value: Value as text, such as 2. Missing when the file gives none.
+        unit: Unit name, such as minute. Missing when there is none.
+        unit_accession: Unit accession, such as UO:0000031. Missing when there is none.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#ScanParam
+    """
+    path: str
+    kind: ScanParamKind
+    accession: Optional[str]
+    name: str
+    value: Optional[str]
+    unit: Optional[str]
+    unit_accession: Optional[str]
+
+
 class Scan(TypedDict):
     """Scan · Results
 
     One scan from get_scans: its retention time, centroided m/z and intensity values, and its details.
 
     Fields:
+        index: Position of the scan in the spectrum list, from 0. Use it with get_scan_metadata.
         rt: Retention time (minutes).
         mz: m/z values.
         intensity: Intensities, same length as mz.
@@ -589,6 +684,7 @@ class Scan(TypedDict):
 
     Documentation: https://phenological.github.io/quantion/?language=python#Scan
     """
+    index: int
     rt: float
     mz: np.ndarray
     intensity: np.ndarray

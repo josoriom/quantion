@@ -21,6 +21,12 @@ interface DataXY
     x: Float64Array<ArrayBufferLike>
     y: Float64Array<ArrayBufferLike>
 
+function deisotopeFeatures(features: Feature[], options?: DeisotopeFeaturesOptions): Feature[]
+
+interface DeisotopeFeaturesOptions
+    mzTolerance?: number | undefined
+    rtTolerance?: number | undefined
+
 function drawPeaks(params: PeakParameters[], options?: DrawPeaksOptions): DataXY
 
 interface DrawPeaksOptions
@@ -105,9 +111,15 @@ interface GetPeakOptions
     findPeaks?: FindPeaksOptions | undefined
     range?: number | undefined
 
+function getScanMetadata(file: SampleFile, index: number, options?: GetScanMetadataOptions): Promise<ScanParam[]>
+
+interface GetScanMetadataOptions
+    tags?: string[] | undefined
+
 function getScans(file: SampleFile, query: ScanQuery, options?: GetScansOptions): Promise<Scan[]>
 
 interface GetScansOptions
+    arrays?: ScanArray[] | undefined
     level?: number | undefined
     timeUnit?: TimeUnit | undefined
 
@@ -213,6 +225,7 @@ class SampleFile
 interface Scan
     basePeakIntensity: number
     basePeakMz: number
+    index: number
     intensity: Float64Array<ArrayBufferLike>
     level: number
     mz: Float64Array<ArrayBufferLike>
@@ -223,6 +236,22 @@ interface Scan
     x: number
     y: number
     z: number
+
+interface ScanArray
+    accession: string
+    key: string
+
+interface ScanParam
+    accession: string | null
+    kind: ScanParamKind
+    name: string
+    path: string
+    unit: string | null
+    unitAccession: string | null
+    value: string | null
+
+type ScanParamKind = ScanParamKind
+const ScanParamKind: { readonly ATTRIBUTE: "ATTRIBUTE"; readonly CV: "CV"; readonly USER: "USER"; }
 
 type ScanQuery = ScanQuery
 
@@ -253,9 +282,11 @@ class WarpModel
 function writeIon(file: SampleFile, options?: WriteIonOptions): Promise<Uint8Array | undefined>
 
 interface WriteIonOptions
+    blockSize?: number | undefined
     f32Compress?: boolean | undefined
     headers?: Header[] | undefined
     level?: number | undefined
+    mzWindow?: number | undefined
     out?: string | URL | undefined
     overwrite?: boolean | undefined
 
@@ -288,6 +319,12 @@ interface DataXY
     x: Float64Array<ArrayBufferLike>
     y: Float64Array<ArrayBufferLike>
 
+function deisotopeFeatures(features: Feature[], options?: DeisotopeFeaturesOptions): Feature[]
+
+interface DeisotopeFeaturesOptions
+    mzTolerance?: number | undefined
+    rtTolerance?: number | undefined
+
 function drawPeaks(params: PeakParameters[], options?: DrawPeaksOptions): DataXY
 
 interface DrawPeaksOptions
@@ -372,9 +409,15 @@ interface GetPeakOptions
     findPeaks?: FindPeaksOptions | undefined
     range?: number | undefined
 
+function getScanMetadata(file: SampleFile, index: number, options?: GetScanMetadataOptions): Promise<ScanParam[]>
+
+interface GetScanMetadataOptions
+    tags?: string[] | undefined
+
 function getScans(file: SampleFile, query: ScanQuery, options?: GetScansOptions): Promise<Scan[]>
 
 interface GetScansOptions
+    arrays?: ScanArray[] | undefined
     level?: number | undefined
     timeUnit?: TimeUnit | undefined
 
@@ -480,6 +523,7 @@ class SampleFile
 interface Scan
     basePeakIntensity: number
     basePeakMz: number
+    index: number
     intensity: Float64Array<ArrayBufferLike>
     level: number
     mz: Float64Array<ArrayBufferLike>
@@ -490,6 +534,22 @@ interface Scan
     x: number
     y: number
     z: number
+
+interface ScanArray
+    accession: string
+    key: string
+
+interface ScanParam
+    accession: string | null
+    kind: ScanParamKind
+    name: string
+    path: string
+    unit: string | null
+    unitAccession: string | null
+    value: string | null
+
+type ScanParamKind = ScanParamKind
+const ScanParamKind: { readonly ATTRIBUTE: "ATTRIBUTE"; readonly CV: "CV"; readonly USER: "USER"; }
 
 type ScanQuery = ScanQuery
 
@@ -520,9 +580,11 @@ class WarpModel
 function writeIon(file: SampleFile, options?: WriteIonOptions): Promise<Uint8Array | undefined>
 
 interface WriteIonOptions
+    blockSize?: number | undefined
     f32Compress?: boolean | undefined
     headers?: Header[] | undefined
     level?: number | undefined
+    mzWindow?: number | undefined
     out?: string | URL | undefined
     overwrite?: boolean | undefined
 

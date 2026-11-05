@@ -125,7 +125,17 @@ parse_ion_options <- function(max_cache_size = 0) {
   ))
 }
 
-write_ion_options <- function(out = NULL, overwrite = FALSE, level = 12L, f32_compress = FALSE, headers = list()) {
+.LARGEST_U32 <- 4294967295
+
+.check_whole_u32 <- function(function_name, argument, value, smallest) {
+  if (!is.numeric(value) || length(value) != 1 || !is.finite(value) || value != floor(value) ||
+      value < smallest || value > .LARGEST_U32)
+    .invalid(function_name, argument, sprintf("must be a whole number from %d to %.0f", smallest, .LARGEST_U32))
+  as.numeric(value)
+}
+
+write_ion_options <- function(out = NULL, overwrite = FALSE, level = 12L, f32_compress = FALSE, headers = list(),
+                              block_size = 8L, mz_window = 20L) {
   function_name <- "write_ion_options"
   if (!is.null(out)) out <- .check_text(function_name, "out", out)
   if (inherits(headers, "quantion_header")) headers <- list(headers)
@@ -139,7 +149,9 @@ write_ion_options <- function(out = NULL, overwrite = FALSE, level = 12L, f32_co
     overwrite = .check_flag(function_name, "overwrite", overwrite),
     level = .check_number(function_name, "level", level),
     f32_compress = .check_flag(function_name, "f32_compress", f32_compress),
-    headers = headers
+    headers = headers,
+    block_size = .check_whole_u32(function_name, "block_size", block_size, 1),
+    mz_window = .check_whole_u32(function_name, "mz_window", mz_window, 0)
   ))
 }
 
@@ -152,11 +164,77 @@ write_mzml_options <- function(out = NULL, overwrite = FALSE) {
   ))
 }
 
-get_scans_options <- function(level = 1L, time_unit = "MINUTES") {
+.DEFAULT_SCAN_ARRAYS <- list(
+  list(key = "mz", accession = "MS:1000514"),
+  list(key = "intensity", accession = "MS:1000515")
+)
+.MAX_ACCESSION <- 4294967295
+.LARGEST_WHOLE_NUMBER <- 2^53 - 1
+.RESERVED_SCAN_KEYS <- c("index", "rt", "level", "precursor_mz", "precursorMz", "base_peak_mz", "basePeakMz", "base_peak_intensity", "basePeakIntensity", "total_ion_current", "totalIonCurrent", "polarity", "x", "y", "z")
+
+.check_scan_array <- function(function_name, array, seen_keys) {
+  if (!is.list(array) || is.null(names(array)))
+    .invalid(function_name, "arrays", "must hold lists with key and accession")
+  for (field in names(array)) {
+    if (!(field %in% c("key", "accession"))) .invalid(function_name, paste0("arrays.", field), "is not an option")
+  }
+  key <- array$key
+  accession <- array$accession
+  if (!is.character(key) || length(key) != 1 || is.na(key) || !nzchar(key))
+    .invalid(function_name, "arrays.key", "must not be empty")
+  if (key %in% .RESERVED_SCAN_KEYS)
+    .invalid(function_name, "arrays.key", sprintf("cannot be %s: a scan already has that field", key))
+  if (!is.character(accession) || length(accession) != 1 || is.na(accession) ||
+      !grepl("^MS:[0-9]+$", accession) || as.numeric(sub("MS:", "", accession)) > .MAX_ACCESSION)
+    .invalid(function_name, "arrays.accession", "must look like MS:1000514")
+  for (pair in .DEFAULT_SCAN_ARRAYS) {
+    if ((key == pair$key) != (accession == pair$accession))
+      .invalid(function_name, "arrays", sprintf("%s and %s must go together", pair$key, pair$accession))
+  }
+  if (key %in% seen_keys) .invalid(function_name, "arrays.key", sprintf("repeats %s", key))
+  list(key = key, accession = accession)
+}
+
+.check_scan_arrays <- function(function_name, arrays) {
+  if (!is.list(arrays) || length(arrays) == 0)
+    .invalid(function_name, "arrays", "must have at least one array")
+  seen_keys <- character()
+  checked <- list()
+  for (array in arrays) {
+    found <- .check_scan_array(function_name, array, seen_keys)
+    seen_keys <- c(seen_keys, found$key)
+    checked[[length(checked) + 1L]] <- found
+  }
+  checked
+}
+
+get_scans_options <- function(level = 1L, time_unit = "MINUTES",
+                              arrays = list(list(key = "mz", accession = "MS:1000514"),
+                                            list(key = "intensity", accession = "MS:1000515"))) {
   function_name <- "get_scans_options"
   .as_options("get_scans_options", list(
     level = .check_number(function_name, "level", level),
-    time_unit = .check_choice(function_name, "time_unit", time_unit, c("MINUTES", "SECONDS"))
+    time_unit = .check_choice(function_name, "time_unit", time_unit, c("MINUTES", "SECONDS")),
+    arrays = .check_scan_arrays(function_name, arrays)
+  ))
+}
+
+.SCAN_METADATA_TAGS <- c(
+  "spectrum", "referenceableParamGroupRef", "spectrumDescription", "scanList", "scan", "scanWindowList",
+  "scanWindow", "precursorList", "precursor", "isolationWindow", "selectedIonList", "selectedIon",
+  "activation", "productList", "product", "binaryDataArrayList", "binaryDataArray"
+)
+
+.check_scan_metadata_tags <- function(function_name, tags) {
+  if (!is.character(tags) || anyNA(tags) || !all(tags %in% .SCAN_METADATA_TAGS))
+    .invalid(function_name, "tags", sprintf("must be tag names from: %s", paste(.SCAN_METADATA_TAGS, collapse = ", ")))
+  tags
+}
+
+get_scan_metadata_options <- function(tags = character(0)) {
+  function_name <- "get_scan_metadata_options"
+  .as_options("get_scan_metadata_options", list(
+    tags = .check_scan_metadata_tags(function_name, tags)
   ))
 }
 
@@ -303,6 +381,14 @@ match_features_options <- function(eic = calculate_eic_options(), grid = grid_op
   ))
 }
 
+deisotope_features_options <- function(rt_tolerance = 0.02, mz_tolerance = 0.005) {
+  function_name <- "deisotope_features_options"
+  .as_options("deisotope_features_options", list(
+    rt_tolerance = .check_number(function_name, "rt_tolerance", rt_tolerance),
+    mz_tolerance = .check_number(function_name, "mz_tolerance", mz_tolerance)
+  ))
+}
+
 .PEAK_COLUMNS <- c("rt", "from", "to", "intensity", "integral", "n_points")
 .FEATURE_COLUMNS <- c("mz", "rt", "from", "to", "intensity", "integral", "n_points")
 
@@ -351,7 +437,7 @@ write_ion <- function(file, options = write_ion_options()) {
   out <- .get_out(options$out)
   headers <- as.character(unlist(lapply(options$headers, function(item) c(item$name, item$value)), use.names = FALSE))
   bytes <- .Call("C_write_ion", file, out, options$overwrite, as.integer(options$level),
-                 options$f32_compress, headers, PACKAGE = "quantion")
+                 options$f32_compress, options$block_size, options$mz_window, headers, PACKAGE = "quantion")
   if (!is.null(out) && .is_url(out)) {
     .upload_ion(out, options$headers, bytes)
     return(invisible(NULL))
@@ -397,6 +483,24 @@ write_mzml <- function(file, options = write_mzml_options()) {
   list(type = closest_query, from = value, to = NaN)
 }
 
+.add_scan_arrays <- function(found, keys) {
+  scans <- found$scans
+  scan_count <- nrow(scans)
+  key_count <- length(keys)
+  if (length(found$starts) != scan_count * key_count + 1)
+    stop("quantion bridge: array starts do not match the scans and arrays")
+  read_values <- function(scan_index, key_index) {
+    position <- (scan_index - 1) * key_count + key_index
+    first <- found$starts[position] + 1
+    last <- found$starts[position + 1]
+    if (last < first) numeric() else found$values[first:last]
+  }
+  for (key_index in seq_along(keys)) {
+    scans[[keys[key_index]]] <- lapply(seq_len(scan_count), read_values, key_index = key_index)
+  }
+  scans
+}
+
 get_scans <- function(file, rt = NULL, mz = NULL, options = get_scans_options()) {
   function_name <- "get_scans"
   file <- .check_sample(function_name, file)
@@ -409,12 +513,42 @@ get_scans <- function(file, rt = NULL, mz = NULL, options = get_scans_options())
   }
   level <- as.integer(options$level)
   source <- .remote_source(file)
+  if (!identical(options$arrays, .DEFAULT_SCAN_ARRAYS)) {
+    keys <- vapply(options$arrays, function(array) array$key, character(1))
+    accessions <- vapply(options$arrays, function(array) as.numeric(sub("MS:", "", array$accession)), numeric(1))
+    if (!is.null(source)) {
+      .prefetch(source, .Call("C_plan_scans_with_arrays", file, query$type, query$from, query$to, level,
+                              options$time_unit, accessions, PACKAGE = "quantion"))
+    }
+    found <- .Call("C_get_scans_with_arrays", file, query$type, query$from, query$to, level,
+                   options$time_unit, accessions, PACKAGE = "quantion")
+    return(.add_scan_arrays(found, keys))
+  }
   if (!is.null(source)) {
     .prefetch(source, .Call("C_plan_scans", file, query$type, query$from, query$to, level,
                             options$time_unit, PACKAGE = "quantion"))
   }
   .Call("C_get_scans", file, query$type, query$from, query$to, level, options$time_unit,
         PACKAGE = "quantion")
+}
+
+.check_scan_index <- function(function_name, index) {
+  if (!is.numeric(index) || length(index) != 1 || !is.finite(index) || index < 0 || index != floor(index))
+    .invalid(function_name, "index", "must be a whole number 0 or more")
+  if (index > .LARGEST_WHOLE_NUMBER)
+    .invalid(function_name, "index", sprintf("must be less than the scan count, got %.0f", index))
+  as.numeric(index)
+}
+
+get_scan_metadata <- function(file, index, options = get_scan_metadata_options()) {
+  function_name <- "get_scan_metadata"
+  file <- .check_sample(function_name, file)
+  options <- .check_options(function_name, "options", options, "get_scan_metadata_options", "get_scan_metadata_options")
+  index <- .check_scan_index(function_name, index)
+  source <- .remote_source(file)
+  if (!is.null(source)) .prefetch(source, .Call("C_plan_scan_metadata", file, index, PACKAGE = "quantion"))
+  tags <- paste(options$tags, collapse = "\x1f")
+  .Call("C_get_scan_metadata", file, index, tags, PACKAGE = "quantion")
 }
 
 calculate_eic <- function(file, mz, options = calculate_eic_options()) {
@@ -578,6 +712,20 @@ match_features <- function(directory, options = match_features_options()) {
   features <- .Call("C_match_features", path.expand(directory), options$eic, options$grid, options$grouping,
                     options$find_peaks, options$threads, PACKAGE = "quantion")
   .as_table(features, c(.FEATURE_COLUMNS, "frequency"))
+}
+
+deisotope_features <- function(features, options = deisotope_features_options()) {
+  function_name <- "deisotope_features"
+  features <- .check_table(function_name, features, c(.FEATURE_COLUMNS, "frequency"), "features")
+  options <- .check_options(function_name, "options", options, "deisotope_features_options", "deisotope_features_options")
+  columns <- lapply(.FEATURE_COLUMNS, function(name) as.numeric(.get_column(function_name, features, name, TRUE, NA, "features")))
+  frequency <- as.numeric(.get_column(function_name, features, "frequency", FALSE, NA, "features"))
+  has_frequency <- any(!is.na(frequency))
+  frequency[is.na(frequency)] <- NaN
+  values <- as.numeric(t(do.call(cbind, c(columns, list(frequency)))))
+  found <- .Call("C_deisotope_features", values, as.numeric(nrow(features)), options$rt_tolerance,
+                 options$mz_tolerance, PACKAGE = "quantion")
+  .as_table(found, if (has_frequency) c(.FEATURE_COLUMNS, "frequency") else .FEATURE_COLUMNS)
 }
 
 dispose <- function(object) {

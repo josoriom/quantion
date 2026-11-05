@@ -16,6 +16,7 @@ import { uploadIon } from "./upload";
 import {
   checkItems,
   checkKeys,
+  FEATURE_NUMBER_KEYS,
   getRequiredNumber,
   getShapeCode,
   getTimeUnitCode,
@@ -23,6 +24,7 @@ import {
   PEAK_KEYS,
   RANGE_KEYS,
   readBaselineOptions,
+  readDeisotopeFeaturesOptions,
   readDrawPeaksOptions,
   readEicOptions,
   readFindFeaturesOptions,
@@ -31,6 +33,9 @@ import {
   readFindTransitionsOptions,
   readFitPeakOptions,
   readGetPeakOptions,
+  getAccessionNumbers,
+  hasDefaultScanArrays,
+  readGetScanMetadataOptions,
   readGetScansOptions,
   readIonImageOptions,
   readMatchFeaturesOptions,
@@ -55,16 +60,19 @@ import type {
   FitPeakOptions,
   FromTo,
   GetPeakOptions,
+  GetScanMetadataOptions,
   GetScansOptions,
   IonImage,
   GetIonImageOptions,
   IonInput,
+  DeisotopeFeaturesOptions,
   MatchFeaturesOptions,
   NoiseLevel,
   ParseIonOptions,
   Peak,
   PeakParameters,
   Scan,
+  ScanParam,
   ScanQuery,
   Target,
   Transition,
@@ -288,7 +296,7 @@ export async function parseMzml(
  * Write a sample as an Ionic file (.ion). With no out, it returns the bytes. A path writes a file; a URL uploads it in one PUT request.
  *
  * @param file - The sample to write.
- * @param options - Optional settings: `out` = undefined, `overwrite` = false, `level` = 12, `f32Compress` = false, `headers` = []. See {@link https://phenological.github.io/quantion/?language=js#WriteIonOptions | WriteIonOptions}.
+ * @param options - Optional settings: `out` = undefined, `overwrite` = false, `level` = 12, `f32Compress` = false, `blockSize` = 8, `mzWindow` = 20, `headers` = []. See {@link https://phenological.github.io/quantion/?language=js#WriteIonOptions | WriteIonOptions}.
  * @returns The bytes when out is left out; nothing when it is written or uploaded.
  * @see {@link https://phenological.github.io/quantion/?language=js#write_ion | Documentation}
  */
@@ -312,6 +320,8 @@ export async function writeIon(
     settings.overwrite,
     settings.level,
     settings.f32Compress,
+    settings.blockSize,
+    settings.mzWindow,
     packHeaders(settings.headers),
   );
   if (!isUrl) return bytes;
@@ -463,7 +473,7 @@ function getScanQuery(query: ScanQuery): [number, number, number] {
  *   Example: `const window: FromTo = { from: 1.0, to: 2.5 };`
  * @param query.mz - Or by precursor m/z: a range or one value. Give rt or mz, not both. Each FromTo has `from`, `to`. See {@link https://phenological.github.io/quantion/?language=js#FromTo | FromTo}.
  *   Example: `const window: FromTo = { from: 1.0, to: 2.5 };`
- * @param options - Optional settings: `level` = 1, `timeUnit` = "MINUTES". See {@link https://phenological.github.io/quantion/?language=js#GetScansOptions | GetScansOptions}.
+ * @param options - Optional settings: `level` = 1, `timeUnit` = "MINUTES", `arrays` = { key: "mz", accession: "MS:1000514" }, { key: "intensity", accession: "MS:1000515" }. See {@link https://phenological.github.io/quantion/?language=js#GetScansOptions | GetScansOptions}.
  * @returns The scans found, in rt order.
  * @see {@link https://phenological.github.io/quantion/?language=js#get_scans | Documentation}
  */
@@ -475,6 +485,18 @@ export async function getScans(
   const handle = getHandle(file, "getScans");
   const settings = readGetScansOptions(options, "getScans");
   const [queryType, from, to] = getScanQuery(query);
+  if (!hasDefaultScanArrays(settings.arrays)) {
+    return file._backend.getScansWithArrays(
+      handle,
+      queryType,
+      from,
+      to,
+      settings.level,
+      getTimeUnitCode(settings.timeUnit),
+      getAccessionNumbers(settings.arrays),
+      settings.arrays.map((array) => array.key),
+    );
+  }
   return file._backend.getScans(
     handle,
     queryType,
@@ -483,6 +505,39 @@ export async function getScans(
     settings.level,
     getTimeUnitCode(settings.timeUnit),
   );
+}
+
+function getScanIndex(index: unknown): number {
+  if (typeof index !== "number" || !Number.isSafeInteger(index) || index < 0) {
+    throw invalidArgument(
+      "getScanMetadata",
+      "index",
+      `must be a whole number 0 or more, got ${String(index)}`,
+    );
+  }
+  return index;
+}
+
+/**
+ * getScanMetadata · Metadata
+ *
+ * Read the attributes, cvParams and userParams of one scan, one row each, parents before children. Find the scan with get_scans, then pass its index.
+ *
+ * @param file - The sample to read, from parse_ion or parse_mzml.
+ * @param index - Position of the scan in the spectrum list, from 0: the index of a scan from get_scans.
+ * @param options - Optional settings: `tags` = []. See {@link https://phenological.github.io/quantion/?language=js#GetScanMetadataOptions | GetScanMetadataOptions}.
+ * @returns One row per attribute or param, in the order of the mzML tree. Values are text. A field the file does not give is missing: None in Rust and Python, null in JS, NA in R.
+ * @see {@link https://phenological.github.io/quantion/?language=js#get_scan_metadata | Documentation}
+ */
+export async function getScanMetadata(
+  file: SampleFile,
+  index: number,
+  options?: GetScanMetadataOptions,
+): Promise<ScanParam[]> {
+  const handle = getHandle(file, "getScanMetadata");
+  const position = getScanIndex(index);
+  const settings = readGetScanMetadataOptions(options, "getScanMetadata");
+  return file._backend.getScanMetadata(handle, position, settings.tags);
 }
 
 /**
@@ -830,5 +885,65 @@ export function matchFeatures(
     settings.grouping,
     settings.findPeaks,
     settings.threads,
+  );
+}
+
+function getFeatureValues(
+  features: Feature[],
+  functionName: string,
+): Float64Array {
+  if (!Array.isArray(features)) {
+    throw invalidArgument(functionName, "features", "must be an array");
+  }
+  checkItems(
+    features,
+    [...FEATURE_NUMBER_KEYS, "frequency"],
+    functionName,
+    "features",
+  );
+  const size = FEATURE_NUMBER_KEYS.length + 1;
+  const values = new Float64Array(features.length * size);
+  features.forEach((feature, index) => {
+    const start = index * size;
+    FEATURE_NUMBER_KEYS.forEach((key, position) => {
+      values[start + position] = getRequiredNumber(
+        feature[key],
+        functionName,
+        `features[${index}].${key}`,
+      );
+    });
+    values[start + size - 1] =
+      feature.frequency === undefined
+        ? NaN
+        : getRequiredNumber(
+            feature.frequency,
+            functionName,
+            `features[${index}].frequency`,
+          );
+  });
+  return values;
+}
+
+/**
+ * deisotopeFeatures · Untargeted
+ *
+ * Remove 13C isotope peaks from a feature list, keeping the monoisotopic peak (M) of each compound. A feature is an isotope when it sits 1.00335/charge above the previous peak (charge = 1 or 2), has the same rt as M, and its intensity is not too high: M+1 at most M × mz × charge / 12 × 0.0108157.
+ *
+ * @param features - The features to clean, from find_features or match_features.
+ * @param options - Optional settings: `rtTolerance` = 0.02, `mzTolerance` = 0.005. See {@link https://phenological.github.io/quantion/?language=js#DeisotopeFeaturesOptions | DeisotopeFeaturesOptions}.
+ * @returns The features that are not isotopes, sorted by m/z.
+ * @see {@link https://phenological.github.io/quantion/?language=js#deisotope_features | Documentation}
+ */
+export function deisotopeFeatures(
+  features: Feature[],
+  options?: DeisotopeFeaturesOptions,
+): Feature[] {
+  const values = getFeatureValues(features, "deisotopeFeatures");
+  const settings = readDeisotopeFeaturesOptions(options, "deisotopeFeatures");
+  return getBackend().deisotopeFeatures(
+    values,
+    features.length,
+    settings.rtTolerance,
+    settings.mzTolerance,
   );
 }

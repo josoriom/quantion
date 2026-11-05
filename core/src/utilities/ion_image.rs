@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use ionic::{
-    IonReader, Range,
+    ByteRangesOptions, IonReader, Range,
     source::{ByteRange, merge_ranges},
 };
 
@@ -140,6 +140,7 @@ fn ranges_for_candidates(
                     from: lower,
                     to: upper,
                 },
+                &ByteRangesOptions::default(),
             )
             .map_err(FastError::from)?;
         ranges.extend(scan_ranges);

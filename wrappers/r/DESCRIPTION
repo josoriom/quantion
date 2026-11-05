@@ -1,7 +1,7 @@
 Package: quantion
 Type: Package
 Title: Peak Detection and Quantification for Mass Spectrometry Data
-Version: 0.2.0
+Version: 0.2.1
 Authors@R: c(
     person("J", "Osorio", email = "josoriom93@gmail.com", role = c("aut", "cre", "cph")),
     person("Julien", "Wist", role = "cph"),

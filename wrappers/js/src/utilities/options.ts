@@ -2,12 +2,15 @@ import { QuantionError, invalidArgument, missingArgument } from "./errors";
 import { PeakShape, TimeUnit } from "../types/types";
 import type {
   CalculateBaselineOptions,
+  DeisotopeFeaturesOptions,
   DrawPeaksOptions,
   CalculateEicOptions,
   FindPeaksOptions,
   FitPeakOptions,
   GetPeakOptions,
+  GetScanMetadataOptions,
   GetScansOptions,
+  ScanArray,
   GridOptions,
   GroupingOptions,
   Header,
@@ -103,6 +106,15 @@ function getObject(
 }
 
 export const TARGET_KEYS = ["mz", "rt", "id", "range"];
+export const FEATURE_NUMBER_KEYS = [
+  "mz",
+  "rt",
+  "from",
+  "to",
+  "intensity",
+  "integral",
+  "nPoints",
+] as const;
 export const TRANSITION_KEYS = ["precursor", "product", "rt", "range", "id"];
 export const PEAK_KEYS = ["height", "center", "fwhm", "tail", "r2"];
 export const RANGE_KEYS = ["from", "to"];
@@ -336,6 +348,18 @@ export function readBaselineOptions(
   return readNumbers(value, { lambda: 20, maxIterations: 4 }, functionName, "");
 }
 
+export function readDeisotopeFeaturesOptions(
+  value: unknown,
+  functionName: string,
+): Complete<DeisotopeFeaturesOptions> {
+  return readNumbers(
+    value,
+    { rtTolerance: 0.02, mzTolerance: 0.005 },
+    functionName,
+    "",
+  );
+}
+
 export function readFindTargetsOptions(
   value: unknown,
   functionName: string,
@@ -395,13 +419,123 @@ export function readMatchFeaturesOptions(
   };
 }
 
+const DEFAULT_SCAN_ARRAYS: ScanArray[] = [
+  { key: "mz", accession: "MS:1000514" },
+  { key: "intensity", accession: "MS:1000515" },
+];
+const RESERVED_SCAN_KEYS = new Set([
+  "index",
+  "rt",
+  "level",
+  "precursor_mz",
+  "precursorMz",
+  "base_peak_mz",
+  "basePeakMz",
+  "base_peak_intensity",
+  "basePeakIntensity",
+  "total_ion_current",
+  "totalIonCurrent",
+  "polarity",
+  "x",
+  "y",
+  "z",
+]);
+const SCAN_ARRAY_FIELDS = ["key", "accession"];
+const ACCESSION_PATTERN = /^MS:[0-9]+$/;
+const MAX_ACCESSION = 4294967295;
+
+export function hasDefaultScanArrays(arrays: ScanArray[]): boolean {
+  return (
+    arrays.length === DEFAULT_SCAN_ARRAYS.length &&
+    arrays.every(
+      (array, index) =>
+        array.key === DEFAULT_SCAN_ARRAYS[index].key &&
+        array.accession === DEFAULT_SCAN_ARRAYS[index].accession,
+    )
+  );
+}
+
+export function getAccessionNumbers(arrays: ScanArray[]): Uint32Array {
+  return Uint32Array.from(arrays, (array) => Number(array.accession.slice(3)));
+}
+
+function checkScanArray(
+  value: unknown,
+  seenKeys: Set<string>,
+  functionName: string,
+): ScanArray {
+  if (value === null || typeof value !== "object") {
+    throw invalidArgument(
+      functionName,
+      "arrays",
+      "must hold objects with key and accession",
+    );
+  }
+  const given = value as Record<string, unknown>;
+  checkKeys(given, SCAN_ARRAY_FIELDS, functionName, "arrays.");
+  const { key, accession } = given;
+  if (typeof key !== "string" || key === "") {
+    throw invalidArgument(functionName, "arrays.key", "must not be empty");
+  }
+  if (RESERVED_SCAN_KEYS.has(key)) {
+    throw invalidArgument(
+      functionName,
+      "arrays.key",
+      `cannot be ${JSON.stringify(key)}: a scan already has that field`,
+    );
+  }
+  if (
+    typeof accession !== "string" ||
+    !ACCESSION_PATTERN.test(accession) ||
+    Number(accession.slice(3)) > MAX_ACCESSION
+  ) {
+    throw invalidArgument(
+      functionName,
+      "arrays.accession",
+      `must look like MS:1000514, got ${JSON.stringify(accession)}`,
+    );
+  }
+  for (const pair of DEFAULT_SCAN_ARRAYS) {
+    if ((key === pair.key) !== (accession === pair.accession)) {
+      throw invalidArgument(
+        functionName,
+        "arrays",
+        `${pair.key} and ${pair.accession} must go together`,
+      );
+    }
+  }
+  if (seenKeys.has(key)) {
+    throw invalidArgument(
+      functionName,
+      "arrays.key",
+      `repeats ${JSON.stringify(key)}`,
+    );
+  }
+  seenKeys.add(key);
+  return { key, accession };
+}
+
+function readScanArrays(value: unknown, functionName: string): ScanArray[] {
+  if (value === undefined) return DEFAULT_SCAN_ARRAYS;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw invalidArgument(
+      functionName,
+      "arrays",
+      "must have at least one array",
+    );
+  }
+  const seenKeys = new Set<string>();
+  return value.map((array) => checkScanArray(array, seenKeys, functionName));
+}
+
 export function readGetScansOptions(
   value: unknown,
   functionName: string,
 ): Complete<GetScansOptions> {
   const given = getObject(value, functionName, "");
-  checkKeys(given, ["level", "timeUnit"], functionName, "");
+  checkKeys(given, ["level", "timeUnit", "arrays"], functionName, "");
   return {
+    arrays: readScanArrays(given.arrays, functionName),
     level: getValue(given, "level", "number", 1, functionName, ""),
     timeUnit: getChoice(
       given,
@@ -412,6 +546,54 @@ export function readGetScansOptions(
       "",
     ),
   };
+}
+
+export const TAG_SEPARATOR = "\x1f";
+
+export const SCAN_METADATA_TAGS = [
+  "spectrum",
+  "referenceableParamGroupRef",
+  "spectrumDescription",
+  "scanList",
+  "scan",
+  "scanWindowList",
+  "scanWindow",
+  "precursorList",
+  "precursor",
+  "isolationWindow",
+  "selectedIonList",
+  "selectedIon",
+  "activation",
+  "productList",
+  "product",
+  "binaryDataArrayList",
+  "binaryDataArray",
+] as const;
+
+export function readGetScanMetadataOptions(
+  value: unknown,
+  functionName: string,
+): Complete<GetScanMetadataOptions> {
+  const given = getObject(value, functionName, "");
+  checkKeys(given, ["tags"], functionName, "");
+  const tags = given.tags === undefined ? [] : given.tags;
+  if (!Array.isArray(tags)) {
+    throw invalidArgument(
+      functionName,
+      "tags",
+      `must be an array of tag names, got ${describe(tags)}`,
+    );
+  }
+  for (const tag of tags) {
+    if (!(SCAN_METADATA_TAGS as readonly unknown[]).includes(tag)) {
+      throw invalidArgument(
+        functionName,
+        "tags",
+        `must be one of ${SCAN_METADATA_TAGS.join(", ")}, got ${describe(tag)}`,
+      );
+    }
+  }
+  return { tags: tags as string[] };
 }
 
 export function readParseIonOptions(
@@ -435,7 +617,34 @@ export interface WriteIonSettings {
   overwrite: boolean;
   level: number;
   f32Compress: boolean;
+  blockSize: number;
+  mzWindow: number;
   headers: Header[];
+}
+
+const LARGEST_U32 = 4294967295;
+
+function getWholeNumber(
+  given: Record<string, unknown>,
+  key: string,
+  fallback: number,
+  smallest: number,
+  functionName: string,
+): number {
+  const value = given[key] === undefined ? fallback : given[key];
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < smallest ||
+    value > LARGEST_U32
+  ) {
+    throw invalidArgument(
+      functionName,
+      key,
+      `must be a whole number from ${smallest} to ${LARGEST_U32}, got ${describe(value)}`,
+    );
+  }
+  return value;
 }
 
 function readOut(
@@ -482,7 +691,15 @@ export function readWriteIonOptions(
   const given = getObject(value, functionName, "");
   checkKeys(
     given,
-    ["out", "overwrite", "level", "f32Compress", "headers"],
+    [
+      "out",
+      "overwrite",
+      "level",
+      "f32Compress",
+      "blockSize",
+      "mzWindow",
+      "headers",
+    ],
     functionName,
     "",
   );
@@ -498,6 +715,8 @@ export function readWriteIonOptions(
       functionName,
       "",
     ),
+    blockSize: getWholeNumber(given, "blockSize", 8, 1, functionName),
+    mzWindow: getWholeNumber(given, "mzWindow", 20, 0, functionName),
     headers: readHeaders(given.headers, functionName),
   };
 }

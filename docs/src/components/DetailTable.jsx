@@ -1,5 +1,5 @@
 import { TypeText } from "./TypeText";
-import { IonicText } from "./IonicText";
+import { LinkedText } from "./LinkedText";
 
 function getVisibleRows(rows, language) {
   const visibleRows = [];
@@ -44,7 +44,7 @@ export function DetailTable({ title, rows, language }) {
                   </td>
                   {hasDefault && <td className="default">{cell.default ?? "—"}</td>}
                   <td>
-                    <IonicText text={row.meaning} />
+                    <LinkedText text={row.meaning} />
                   </td>
                 </tr>
               );

@@ -35,6 +35,8 @@
 
 #define QUANTION_PAYLOAD_MODEL_METADATA 11
 
+#define QUANTION_PAYLOAD_SCAN_METADATA 12
+
 #define QUANTION_ELEMENT_F64 1
 
 #define QUANTION_ELEMENT_U32 2
@@ -166,6 +168,48 @@
 #define QUANTION_SECTION_MODEL_METADATA_VALUE_BYTES 86
 
 #define QUANTION_SECTION_CONSENSUS_POINT_COUNT 87
+
+#define QUANTION_SECTION_SCAN_ARRAY_STARTS 88
+
+#define QUANTION_SECTION_SCAN_ARRAY_VALUES 89
+
+#define QUANTION_SECTION_SCAN_INDEX 90
+
+#define QUANTION_SECTION_SCAN_METADATA_PATH_STARTS 91
+
+#define QUANTION_SECTION_SCAN_METADATA_PATH_BYTES 92
+
+#define QUANTION_SECTION_SCAN_METADATA_KIND_STARTS 93
+
+#define QUANTION_SECTION_SCAN_METADATA_KIND_BYTES 94
+
+#define QUANTION_SECTION_SCAN_METADATA_ACCESSION_STARTS 95
+
+#define QUANTION_SECTION_SCAN_METADATA_ACCESSION_BYTES 96
+
+#define QUANTION_SECTION_SCAN_METADATA_ACCESSION_MISSING 97
+
+#define QUANTION_SECTION_SCAN_METADATA_NAME_STARTS 98
+
+#define QUANTION_SECTION_SCAN_METADATA_NAME_BYTES 99
+
+#define QUANTION_SECTION_SCAN_METADATA_VALUE_STARTS 100
+
+#define QUANTION_SECTION_SCAN_METADATA_VALUE_BYTES 101
+
+#define QUANTION_SECTION_SCAN_METADATA_VALUE_MISSING 102
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_STARTS 103
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_BYTES 104
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_MISSING 105
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS 106
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES 107
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING 108
 
 typedef struct ImageSession ImageSession;
 
@@ -370,6 +414,8 @@ int write_ion(struct ParsedFile *handle,
               uint8_t overwrite,
               uint8_t level,
               uint8_t f32_compress,
+              uint32_t block_size,
+              uint32_t mz_window,
               const uint8_t *headers,
               uintptr_t headers_len,
               struct Buf *out);
@@ -503,6 +549,38 @@ int get_scans(struct ParsedFile *handle,
               struct Buf *out);
 
 /**
+ * Read chosen arrays of each scan. `accessions` holds the number of each array, such as 1000786.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `accessions` must hold `array_count` numbers. `out` must be a valid writable `Buf`.
+ */
+int get_scans_with_arrays(struct ParsedFile *handle,
+                          uint8_t query_type,
+                          double from,
+                          double to,
+                          uint8_t level,
+                          uint8_t time_unit,
+                          const uint32_t *accessions,
+                          uintptr_t array_count,
+                          struct Buf *out);
+
+/**
+ * Plan the byte ranges `get_scans_with_arrays` reads from an .ion file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `accessions` must hold `array_count` numbers. `out` must be a valid writable `Buf`.
+ */
+int plan_scans_with_arrays(struct ParsedFile *handle,
+                           uint8_t query_type,
+                           double from,
+                           double to,
+                           uint8_t level,
+                           uint8_t time_unit,
+                           const uint32_t *accessions,
+                           uintptr_t array_count,
+                           struct Buf *out);
+
+/**
  * Plan the byte ranges `get_scans` reads from an .ion file.
  *
  * # Safety
@@ -515,6 +593,25 @@ int plan_scans(struct ParsedFile *handle,
                uint8_t level,
                uint8_t time_unit,
                struct Buf *out);
+
+/**
+ * Read the attributes, cvParams and userParams of one scan, one row each. `tags` holds tag names split by the unit separator 0x1F; null or empty keeps every tag.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `tags` must be null or NUL-terminated text. `out` must be a valid writable `Buf`.
+ */
+int get_scan_metadata(struct ParsedFile *handle,
+                      uintptr_t index,
+                      const char *tags,
+                      struct Buf *out);
+
+/**
+ * Plan the byte ranges `get_scan_metadata` reads from an .ion file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
+ */
+int plan_scan_metadata(struct ParsedFile *handle, uintptr_t index, struct Buf *out);
 
 /**
  * Build the ion image of one m/z. Only .ion files.
@@ -625,6 +722,19 @@ int plan_find_features(struct ParsedFile *handle,
                        double grid_start,
                        double grid_end,
                        double grid_step_size,
+                       struct Buf *out);
+
+/**
+ * Remove 13C isotope peaks from a feature list. `features` holds 8 values per feature, in this order:
+ * mz, rt, from, to, intensity, integral, n_points, frequency (NaN when there is none).
+ *
+ * # Safety
+ * `features` must point to `count * 8` readable values. `out` must be a valid writable `Buf`.
+ */
+int deisotope_features(const double *features,
+                       uintptr_t count,
+                       double rt_tolerance,
+                       double mz_tolerance,
                        struct Buf *out);
 
 #if !(defined(QUANTION_TARGET_WASM32) && !defined(QUANTION_TARGET_WASI))

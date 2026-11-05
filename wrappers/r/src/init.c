@@ -13,10 +13,15 @@ SEXP C_parse_ion_source(SEXP store_pointer, SEXP max_cache_size);
 SEXP C_plan_open(SEXP header);
 SEXP C_store_new(void);
 SEXP C_store_add(SEXP store_pointer, SEXP offset, SEXP bytes);
-SEXP C_write_ion(SEXP file, SEXP out_path, SEXP overwrite, SEXP level, SEXP f32_compress, SEXP headers);
+SEXP C_write_ion(SEXP file, SEXP out_path, SEXP overwrite, SEXP level, SEXP f32_compress, SEXP block_size,
+                 SEXP mz_window, SEXP headers);
 SEXP C_write_mzml(SEXP file, SEXP out_path, SEXP overwrite);
 SEXP C_get_scans(SEXP file, SEXP query_type, SEXP from, SEXP to, SEXP level, SEXP time_unit);
 SEXP C_plan_scans(SEXP file, SEXP query_type, SEXP from, SEXP to, SEXP level, SEXP time_unit);
+SEXP C_get_scan_metadata(SEXP file, SEXP index, SEXP tags);
+SEXP C_plan_scan_metadata(SEXP file, SEXP index);
+SEXP C_get_scans_with_arrays(SEXP file, SEXP query_type, SEXP from, SEXP to, SEXP level, SEXP time_unit, SEXP accessions);
+SEXP C_plan_scans_with_arrays(SEXP file, SEXP query_type, SEXP from, SEXP to, SEXP level, SEXP time_unit, SEXP accessions);
 SEXP C_calculate_eic(SEXP file, SEXP mz, SEXP eic);
 SEXP C_plan_eic(SEXP file, SEXP mz, SEXP eic);
 SEXP C_get_ion_image(SEXP file, SEXP mz, SEXP tolerance, SEXP level);
@@ -32,6 +37,7 @@ SEXP C_plan_find_targets(SEXP file, SEXP mzs, SEXP eic);
 SEXP C_find_transitions(SEXP file, SEXP precursors, SEXP products, SEXP rts, SEXP ranges, SEXP ids, SEXP options, SEXP threads);
 SEXP C_find_features(SEXP file, SEXP eic, SEXP grid, SEXP options, SEXP threads);
 SEXP C_plan_find_features(SEXP file, SEXP eic, SEXP grid);
+SEXP C_deisotope_features(SEXP features, SEXP count, SEXP rt_tolerance, SEXP mz_tolerance);
 SEXP C_match_features(SEXP directory, SEXP eic, SEXP grid, SEXP grouping, SEXP options, SEXP threads);
 SEXP C_model_load_path(SEXP path);
 SEXP C_model_load_bytes(SEXP bytes);
@@ -55,10 +61,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_plan_open", (DL_FUNC)&C_plan_open, 1},
     {"C_store_new", (DL_FUNC)&C_store_new, 0},
     {"C_store_add", (DL_FUNC)&C_store_add, 3},
-    {"C_write_ion", (DL_FUNC)&C_write_ion, 6},
+    {"C_write_ion", (DL_FUNC)&C_write_ion, 8},
     {"C_write_mzml", (DL_FUNC)&C_write_mzml, 3},
     {"C_get_scans", (DL_FUNC)&C_get_scans, 6},
     {"C_plan_scans", (DL_FUNC)&C_plan_scans, 6},
+    {"C_get_scan_metadata", (DL_FUNC)&C_get_scan_metadata, 3},
+    {"C_plan_scan_metadata", (DL_FUNC)&C_plan_scan_metadata, 2},
+    {"C_get_scans_with_arrays", (DL_FUNC)&C_get_scans_with_arrays, 7},
+    {"C_plan_scans_with_arrays", (DL_FUNC)&C_plan_scans_with_arrays, 7},
     {"C_calculate_eic", (DL_FUNC)&C_calculate_eic, 3},
     {"C_plan_eic", (DL_FUNC)&C_plan_eic, 3},
     {"C_get_ion_image", (DL_FUNC)&C_get_ion_image, 4},
@@ -74,6 +84,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_find_transitions", (DL_FUNC)&C_find_transitions, 8},
     {"C_find_features", (DL_FUNC)&C_find_features, 5},
     {"C_plan_find_features", (DL_FUNC)&C_plan_find_features, 3},
+    {"C_deisotope_features", (DL_FUNC)&C_deisotope_features, 4},
     {"C_match_features", (DL_FUNC)&C_match_features, 6},
     {"C_model_load_path", (DL_FUNC)&C_model_load_path, 1},
     {"C_model_load_bytes", (DL_FUNC)&C_model_load_bytes, 1},

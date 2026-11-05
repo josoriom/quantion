@@ -4,6 +4,7 @@ import {
   PAYLOAD_FIT_RESULT,
   PAYLOAD_PEAKS,
   PAYLOAD_MODEL_METADATA,
+  PAYLOAD_SCAN_METADATA,
   PAYLOAD_WARP_TARGETS,
   SECTION_CONSENSUS_FREQUENCY,
   SECTION_CONSENSUS_POINT_COUNT,
@@ -35,6 +36,24 @@ import {
   SECTION_MODEL_METADATA_KEY_STARTS,
   SECTION_MODEL_METADATA_VALUE_BYTES,
   SECTION_MODEL_METADATA_VALUE_STARTS,
+  SECTION_SCAN_METADATA_ACCESSION_BYTES,
+  SECTION_SCAN_METADATA_ACCESSION_MISSING,
+  SECTION_SCAN_METADATA_ACCESSION_STARTS,
+  SECTION_SCAN_METADATA_KIND_BYTES,
+  SECTION_SCAN_METADATA_KIND_STARTS,
+  SECTION_SCAN_METADATA_NAME_BYTES,
+  SECTION_SCAN_METADATA_NAME_STARTS,
+  SECTION_SCAN_METADATA_PATH_BYTES,
+  SECTION_SCAN_METADATA_PATH_STARTS,
+  SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES,
+  SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING,
+  SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS,
+  SECTION_SCAN_METADATA_UNIT_BYTES,
+  SECTION_SCAN_METADATA_UNIT_MISSING,
+  SECTION_SCAN_METADATA_UNIT_STARTS,
+  SECTION_SCAN_METADATA_VALUE_BYTES,
+  SECTION_SCAN_METADATA_VALUE_MISSING,
+  SECTION_SCAN_METADATA_VALUE_STARTS,
   SECTION_WARP_TARGET_ID_BYTES,
   SECTION_WARP_TARGET_ID_STARTS,
   SECTION_WARP_TARGET_MZ,
@@ -45,11 +64,19 @@ import {
   readU32Section,
   readU8Section,
 } from "./bridge";
+import type { ScanParam } from "../types/types";
 
 type Column =
   | { name: string; id: number; kind: "number" }
   | { name: string; id: number; kind: "count" }
-  | { name: string; startsId: number; bytesId: number; kind: "text" };
+  | { name: string; startsId: number; bytesId: number; kind: "text" }
+  | {
+      name: string;
+      startsId: number;
+      bytesId: number;
+      missingId: number;
+      kind: "optional text";
+    };
 
 const RECORD_COLUMNS: Record<number, Column[]> = {
   [PAYLOAD_PEAKS]: [
@@ -110,6 +137,54 @@ const RECORD_COLUMNS: Record<number, Column[]> = {
       kind: "text",
     },
   ],
+  [PAYLOAD_SCAN_METADATA]: [
+    {
+      name: "path",
+      startsId: SECTION_SCAN_METADATA_PATH_STARTS,
+      bytesId: SECTION_SCAN_METADATA_PATH_BYTES,
+      kind: "text",
+    },
+    {
+      name: "kind",
+      startsId: SECTION_SCAN_METADATA_KIND_STARTS,
+      bytesId: SECTION_SCAN_METADATA_KIND_BYTES,
+      kind: "text",
+    },
+    {
+      name: "accession",
+      startsId: SECTION_SCAN_METADATA_ACCESSION_STARTS,
+      bytesId: SECTION_SCAN_METADATA_ACCESSION_BYTES,
+      missingId: SECTION_SCAN_METADATA_ACCESSION_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "name",
+      startsId: SECTION_SCAN_METADATA_NAME_STARTS,
+      bytesId: SECTION_SCAN_METADATA_NAME_BYTES,
+      kind: "text",
+    },
+    {
+      name: "value",
+      startsId: SECTION_SCAN_METADATA_VALUE_STARTS,
+      bytesId: SECTION_SCAN_METADATA_VALUE_BYTES,
+      missingId: SECTION_SCAN_METADATA_VALUE_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "unit",
+      startsId: SECTION_SCAN_METADATA_UNIT_STARTS,
+      bytesId: SECTION_SCAN_METADATA_UNIT_BYTES,
+      missingId: SECTION_SCAN_METADATA_UNIT_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "unitAccession",
+      startsId: SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS,
+      bytesId: SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES,
+      missingId: SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING,
+      kind: "optional text",
+    },
+  ],
 };
 
 const decoder = new TextDecoder();
@@ -136,8 +211,14 @@ export function readRecords(buffer: ArrayBuffer): Record<string, unknown>[] {
     } else {
       const starts = readCountSection(bridge, column.startsId);
       const bytes = readU8Section(bridge, column.bytesId);
+      const missing =
+        column.kind === "optional text"
+          ? readU8Section(bridge, column.missingId)
+          : null;
       values.set(column.name, (index) =>
-        decoder.decode(bytes.subarray(starts[index], starts[index + 1])),
+        missing?.[index]
+          ? null
+          : decoder.decode(bytes.subarray(starts[index], starts[index + 1])),
       );
     }
   }
@@ -149,4 +230,8 @@ export function readRecords(buffer: ArrayBuffer): Record<string, unknown>[] {
     rows[index] = row;
   }
   return rows;
+}
+
+export function readScanMetadata(buffer: ArrayBuffer): ScanParam[] {
+  return readRecords(buffer) as unknown as ScanParam[];
 }

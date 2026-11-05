@@ -8,7 +8,7 @@ Settings for find_transitions.
 find_transitions_options(find_peaks = find_peaks_options(), threads = 1L)
 }
 \arguments{
-  \item{find_peaks}{Peak-picking settings. See \code{\link{find_peaks_options}()}.}
+  \item{find_peaks}{Settings for peak picking. See \code{\link{find_peaks_options}()}.}
   \item{threads}{Number of threads.}
 }
 \value{

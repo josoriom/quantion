@@ -1,10 +1,10 @@
 use std::path::Path;
 
 use quantion::{
-    DataXY, CalculateEicOptions, FindFeaturesOptions, FindPeaksOptions, FindTargetsOptions, FindTransitionsOptions,
-    GetPeakOptions, GridOptions, MatchFeaturesOptions, ParseIonOptions, Peak, SampleFile, ScanQuery, Target,
-    Transition, FromTo, calculate_eic, find_features, find_noise_level, find_peaks, find_targets, find_transitions,
-    get_peak, get_scans, load_model, load_warp, match_features, parse_ion,
+    DataXY, CalculateEicOptions, DeisotopeFeaturesOptions, Feature, FindFeaturesOptions, FindPeaksOptions, FindTargetsOptions, FindTransitionsOptions,
+    GetPeakOptions, GetScanMetadataOptions, GridOptions, MatchFeaturesOptions, ParseIonOptions, Peak, SampleFile, ScanQuery, Target,
+    Transition, FromTo, calculate_eic, deisotope_features, find_features, find_noise_level, find_peaks, find_targets, find_transitions,
+    get_peak, get_scan_metadata, get_scans, load_model, load_warp, match_features, parse_ion,
 };
 
 const FROM_RT: f64 = 0.0;
@@ -123,6 +123,27 @@ fn count_scans(fixture: &Path) -> usize {
     get_scans(&mut open(fixture), query, Default::default()).expect("get_scans").len()
 }
 
+fn scan_metadata(fixture: &Path, out: &mut Vec<String>) {
+    let mut file = open(fixture);
+    let query = ScanQuery::RtRange(FromTo { from: FROM_RT, to: TO_RT });
+    let scans = get_scans(&mut file, query, Default::default()).expect("get_scans");
+    let first = scans.first().expect("a first scan").index;
+    let last = scans.last().expect("a last scan").index;
+    out.push(format!("get_scans.first.index = {first}"));
+    out.push(format!("get_scans.last.index = {last}"));
+    let rows = get_scan_metadata(&mut file, last, Default::default()).expect("get_scan_metadata");
+    out.push(format!("get_scan_metadata.count = {}", rows.len()));
+    for (position, row) in rows.iter().enumerate() {
+        let kind = format!("{:?}", row.kind);
+        let fields = [Some(row.path.as_str()), Some(kind.as_str()), row.accession.as_deref(), Some(row.name.as_str()), row.value.as_deref(), row.unit.as_deref(), row.unit_accession.as_deref()];
+        let text: Vec<&str> = fields.iter().map(|field| field.unwrap_or("NA")).collect();
+        out.push(format!("get_scan_metadata.{position} = {}", text.join(" | ")));
+    }
+    let options = GetScanMetadataOptions { tags: vec!["scan".to_string()] };
+    let scan_rows = get_scan_metadata(&mut file, last, options).expect("get_scan_metadata");
+    out.push(format!("get_scan_metadata.scan.count = {}", scan_rows.len()));
+}
+
 fn extract_eic(fixture: &Path, channel: &Channel) -> DataXY {
     calculate_eic(&mut open(fixture), channel.mass, eic_options()).expect("calculate_eic")
 }
@@ -220,9 +241,15 @@ fn consensus_features(directory: &str, out: &mut Vec<String>) {
         ..Default::default()
     };
     let found = match_features(directory, options).expect("match_features");
-    out.push(format!("match_features.count = {}", found.len()));
+    report_matched("match_features", &found, out);
+    let cleaned = deisotope_features(found, DeisotopeFeaturesOptions::default()).expect("deisotope_features");
+    report_matched("deisotope_features", &cleaned, out);
+}
+
+fn report_matched(label: &str, found: &[Feature], out: &mut Vec<String>) {
+    out.push(format!("{label}.count = {}", found.len()));
     for (index, f) in found.iter().enumerate() {
-        let name = format!("match_features[{index}]");
+        let name = format!("{label}[{index}]");
         out.push(format!("{name}.mz = {}", number(f.mz)));
         out.push(format!("{name}.rt = {}", number(f.rt)));
         out.push(format!("{name}.from = {}", number(f.from)));
@@ -314,6 +341,7 @@ fn main() {
     let mut out = Vec::new();
     out.push(format!("fnv1a.self_check = {}", digest(&SELF_CHECK_VALUES)));
     out.push(format!("parse_ion.scans = {}", count_scans(&fixture)));
+    scan_metadata(&fixture, &mut out);
     for channel in CHANNELS.iter() {
         report_channel(&fixture, channel, &mut out);
     }

@@ -13,6 +13,10 @@ typeddict DataXY total=True
     x: np.ndarray
     y: np.ndarray
 
+typeddict DeisotopeFeaturesOptions total=False
+    mz_tolerance?: float
+    rt_tolerance?: float
+
 typeddict DrawPeaksOptions total=False
     from?: float
     points?: int
@@ -75,7 +79,11 @@ typeddict GetPeakOptions total=False
     find_peaks?: FindPeaksOptions
     range?: float
 
+typeddict GetScanMetadataOptions total=False
+    tags?: List[str]
+
 typeddict GetScansOptions total=False
+    arrays?: List[ScanArray]
     level?: int
     time_unit?: TimeUnit | str
 
@@ -152,6 +160,7 @@ class Quantion(object)
     def __init__(self, abi: _ABI) -> None
     def calculate_baseline(self, y, options=None)
     def calculate_eic(self, file: SampleFile, mz: float, options=None)
+    def deisotope_features(self, features, options=None)
     def draw_peaks(self, params, options=None)
     def find_features(self, file: SampleFile, options=None)
     def find_noise_level(self, y)
@@ -161,6 +170,7 @@ class Quantion(object)
     def fit_peak(self, x, y, rt: float, options=None)
     def get_ion_image(self, file: SampleFile, mz: float, options=None)
     def get_peak(self, x, y, rt: float, options=None)
+    def get_scan_metadata(self, file: SampleFile, index: int, options=None)
     def get_scans(self, file: SampleFile, *, rt=None, mz=None, options=None)
     def load_model(self, source) -> Model
     def load_warp(self, model: Model) -> WarpModel
@@ -183,6 +193,7 @@ class SampleFile(object)
 typeddict Scan total=True
     base_peak_intensity: float
     base_peak_mz: float
+    index: int
     intensity: np.ndarray
     level: int
     mz: np.ndarray
@@ -193,6 +204,24 @@ typeddict Scan total=True
     x: int
     y: int
     z: int
+
+typeddict ScanArray total=True
+    accession: str
+    key: str
+
+typeddict ScanParam total=True
+    accession: str | None
+    kind: ScanParamKind
+    name: str
+    path: str
+    unit: str | None
+    unit_accession: str | None
+    value: str | None
+
+enum ScanParamKind
+    ATTRIBUTE = ATTRIBUTE
+    CV = CV
+    USER = USER
 
 typeddict Target total=False
     id?: str
@@ -221,9 +250,11 @@ class WarpModel(Metadata)
     def predict_rts(self, file: SampleFile, targets: Sequence[Dict[str, Any]]) -> List[Dict[str, float]]
 
 typeddict WriteIonOptions total=False
+    block_size?: int
     f32_compress?: bool
     headers?: List[Header]
     level?: int
+    mz_window?: int
     out?: str
     overwrite?: bool
 
@@ -234,6 +265,8 @@ typeddict WriteMzmlOptions total=False
 def calculate_baseline(y: Sequence, options: CalculateBaselineOptions | None = None) -> np.ndarray
 
 def calculate_eic(file: SampleFile, mz: float, options: CalculateEicOptions | None = None) -> DataXY
+
+def deisotope_features(features: Sequence[Feature], options: DeisotopeFeaturesOptions | None = None) -> List[Feature]
 
 def draw_peaks(params: Sequence[PeakParameters], options: DrawPeaksOptions | None = None) -> DataXY
 
@@ -252,6 +285,8 @@ def fit_peak(x: Sequence, y: Sequence, rt: float, options: FitPeakOptions | None
 def get_ion_image(file: SampleFile, mz: float, options: GetIonImageOptions | None = None) -> IonImage
 
 def get_peak(x: Sequence, y: Sequence, rt: float, options: GetPeakOptions | None = None) -> Peak
+
+def get_scan_metadata(file: SampleFile, index: int, options: GetScanMetadataOptions | None = None) -> List[ScanParam]
 
 def get_scans(file: SampleFile, *, rt: float | FromTo | None = None, mz: float | FromTo | None = None, options: GetScansOptions | None = None) -> List[Scan]
 

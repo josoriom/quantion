@@ -15,12 +15,12 @@ pub(crate) mod utilities;
 pub use error::{ErrorKind, QuantionError};
 #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
 pub use features::match_features;
-pub use features::find_features;
-pub use files::{Scan, calculate_eic, get_ion_image, get_scans, parse_ion, parse_mzml, write_ion, write_mzml};
+pub use features::{deisotope_features, find_features};
+pub use files::{Scan, ScanParam, ScanParamKind, calculate_eic, get_ion_image, get_scan_metadata, get_scans, parse_ion, parse_mzml, write_ion, write_mzml};
 pub use models::{load_model, load_warp};
 pub use options::{
-    CalculateBaselineOptions, DrawPeaksOptions, CalculateEicOptions, FindFeaturesOptions, FindPeaksOptions, FindTargetsOptions,
-    FindTransitionsOptions, FitPeakOptions, GetPeakOptions, GetScansOptions, GridOptions, GroupingOptions, Header,
+    CalculateBaselineOptions, DeisotopeFeaturesOptions, DrawPeaksOptions, CalculateEicOptions, FindFeaturesOptions, FindPeaksOptions, FindTargetsOptions,
+    FindTransitionsOptions, FitPeakOptions, GetPeakOptions, GetScanMetadataOptions, GetScansOptions, GridOptions, ScanArray, GroupingOptions, Header,
     GetIonImageOptions, IonOutput, MatchFeaturesOptions, ParseIonOptions, WriteIonOptions, WriteMzmlOptions,
 };
 pub use sample_file::{MzmlInput, SampleFile};

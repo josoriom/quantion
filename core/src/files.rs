@@ -1,16 +1,17 @@
-use std::{fmt::Display, fs, path::Path};
+use std::{collections::BTreeMap, fmt::Display, fs, ops::Index, path::Path};
 
 use ionic::{
-    ReadOptions, WriteOptions,
+    IonError, ReadOptions, WriteOptions,
     mzml::{bin_to_mzml, parse_mzml as read_mzml},
 };
 
 use crate::{
     error::{ErrorKind, QuantionError, check_finite, check_not_negative, check_positive},
-    options::{CalculateEicOptions, GetScansOptions, Header, GetIonImageOptions, IonOutput, ParseIonOptions, WriteIonOptions, WriteMzmlOptions},
+    options::{CalculateEicOptions, GetScanMetadataOptions, GetScansOptions, INTENSITY_KEY, MZ_KEY, ScanArray, Header, GetIonImageOptions, IonOutput, ParseIonOptions, WriteIonOptions, WriteMzmlOptions},
     sample_file::{FileSource, MzmlInput, SampleFile, is_url_path},
     utilities::{
-        calculate_eic::{CentroidScan, FastError, ScanQuery, calculate_eic as read_eic, get_scans as read_scans},
+        ion::ScanSource,
+        calculate_eic::{CentroidScan, FastError, ScanArrays, ScanQuery, calculate_eic as read_eic, get_scan_arrays as read_scan_arrays, get_scans as read_scans},
         ion::write_mzml_to_ion,
         ion_image::{IonImage, image_session_begin},
         parse_ion::{IonInput, parse_ion as open_ion},
@@ -27,6 +28,7 @@ const RESERVED_HEADERS: [&str; 3] = ["host", "content-length", "transfer-encodin
 /// One scan from get_scans: its retention time, centroided m/z and intensity values, and its details.
 ///
 /// Fields:
+/// - `index`: Position of the scan in the spectrum list, from 0. Use it with get_scan_metadata.
 /// - `rt`: Retention time (minutes).
 /// - `mz`: m/z values.
 /// - `intensity`: Intensities, same length as mz.
@@ -43,6 +45,7 @@ const RESERVED_HEADERS: [&str; 3] = ["host", "content-length", "transfer-encodin
 /// [Documentation](https://phenological.github.io/quantion/?language=rust#Scan)
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scan {
+    pub index: usize,
     pub rt: f64,
     pub mz: Vec<f64>,
     pub intensity: Vec<f64>,
@@ -55,12 +58,79 @@ pub struct Scan {
     pub x: u32,
     pub y: u32,
     pub z: u32,
+    arrays: BTreeMap<String, Vec<f64>>,
+}
+
+/// **ScanParamKind** · Enums
+///
+/// What a row from get_scan_metadata holds.
+///
+/// Fields:
+/// - `ATTRIBUTE`: An attribute of the tag, such as id or defaultArrayLength.
+/// - `CV`: A cvParam: a param from the controlled vocabulary, with an accession.
+/// - `USER`: A userParam: a param the software that wrote the file named itself.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#ScanParamKind)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
+pub enum ScanParamKind {
+    ATTRIBUTE,
+    CV,
+    USER,
+}
+
+impl ScanParamKind {
+    pub(crate) fn as_text(self) -> &'static str {
+        match self {
+            Self::ATTRIBUTE => "ATTRIBUTE",
+            Self::CV => "CV",
+            Self::USER => "USER",
+        }
+    }
+}
+
+/// **ScanParam** · Results
+///
+/// One row from get_scan_metadata: an attribute, cvParam or userParam of one tag in a spectrum.
+///
+/// Fields:
+/// - `path`: Where the tag sits, from spectrum down. Repeated tags carry their position from 0, such as spectrum/precursorList/precursor\[0\]/selectedIonList/selectedIon\[0\].
+/// - `kind`: What the row holds: ATTRIBUTE, CV or USER. See ScanParamKind.
+/// - `accession`: Accession of a cvParam, such as MS:1000511. Missing for attributes and userParams. Optional.
+/// - `name`: Name of the attribute or param, such as ms level.
+/// - `value`: Value as text, such as 2. Missing when the file gives none. Optional.
+/// - `unit`: Unit name, such as minute. Missing when there is none. Optional.
+/// - `unit_accession`: Unit accession, such as UO:0000031. Missing when there is none. Optional.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#ScanParam)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScanParam {
+    pub path: String,
+    pub kind: ScanParamKind,
+    pub accession: Option<String>,
+    pub name: String,
+    pub value: Option<String>,
+    pub unit: Option<String>,
+    pub unit_accession: Option<String>,
+}
+
+impl Index<&str> for Scan {
+    type Output = Vec<f64>;
+
+    fn index(&self, key: &str) -> &Vec<f64> {
+        match key {
+            MZ_KEY => &self.mz,
+            INTENSITY_KEY => &self.intensity,
+            _ => &self.arrays[key],
+        }
+    }
 }
 
 impl From<CentroidScan> for Scan {
     fn from(scan: CentroidScan) -> Self {
         let details = scan.metadata;
         Self {
+            index: scan.index,
             rt: scan.rt,
             mz: scan.mz.to_vec(),
             intensity: scan.intensity.to_vec(),
@@ -73,8 +143,30 @@ impl From<CentroidScan> for Scan {
             x: details.position_x,
             y: details.position_y,
             z: details.position_z,
+            arrays: BTreeMap::new(),
         }
     }
+}
+
+pub(crate) fn read_scans_with_arrays(file: &mut SampleFile, query: ScanQuery, options: &GetScansOptions, accessions: &[u32]) -> Vec<ScanArrays> {
+    match &mut file.source {
+        FileSource::Full(mzml) => read_scan_arrays(mzml.as_mut(), query, options.time_unit, options.level, accessions),
+        FileSource::Lazy(ion) | FileSource::Remote(ion) => read_scan_arrays(ion.as_mut(), query, options.time_unit, options.level, accessions),
+    }
+}
+
+fn get_keyed_scan(found: ScanArrays, keys: &[ScanArray]) -> Scan {
+    let mut scan = Scan::from(found.scan);
+    for (array, values) in keys.iter().zip(found.arrays) {
+        match array.key.as_str() {
+            MZ_KEY => scan.mz = values,
+            INTENSITY_KEY => scan.intensity = values,
+            _ => {
+                scan.arrays.insert(array.key.clone(), values);
+            }
+        }
+    }
+    scan
 }
 
 pub(crate) fn read_error(function: &'static str, error: impl Display) -> QuantionError {
@@ -155,7 +247,7 @@ pub fn parse_mzml(input: impl Into<MzmlInput>) -> Result<SampleFile, QuantionErr
 /// Write a sample as an Ionic file (.ion). With no out, it returns the bytes. A path writes a file; a URL uploads it in one PUT request.
 ///
 /// - `file`: The sample to write.
-/// - `options`: Optional settings: `out` = None, `overwrite` = false, `level` = 12, `f32_compress` = false, `headers` = empty. See [WriteIonOptions](https://phenological.github.io/quantion/?language=rust#WriteIonOptions).
+/// - `options`: Optional settings: `out` = None, `overwrite` = false, `level` = 12, `f32_compress` = false, `block_size` = 8, `mz_window` = 20, `headers` = empty. See [WriteIonOptions](https://phenological.github.io/quantion/?language=rust#WriteIonOptions).
 ///
 /// Returns: The bytes when out is left out; nothing when it is written or uploaded.
 ///
@@ -176,6 +268,17 @@ pub fn write_ion(file: &mut SampleFile, options: WriteIonOptions) -> Result<Opti
     }
 }
 
+const BYTES_PER_MEGABYTE: usize = 1024 * 1024;
+
+fn get_block_bytes(function: &'static str, block_size: u32) -> Result<usize, QuantionError> {
+    let bytes = usize::try_from(block_size).ok().and_then(|size| size.checked_mul(BYTES_PER_MEGABYTE));
+    match bytes {
+        Some(bytes) if bytes > 0 => Ok(bytes),
+        Some(_) => Err(QuantionError::invalid(function, "block_size", "must be at least 1 MB, got 0")),
+        None => Err(QuantionError::invalid(function, "block_size", format!("must be at most {} MB, got {block_size}", usize::MAX / BYTES_PER_MEGABYTE))),
+    }
+}
+
 pub(crate) fn encode_ion(file: &mut SampleFile, options: &WriteIonOptions) -> Result<Vec<u8>, QuantionError> {
     const FUNCTION: &str = "write_ion";
     if options.level > MAX_COMPRESSION_LEVEL {
@@ -185,6 +288,7 @@ pub(crate) fn encode_ion(file: &mut SampleFile, options: &WriteIonOptions) -> Re
             format!("must be between 0 and {MAX_COMPRESSION_LEVEL}, got {}", options.level),
         ));
     }
+    let block_bytes = get_block_bytes(FUNCTION, options.block_size)?;
     let is_upload = matches!(options.out, Some(IonOutput::Url(_)));
     if !options.headers.is_empty() && !is_upload {
         return Err(QuantionError::invalid(FUNCTION, "headers", "can only be used when out is a URL"));
@@ -198,6 +302,8 @@ pub(crate) fn encode_ion(file: &mut SampleFile, options: &WriteIonOptions) -> Re
         let write_options = WriteOptions {
             compression_level: options.level,
             force_f32: options.f32_compress,
+            block_size: block_bytes,
+            mz_window: f64::from(options.mz_window),
             ..Default::default()
         };
         write_mzml_to_ion(mzml, write_options, &mut bytes)
@@ -346,7 +452,7 @@ pub(crate) fn check_scan_query(function: &'static str, query: ScanQuery) -> Resu
 ///   Example: `let query = ScanQuery::RtRange(FromTo { from: 1.0, to: 2.5 });`
 /// - `query`: Or by precursor m/z: a range or one value. Give rt or mz, not both. Each ScanQuery has `RtRange(FromTo)`, `Rt(f64)`, `MzRange(FromTo)`, `Mz(f64)`. See [ScanQuery](https://phenological.github.io/quantion/?language=rust#ScanQuery).
 ///   Example: `let query = ScanQuery::RtRange(FromTo { from: 1.0, to: 2.5 });`
-/// - `options`: Optional settings: `level` = 1, `time_unit` = MINUTES. See [GetScansOptions](https://phenological.github.io/quantion/?language=rust#GetScansOptions).
+/// - `options`: Optional settings: `level` = 1, `time_unit` = MINUTES, `arrays` = { key: "mz", accession: "MS:1000514" }, { key: "intensity", accession: "MS:1000515" }. See [GetScansOptions](https://phenological.github.io/quantion/?language=rust#GetScansOptions).
 ///
 /// Returns: The scans found, in rt order.
 ///
@@ -354,11 +460,47 @@ pub(crate) fn check_scan_query(function: &'static str, query: ScanQuery) -> Resu
 pub fn get_scans(file: &mut SampleFile, query: ScanQuery, options: GetScansOptions) -> Result<Vec<Scan>, QuantionError> {
     const FUNCTION: &str = "get_scans";
     check_scan_query(FUNCTION, query)?;
+    let accessions = options.check_arrays(FUNCTION)?;
+    if !options.has_default_arrays() {
+        let found = read_scans_with_arrays(file, query, &options, &accessions);
+        return Ok(found.into_iter().map(|scan| get_keyed_scan(scan, &options.arrays)).collect());
+    }
     let (_, scans) = match &mut file.source {
         FileSource::Full(mzml) => read_scans(mzml.as_mut(), query, options.time_unit, options.level),
         FileSource::Lazy(ion) | FileSource::Remote(ion) => read_scans(ion.as_mut(), query, options.time_unit, options.level),
     };
     Ok(scans.into_iter().map(Scan::from).collect())
+}
+
+/// **get_scan_metadata** · Metadata
+///
+/// Read the attributes, cvParams and userParams of one scan, one row each, parents before children. Find the scan with get_scans, then pass its index.
+///
+/// - `file`: The sample to read, from parse_ion or parse_mzml.
+/// - `index`: Position of the scan in the spectrum list, from 0: the index of a scan from get_scans.
+/// - `options`: Optional settings: `tags` = []. See [GetScanMetadataOptions](https://phenological.github.io/quantion/?language=rust#GetScanMetadataOptions).
+///
+/// Returns: One row per attribute or param, in the order of the mzML tree. Values are text. A field the file does not give is missing: None in Rust and Python, null in JS, NA in R.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#get_scan_metadata)
+pub fn get_scan_metadata(file: &mut SampleFile, index: usize, options: GetScanMetadataOptions) -> Result<Vec<ScanParam>, QuantionError> {
+    options.check("get_scan_metadata")?;
+    let found = match &mut file.source {
+        FileSource::Full(mzml) => mzml.load_metadata(index),
+        FileSource::Lazy(ion) | FileSource::Remote(ion) => ion.load_metadata(index),
+    };
+    let rows = found.map_err(|error| scan_metadata_error(index, error))?;
+    Ok(rows.into_iter().filter(|row| options.keeps(&row.path)).collect())
+}
+
+pub(crate) fn scan_metadata_error(index: usize, error: IonError) -> QuantionError {
+    const FUNCTION: &str = "get_scan_metadata";
+    match error {
+        IonError::OutOfRange { count, .. } => {
+            QuantionError::invalid(FUNCTION, "index", format!("must be less than the scan count ({count}), got {index}"))
+        }
+        other => read_error(FUNCTION, other),
+    }
 }
 
 /// **calculate_eic** · Files

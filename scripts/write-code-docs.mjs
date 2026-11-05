@@ -52,6 +52,10 @@ function endWithPeriod(text) {
   return `${text}.`;
 }
 
+function getOneLineDefault(defaultValue) {
+  return defaultValue.replace(/\s*\n\s*/g, ", ");
+}
+
 function hasPlainDefault(defaultValue) {
   if (!defaultValue) return false;
   if (defaultValue === "default" || defaultValue === "—") return false;
@@ -65,7 +69,7 @@ function getOptionFields(optionsEntry, language) {
     const cell = field.languages[language];
     if (!cell) continue;
     let defaultValue = null;
-    if (hasPlainDefault(cell.default)) defaultValue = cell.default;
+    if (hasPlainDefault(cell.default)) defaultValue = getOneLineDefault(cell.default);
     fields.push({ name: cell.name, meaning: endWithPeriod(field.meaning), defaultValue, nested: findOptionsEntry(cell) });
   }
   return fields;
@@ -179,7 +183,7 @@ function getFieldLines(entry, language) {
     let meaning = endWithPeriod(field.meaning);
     if (language === "rust") meaning = escapeRustText(meaning);
     let line = `${formatName(cell.name, language)}: ${meaning}`;
-    if (entry.group === "Options" && hasPlainDefault(cell.default)) line += ` Default ${formatName(cell.default, language)}.`;
+    if (entry.group === "Options" && hasPlainDefault(cell.default)) line += ` Default ${formatName(getOneLineDefault(cell.default), language)}.`;
     if (entry.group !== "Options" && isOptionalField(cell)) line += " Optional.";
     const nested = findOptionsEntry(cell);
     if (nested) line += ` ${formatTypeLink(nested, language)}`;
@@ -372,7 +376,8 @@ function escapeRd(text) {
     .replace(/…/g, "...")
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
-    .replace(/±/g, "+/-");
+    .replace(/±/g, "+/-")
+    .replace(/×/g, "x");
   if (/[^\x00-\x7F]/.test(escaped)) throw new Error(`R help pages must be ASCII: ${escaped}`);
   return escaped;
 }
@@ -417,6 +422,10 @@ function getRFieldNames(entry) {
     if (cell) names.push(`\\code{${cell.name}}`);
   }
   return names.join(", ");
+}
+
+function hasRFunction(entry) {
+  return entry.languages.r.signature.startsWith(`${toSnakeCase(entry.name)}(`);
 }
 
 function getROptionsArgument(cell, optionsEntry) {
@@ -493,7 +502,7 @@ function writeROptionsPage(entry, text) {
     if (!cell) continue;
     let line = `  \\item{${cell.name}}{${escapeRd(endWithPeriod(field.meaning))}`;
     const nested = findOptionsEntry(cell);
-    if (nested) line += ` See \\code{\\link{${toSnakeCase(nested.name)}}()}.`;
+    if (nested) line += hasRFunction(nested) ? ` See \\code{\\link{${toSnakeCase(nested.name)}}()}.` : ` See \\href{${getLink(nested, "r")}}{${nested.name}}.`;
     argumentLines.push(`${line}}`);
   }
   if (argumentLines.length) text = replaceRdBlock(text, "arguments", argumentLines.join("\n"));

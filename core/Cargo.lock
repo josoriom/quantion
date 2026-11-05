@@ -373,9 +373,9 @@ dependencies = [
 
 [[package]]
 name = "ionic-rs"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af66422debee2d98fabc7316cdc69391a5c26dbea50adb94b08c7ab16c0230af"
+checksum = "0162460494138de2c30d47f497d940a7678ebbea94c7f7a4ea7c9a4dcf027ee5"
 dependencies = [
  "base64 0.22.1",
  "bytemuck",
@@ -477,7 +477,7 @@ dependencies = [
 
 [[package]]
 name = "quantion"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bytes",
  "cbindgen",

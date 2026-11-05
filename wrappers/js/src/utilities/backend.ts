@@ -7,6 +7,7 @@ import type {
   Peak,
   PeakParameters,
   Scan,
+  ScanParam,
   Target,
 } from "../types/types";
 import type { ModelEntry } from "../types/internal";
@@ -90,6 +91,8 @@ export interface Backend {
     overwrite: boolean,
     level: number,
     f32Compress: boolean,
+    blockSize: number,
+    mzWindow: number,
     headers: Uint8Array,
   ): MaybePromise<Uint8Array | undefined>;
   writeMzml(
@@ -140,6 +143,23 @@ export interface Backend {
     timeUnit: number,
   ): MaybePromise<Scan[]>;
 
+  getScansWithArrays(
+    handle: FileHandle,
+    queryType: number,
+    from: number,
+    to: number,
+    level: number,
+    timeUnit: number,
+    accessions: Uint32Array,
+    keys: string[],
+  ): MaybePromise<Scan[]>;
+
+  getScanMetadata(
+    handle: FileHandle,
+    index: number,
+    tags: string[],
+  ): MaybePromise<ScanParam[]>;
+
   getIonImage(
     handle: FileHandle,
     mz: number,
@@ -175,6 +195,13 @@ export interface Backend {
     lambda: number,
     maxIterations: number,
   ): Float64Array;
+
+  deisotopeFeatures(
+    values: Float64Array,
+    count: number,
+    rtTolerance: number,
+    mzTolerance: number,
+  ): Feature[];
 
   findTargets(
     handle: FileHandle,

@@ -11,11 +11,14 @@ use crate::{
     },
 };
 use crate::{
-    error::QuantionError,
+    error::{QuantionError, check_finite},
     files::{from_fast_error, read_error},
-    options::{CalculateEicOptions, FindFeaturesOptions, FindPeaksOptions, GridOptions, check_threads},
+    options::{CalculateEicOptions, DeisotopeFeaturesOptions, FindFeaturesOptions, FindPeaksOptions, GridOptions, check_threads},
     sample_file::SampleFile,
-    utilities::find_features::{Feature, FeatureError, FeatureSettings, find_features as read_features},
+    utilities::{
+        deisotope_features::deisotope_features as remove_isotopes,
+        find_features::{Feature, FeatureError, FeatureSettings, find_features as read_features},
+    },
 };
 
 fn get_feature_settings(eic: &CalculateEicOptions, grid: &GridOptions, find_peaks: &FindPeaksOptions, threads: usize) -> FeatureSettings {
@@ -136,4 +139,25 @@ fn from_alignment_error(function: &'static str, error: AlignmentError) -> Quanti
         AlignmentError::FastPath { path, source } => read_error(function, format!("{path}: {source}")),
         other => read_error(function, other),
     }
+}
+
+/// **deisotope_features** · Untargeted
+///
+/// Remove 13C isotope peaks from a feature list, keeping the monoisotopic peak (M) of each compound. A feature is an isotope when it sits 1.00335/charge above the previous peak (charge = 1 or 2), has the same rt as M, and its intensity is not too high: M+1 at most M × mz × charge / 12 × 0.0108157.
+///
+/// - `features`: The features to clean, from find_features or match_features.
+/// - `options`: Optional settings: `rt_tolerance` = 0.02, `mz_tolerance` = 0.005. See [DeisotopeFeaturesOptions](https://phenological.github.io/quantion/?language=rust#DeisotopeFeaturesOptions).
+///
+/// Returns: The features that are not isotopes, sorted by m/z.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#deisotope_features)
+pub fn deisotope_features(features: Vec<Feature>, options: DeisotopeFeaturesOptions) -> Result<Vec<Feature>, QuantionError> {
+    const FUNCTION: &str = "deisotope_features";
+    options.check(FUNCTION)?;
+    for (index, feature) in features.iter().enumerate() {
+        check_finite(FUNCTION, &format!("features[{index}].mz"), feature.mz)?;
+        check_finite(FUNCTION, &format!("features[{index}].rt"), feature.rt)?;
+        check_finite(FUNCTION, &format!("features[{index}].intensity"), feature.intensity)?;
+    }
+    Ok(remove_isotopes(features, options))
 }

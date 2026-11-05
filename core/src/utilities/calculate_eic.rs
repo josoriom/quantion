@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, sync::Arc};
 
 use ionic::{
-    ArrayKind, IonError, IonReader, Range,
+    ArrayKind, ByteRangesOptions, IonError, IonReader, Range,
     mzml::structs::{CvParam, MzML},
     source::{ByteRange, merge_ranges},
 };
@@ -197,6 +197,7 @@ impl SpectrumSummary {
 
 #[derive(Clone, Debug)]
 pub struct CentroidScan {
+    pub index: usize,
     pub rt: f64,
     pub mz: Arc<[f64]>,
     pub intensity: Arc<[f64]>,
@@ -371,24 +372,26 @@ pub fn plan_scan_ranges(
     query: ScanQuery,
     time_unit: TimeUnit,
     level: u8,
+    arrays: &ByteRangesOptions,
 ) -> Result<Vec<ByteRange>, FastError> {
     ion.require_bounds().map_err(FastError::from)?;
 
     let wanted = find_wanted_scans(ion, query, time_unit, level);
     if wanted.only_first {
-        return ranges_for_first_scan_with_data(ion, &wanted.scans);
+        return ranges_for_first_scan_with_data(ion, &wanted.scans, arrays);
     }
-    ranges_for_scans(ion, &wanted.scans)
+    ranges_for_scans(ion, &wanted.scans, arrays)
 }
 
 fn ranges_for_scans(
     ion: &mut IonReader,
     scans: &[(usize, ScanSummary)],
+    arrays: &ByteRangesOptions,
 ) -> Result<Vec<ByteRange>, FastError> {
     let mut ranges = Vec::with_capacity(scans.len());
     for (index, _) in scans {
         let scan_ranges = ion
-            .byte_ranges(*index, whole_scan_mz_range())
+            .byte_ranges(*index, whole_scan_mz_range(), arrays)
             .map_err(FastError::from)?;
         ranges.extend(scan_ranges);
     }
@@ -399,10 +402,11 @@ fn ranges_for_scans(
 fn ranges_for_first_scan_with_data(
     ion: &mut IonReader,
     scans: &[(usize, ScanSummary)],
+    arrays: &ByteRangesOptions,
 ) -> Result<Vec<ByteRange>, FastError> {
     for (index, _) in scans {
         let mut ranges = ion
-            .byte_ranges(*index, whole_scan_mz_range())
+            .byte_ranges(*index, whole_scan_mz_range(), arrays)
             .map_err(FastError::from)?;
         if !ranges.is_empty() {
             merge_ranges(&mut ranges, 0);
@@ -513,6 +517,11 @@ pub enum ScanQuery {
     Mz(f64),
 }
 
+pub struct ScanArrays {
+    pub scan: CentroidScan,
+    pub arrays: Vec<Vec<f64>>,
+}
+
 pub struct WantedScans {
     pub scans: Vec<(usize, ScanSummary)>,
     pub only_first: bool,
@@ -529,6 +538,43 @@ pub fn get_scans(
         return load_first(source, wanted.scans.into_iter());
     }
     load_selected(source, wanted.scans)
+}
+
+pub fn get_scan_arrays(
+    source: &mut impl ScanSource,
+    query: ScanQuery,
+    time_unit: TimeUnit,
+    level: u8,
+    accessions: &[u32],
+) -> Vec<ScanArrays> {
+    let wanted = find_wanted_scans(source, query, time_unit, level);
+    let mut scans = Vec::with_capacity(wanted.scans.len());
+    let mut values = Vec::new();
+    for (index, summary) in wanted.scans {
+        let mut arrays = Vec::with_capacity(accessions.len());
+        let mut has_data = false;
+        for &accession in accessions {
+            has_data |= source.load_array(index, accession, &mut values);
+            arrays.push(std::mem::take(&mut values));
+        }
+        if !has_data {
+            continue;
+        }
+        scans.push(ScanArrays {
+            scan: CentroidScan {
+                index,
+                rt: summary.rt,
+                mz: Arc::from(&[][..]),
+                intensity: Arc::from(&[][..]),
+                metadata: SpectrumSummary::from_summary(&summary),
+            },
+            arrays,
+        });
+        if wanted.only_first {
+            break;
+        }
+    }
+    scans
 }
 
 pub fn find_wanted_scans(
@@ -664,6 +710,7 @@ fn load_first(
         return (
             vec![summary.rt],
             vec![CentroidScan {
+                index,
                 rt: summary.rt,
                 mz: Arc::from(&mz_buf[..len]),
                 intensity: Arc::from(&int_buf[..len]),
@@ -689,6 +736,7 @@ fn load_selected(
         let len = mz_buf.len().min(int_buf.len());
         rts.push(summary.rt);
         scans.push(CentroidScan {
+            index,
             rt: summary.rt,
             mz: Arc::from(&mz_buf[..len]),
             intensity: Arc::from(&int_buf[..len]),
@@ -807,6 +855,15 @@ mod tests {
             *mz = m.clone();
             *intensity = i.clone();
             !m.is_empty()
+        }
+
+        fn load_array(&mut self, _index: usize, _accession: u32, values: &mut Vec<f64>) -> bool {
+            values.clear();
+            false
+        }
+
+        fn load_metadata(&mut self, index: usize) -> ionic::IonResult<Vec<crate::files::ScanParam>> {
+            Err(ionic::IonError::OutOfRange { index, count: self.scans.len() as u64 })
         }
     }
 

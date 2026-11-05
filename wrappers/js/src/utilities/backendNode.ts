@@ -23,13 +23,15 @@ import type {
   Peak,
   PeakParameters,
   Scan,
+  ScanParam,
   Target,
 } from "../types/types";
 import type { ModelEntry } from "../types/internal";
+import { TAG_SEPARATOR } from "./options";
 import { toQuantionError } from "./errors";
-import { readRecords } from "./recordBridge";
+import { readRecords, readScanMetadata } from "./recordBridge";
 import { readIonImage } from "./imageBridge";
-import { readScans } from "./scanBridge";
+import { readScanArrays, readScans } from "./scanBridge";
 import {
   ByteRangeResult,
   RemoteSource,
@@ -277,6 +279,8 @@ export class NodeBackend implements Backend {
     overwrite: boolean,
     level: number,
     f32Compress: boolean,
+    blockSize: number,
+    mzWindow: number,
     headers: Uint8Array,
   ): Uint8Array | undefined {
     return this.native.writeIon(
@@ -285,6 +289,8 @@ export class NodeBackend implements Backend {
       overwrite ? 1 : 0,
       level,
       f32Compress ? 1 : 0,
+      blockSize,
+      mzWindow,
       toNodeBuffer(headers),
     );
   }
@@ -386,6 +392,39 @@ export class NodeBackend implements Backend {
     return readScans(this.native.getScans(handle, ...values));
   }
 
+  async getScansWithArrays(
+    handle: FileHandle,
+    queryType: number,
+    from: number,
+    to: number,
+    level: number,
+    timeUnit: number,
+    accessions: Uint32Array,
+    keys: string[],
+  ): Promise<Scan[]> {
+    const values = [queryType, from, to, level, timeUnit, accessions];
+    await this.prefetch(handle, () =>
+      this.native.planScansWithArrays(handle, ...values),
+    );
+    return readScanArrays(
+      this.native.getScansWithArrays(handle, ...values),
+      keys,
+    );
+  }
+
+  async getScanMetadata(
+    handle: FileHandle,
+    index: number,
+    tags: string[],
+  ): Promise<ScanParam[]> {
+    await this.prefetch(handle, () =>
+      this.native.planScanMetadata(handle, index),
+    );
+    return readScanMetadata(
+      this.native.getScanMetadata(handle, index, tags.join(TAG_SEPARATOR)),
+    );
+  }
+
   async getIonImage(
     handle: FileHandle,
     mz: number,
@@ -454,6 +493,17 @@ export class NodeBackend implements Backend {
     maxIterations: number,
   ): Float64Array {
     return this.native.calculateBaseline(y, lambda, maxIterations);
+  }
+
+  deisotopeFeatures(
+    values: Float64Array,
+    count: number,
+    rtTolerance: number,
+    mzTolerance: number,
+  ): Feature[] {
+    return readRecords(
+      this.native.deisotopeFeatures(values, count, rtTolerance, mzTolerance),
+    ) as unknown as Feature[];
   }
 
   async findTargets(
