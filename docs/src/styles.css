@@ -864,6 +864,31 @@ table.details td {
   font-size: 14px;
 }
 
+.ask-restart {
+  margin-left: auto;
+  margin-right: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.ask-restart:hover,
+.ask-restart:focus-visible {
+  color: var(--accent-strong);
+}
+
+.ask-restart:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .ask-close {
   border: 0;
   background: transparent;
@@ -917,6 +942,34 @@ table.details td {
 
 .ask-chat-input {
   margin: 10px 12px 4px;
+}
+
+.ask-install {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.ask-install li {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.ask-install p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.ask-install code {
+  user-select: all;
+}
+
+.ask-install-note {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .ask-tip {

@@ -464,11 +464,11 @@ export function getTemplateFunctions(entry, document) {
 
 const numberValuePattern = /\d+(\.\d+)?/;
 
-function namesFunction(entry, text) {
+function namesFunction(entry, text, { typed = false } = {}) {
   if (entry?.kind !== "function") return false;
   if (isCodeForm(entry, text)) return true;
   const squashed = entry.name.replace(/_/g, "");
-  const words = getWords(text);
+  const words = typed ? (text.toLowerCase().match(/[a-z0-9]+/g) ?? []) : getWords(text);
   for (let start = 0; start < words.length; start += 1) {
     if (words.slice(start, start + entry.name.split("_").length).join("") === squashed) return true;
   }
@@ -656,7 +656,8 @@ export function createAsker({ embed, index, document }) {
       const confidence = explanation.type === "entry" || isAboutPage(explanation, page) ? "high" : "medium";
       return { questionVector, reason: { route: "definition", confidence }, explanation, option: getExplainedOption(explanation), entries: getExplainedEntries(explanation), values: null, followUps: [] };
     }
-    const allowedItems = keywordItems.filter((item) => allowsNamed(item) && !(item.numbers && namesFunction(namedEntry, asked)));
+    const isBlocked = (item) => (item.numbers && namesFunction(namedEntry, asked)) || (item.withoutFunction && namesFunction(namedEntry, asked, { typed: true }));
+    const allowedItems = keywordItems.filter((item) => allowsNamed(item) && !isBlocked(item));
     if (allowedItems.length > 0 && !isContinuation) {
       const best = pickGuideItem(guideScores, allowedItems);
       return guideResult(best.item, "high", language, { questionVector, guideScore: best.score, question: asked });
@@ -669,7 +670,7 @@ export function createAsker({ embed, index, document }) {
     const isOffTopic = !hasDomainWord(original) && (margin < limits.topicMargin || descriptiveTopScore < limits.minScore);
     const isPlainWord = namedEntry?.kind === "function" && !isCodeForm(namedEntry, asked);
     const namedFunction = namedEntry?.kind === "function" && (namedEntry.name.includes("_") ? !isPlainWord : !(isPlainWord && isOffTopic)) ? namedEntry : null;
-    const guideBest = !namedFunction && !isContinuation ? pickGuideItem(guideScores, guideItems.filter((item) => !item.numbers || (keywordItems.includes(item) && !namesFunction(namedEntry, asked)))) : null;
+    const guideBest = !namedFunction && !isContinuation ? pickGuideItem(guideScores, guideItems.filter((item) => !(item.numbers || item.withoutFunction || item.keywordsOnly) || (keywordItems.includes(item) && !isBlocked(item)))) : null;
     if (!namedFunction && isOffTopic && !isContinuation) {
       if (guideBest && guideBest.score >= limits.guideScore + limits.guideLead) return guideResult(guideBest.item, rateGuide(false, guideBest.score), language, { questionVector, guideScore: guideBest.score });
       return refusedResult({ questionVector, topScore, rawTopScore, descriptiveTopScore, offTopicScore });

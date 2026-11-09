@@ -35,5 +35,20 @@
   {"question": "What is Quant·ion?", "expect": "about", "split": "dev"},
   {"question": "how quantion works?", "expect": "about", "split": "dev"},
   {"question": "what can quant-ion do", "expect": "about", "split": "test"},
-  {"question": "why would I use quantion", "expect": "about", "split": "test"}
+  {"question": "why would I use quantion", "expect": "about", "split": "test"},
+  {"question": "How do I install Quant·ion?", "expect": "install", "split": "dev"},
+  {"question": "pip install quantion", "expect": "install", "split": "dev"},
+  {"question": "is it on npm", "expect": "install", "split": "dev"},
+  {"question": "how can I get quantion for rust", "expect": "install", "split": "test"},
+  {"question": "does it work on windows", "expect": "install", "split": "test"},
+  {"question": "How to do peak detection", "expect": "peak-detection", "split": "dev"},
+  {"question": "how detect peaks", "expect": "peak-detection", "split": "dev"},
+  {"question": "peak detection", "expect": "peak-detection", "split": "dev"},
+  {"question": "how does peak picking work", "expect": "peak-detection", "split": "test"},
+  {"question": "how can I identify peaks in my data", "expect": "peak-detection", "split": "test"},
+  {"question": "Something not working?", "expect": "report", "split": "dev"},
+  {"question": "it doesn't work", "expect": "report", "split": "dev"},
+  {"question": "I found a bug", "expect": "report", "split": "dev"},
+  {"question": "how do I report a problem", "expect": "report", "split": "test"},
+  {"question": "where can I open an issue", "expect": "report", "split": "test"}
 ]

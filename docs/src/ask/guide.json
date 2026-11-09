@@ -10,13 +10,25 @@
       "label": "Which tool do I need?"
     },
     {
+      "label": "How do I install Quant·ion?"
+    },
+    {
       "label": "Open a file"
+    },
+    {
+      "label": "How do I do peak detection?"
     },
     {
       "label": "How do I get peaks above 1000 intensity?"
     },
     {
       "label": "What is a target?"
+    },
+    {
+      "label": "What's a feature?"
+    },
+    {
+      "label": "Something not working?"
     }
   ],
   "items": [
@@ -184,6 +196,173 @@
         "arguments",
         "parameter",
         "parameters"
+      ]
+    },
+    {
+      "id": "install",
+      "keywordsOnly": true,
+      "questions": [
+        "How do I install Quant·ion?",
+        "Install quantion",
+        "How do I install it for Python?",
+        "Is quantion on npm?",
+        "How do I add quantion to my Rust project?",
+        "Which platforms are supported?",
+        "Can I use it on Windows?"
+      ],
+      "all": [
+        [
+          "install|installation|installing|setup",
+          "quantion|it|this|python|rust|javascript|js|node|pip|npm|cargo|pypi|crates|package|toolkit|library"
+        ],
+        [
+          "npm|pypi|crates|cran",
+          "quantion|it|this|package"
+        ],
+        [
+          "platforms|platform|windows|macos|linux",
+          "quantion|it|this|supported|support|work|works|run|runs"
+        ],
+        [
+          "get|download|add|obtain",
+          "quantion"
+        ]
+      ],
+      "answer": "Quant·ion is available in each language's package registry. For other languages, switch the language tab.",
+      "functions": [],
+      "link": "overview",
+      "followUps": [
+        {
+          "label": "Which tool do I need?"
+        },
+        {
+          "label": "Open a file"
+        }
+      ],
+      "unless": [
+        "option",
+        "options",
+        "peak",
+        "peaks",
+        "find",
+        "parse",
+        "file",
+        "files",
+        "eic",
+        "mz",
+        "rt",
+        "targets",
+        "features",
+        "feature",
+        "scans",
+        "baseline",
+        "noise",
+        "threads"
+      ],
+      "languages": [
+        {
+          "key": "python",
+          "label": "Python",
+          "registry": {
+            "label": "PyPI",
+            "address": "https://pypi.org/project/quantion/"
+          },
+          "command": "pip install quantion",
+          "github": {
+            "address": "https://github.com/phenological/quantion/tree/main/wrappers/python",
+            "command": "pip install \"git+https://github.com/phenological/quantion.git#subdirectory=wrappers/python\""
+          }
+        },
+        {
+          "key": "js",
+          "label": "JavaScript",
+          "registry": {
+            "label": "npm",
+            "address": "https://www.npmjs.com/package/quantion"
+          },
+          "command": "npm install quantion"
+        },
+        {
+          "key": "rust",
+          "label": "Rust",
+          "registry": {
+            "label": "crates.io",
+            "address": "https://crates.io/crates/quantion"
+          },
+          "command": "cargo add quantion",
+          "github": {
+            "address": "https://github.com/phenological/quantion",
+            "command": "cargo add quantion --git https://github.com/phenological/quantion"
+          }
+        },
+        {
+          "key": "r",
+          "label": "R",
+          "pending": "Not on CRAN yet; install it from GitHub.",
+          "github": {
+            "address": "https://github.com/phenological/quantion/tree/main/wrappers/r",
+            "command": "remotes::install_github(\"phenological/quantion\", subdir = \"wrappers/r\")"
+          }
+        }
+      ]
+    },
+    {
+      "id": "peak-detection",
+      "withoutFunction": true,
+      "questions": [
+        "How to do peak detection",
+        "How do I detect peaks?",
+        "How does peak picking work?",
+        "How can I find the peaks in my data?",
+        "Peak detection",
+        "Which function detects peaks?"
+      ],
+      "all": [
+        [
+          "peak|peaks",
+          "detection|detecting|detector|find|finding|identify|locate|picking"
+        ]
+      ],
+      "answer": "Peak detection runs on a trace: build one with `calculate_eic` for an m/z. `find_peaks` finds every peak in that trace, and `get_peak` finds one known peak at its rt. To detect peaks in a whole file without a list, use `find_features` (`untargeted`).",
+      "functions": [
+        "find_peaks",
+        "get_peak",
+        "find_features"
+      ],
+      "link": "find_peaks",
+      "followUps": [
+        {
+          "label": "Every peak in a trace",
+          "question": "How do I use find_peaks?"
+        },
+        {
+          "label": "One peak at an rt",
+          "question": "How do I use get_peak?"
+        },
+        {
+          "label": "Untargeted, one file",
+          "question": "How do I use find_features?"
+        }
+      ],
+      "unless": [
+        "mz",
+        "rt",
+        "eic",
+        "trace",
+        "targets",
+        "transitions",
+        "option",
+        "options",
+        "features",
+        "feature",
+        "above",
+        "below",
+        "intensity",
+        "noise",
+        "width",
+        "shape",
+        "targeted",
+        "untargeted"
       ]
     },
     {
@@ -509,8 +688,7 @@
         "Something fails",
         "I get an error, what does it mean?",
         "My code throws an exception",
-        "What do the error codes mean?",
-        "It does not work"
+        "What do the error codes mean?"
       ],
       "all": [
         [
@@ -532,6 +710,44 @@
         }
       ],
       "first": true
+    },
+    {
+      "id": "report",
+      "questions": [
+        "Something not working?",
+        "It does not work",
+        "I found a bug",
+        "How do I report a problem?",
+        "Where can I open an issue?",
+        "Quant·ion is broken"
+      ],
+      "all": [
+        [
+          "not|doesn|don|didn|isn|nothing",
+          "work|working|works|worked"
+        ],
+        [
+          "bug|bugs|broken|issue|issues|report|problem|problems"
+        ]
+      ],
+      "answer": "Please report it as an issue in phenological/quantion. Say what you ran, what you expected and what happened, and add the error message if there is one.",
+      "links": [
+        {
+          "label": "Open an issue",
+          "address": "https://github.com/phenological/quantion/issues/new"
+        }
+      ],
+      "functions": [],
+      "link": "overview",
+      "followUps": [
+        {
+          "label": "What do the error codes mean?"
+        }
+      ],
+      "unless": [
+        "option",
+        "options"
+      ]
     }
   ],
   "functions": {

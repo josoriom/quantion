@@ -1,6 +1,7 @@
 const registries = {
   rust: { name: "crates.io", address: "https://crates.io/crates/quantion" },
   python: { name: "PyPI", address: "https://pypi.org/project/quantion/" },
+  js: { name: "npm", address: "https://www.npmjs.com/package/quantion" },
 };
 
 export function RegistryLink({ language }) {

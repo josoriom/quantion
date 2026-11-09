@@ -195,6 +195,39 @@ function Refusal({ result }) {
   );
 }
 
+function InstallList({ languages }) {
+  const { state } = useDocumentation();
+  const shown = languages.filter((item) => item.key === state.language);
+  return (
+    <ul className="ask-install">
+      {shown.map((item) => (
+        <li key={item.key}>
+          <strong>{item.label}</strong>
+          {item.registry ? (
+            <p>
+              <a className="text-link" href={item.registry.address} target="_blank" rel="noreferrer">
+                {item.registry.label}
+              </a>
+              : <code>{item.command}</code>
+            </p>
+          ) : (
+            <p>{item.pending}</p>
+          )}
+          {item.github && (
+            <p>
+              <a className="text-link" href={item.github.address} target="_blank" rel="noreferrer">
+                GitHub
+              </a>
+              : <code>{item.github.command}</code>
+            </p>
+          )}
+          {item.platforms && <p className="ask-install-note">{item.platforms}</p>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function GuideResult({ result }) {
   const { state } = useDocumentation();
   const answer = result.answer ?? result.guide.answer;
@@ -211,6 +244,16 @@ function GuideResult({ result }) {
           Functions:{" "}
           {functions.map((link) => (
             <DocsLink key={link.entryName} link={link} />
+          ))}
+        </p>
+      )}
+      {result.guide.languages && <InstallList languages={result.guide.languages} />}
+      {result.guide.links && (
+        <p className="ask-sources">
+          {result.guide.links.map((link) => (
+            <a key={link.address} className="text-link" href={link.address} target="_blank" rel="noreferrer">
+              {link.label} ↗
+            </a>
           ))}
         </p>
       )}
@@ -522,7 +565,11 @@ export function AskProvider({ children }) {
     setMessages((current) => current.map((message) => (message.id === id ? { ...message, result: withValue(message.result, owner, name, value) } : message)));
   }
 
-  const value = { isOpen, setIsOpen, messages, progress, isBusy, modelFailed, askQuestion, chooseFunction, changeValue };
+  function restart() {
+    setMessages([]);
+  }
+
+  const value = { isOpen, setIsOpen, messages, progress, isBusy, modelFailed, askQuestion, chooseFunction, changeValue, restart };
   return <AskContext.Provider value={value}>{children}</AskContext.Provider>;
 }
 
@@ -692,10 +739,21 @@ function usePanelSize(panel) {
 }
 
 export function AskChat() {
-  const { isOpen, setIsOpen, messages, progress, modelFailed } = useContext(AskContext);
+  const { isOpen, setIsOpen, messages, progress, modelFailed, restart } = useContext(AskContext);
   const listEnd = useRef(null);
   const panel = useRef(null);
   const resize = usePanelSize(panel);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    function closeOutside(event) {
+      if (!panel.current || panel.current.contains(event.target)) return;
+      if (event.target.closest?.('[role="tablist"][aria-label="Language"]')) return;
+      setIsOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [isOpen, setIsOpen]);
 
   useEffect(() => {
     listEnd.current?.scrollIntoView({ block: "end" });
@@ -725,6 +783,9 @@ export function AskChat() {
           <AgentIcon />
           Ask about Quant·ion
         </span>
+        <button type="button" className="ask-restart" onClick={restart} disabled={messages.length === 0}>
+          Restart the conversation
+        </button>
         <button type="button" className="ask-close" aria-label="Close" onClick={() => setIsOpen(false)}>
           ×
         </button>
