@@ -1,6 +1,6 @@
 use ionic::mzml::structs::{
-    BinaryDataArray, CvParam, IsolationWindow, Precursor, PrecursorList, Product, ReferenceableParamGroupRef, Scan, ScanList,
-    Spectrum, SpectrumDescription, UserParam,
+    BinaryDataArray, CvParam, IsolationWindow, Precursor, PrecursorList, Product,
+    ReferenceableParamGroupRef, Scan, ScanList, Spectrum, SpectrumDescription, UserParam,
 };
 
 use crate::files::{ScanParam, ScanParamKind};
@@ -34,7 +34,9 @@ pub(crate) fn get_scan_params(spectrum: &Spectrum) -> Vec<ScanParam> {
     let mut rows = Rows::default();
     let path = "spectrum".to_string();
     let index = spectrum.index.map(|index| index.to_string());
-    let length = spectrum.default_array_length.map(|length| length.to_string());
+    let length = spectrum
+        .default_array_length
+        .map(|length| length.to_string());
     rows.add_attributes(
         &path,
         &[
@@ -47,7 +49,12 @@ pub(crate) fn get_scan_params(spectrum: &Spectrum) -> Vec<ScanParam> {
             ("spotID", spectrum.spot_id.as_deref()),
         ],
     );
-    rows.add_params(&path, &spectrum.referenceable_param_group_refs, &spectrum.cv_params, &spectrum.user_params);
+    rows.add_params(
+        &path,
+        &spectrum.referenceable_param_group_refs,
+        &spectrum.cv_params,
+        &spectrum.user_params,
+    );
     if let Some(description) = &spectrum.spectrum_description {
         rows.add_description(&format!("{path}/spectrumDescription"), description);
     }
@@ -91,7 +98,13 @@ impl Rows {
         }
     }
 
-    fn add_params(&mut self, path: &str, groups: &[ReferenceableParamGroupRef], cv_params: &[CvParam], user_params: &[UserParam]) {
+    fn add_params(
+        &mut self,
+        path: &str,
+        groups: &[ReferenceableParamGroupRef],
+        cv_params: &[CvParam],
+        user_params: &[UserParam],
+    ) {
         for (position, group) in groups.iter().enumerate() {
             let group_path = format!("{path}/referenceableParamGroupRef[{position}]");
             self.add_attributes(&group_path, &[("ref", Some(group.r#ref.as_str()))]);
@@ -121,7 +134,12 @@ impl Rows {
     }
 
     fn add_description(&mut self, path: &str, description: &SpectrumDescription) {
-        self.add_params(path, &description.referenceable_param_group_refs, &description.cv_params, &description.user_params);
+        self.add_params(
+            path,
+            &description.referenceable_param_group_refs,
+            &description.cv_params,
+            &description.user_params,
+        );
         self.add_scan_list(path, description.scan_list.as_ref());
         self.add_precursors(path, description.precursor_list.as_ref());
     }
@@ -131,7 +149,12 @@ impl Rows {
             return;
         };
         let list_path = format!("{parent}/scanList");
-        self.add_params(&list_path, &list.referenceable_param_group_refs, &list.cv_params, &list.user_params);
+        self.add_params(
+            &list_path,
+            &list.referenceable_param_group_refs,
+            &list.cv_params,
+            &list.user_params,
+        );
         for (position, scan) in list.scans.iter().enumerate() {
             self.add_scan(&format!("{list_path}/scan[{position}]"), scan);
         }
@@ -141,17 +164,30 @@ impl Rows {
         self.add_attributes(
             path,
             &[
-                ("instrumentConfigurationRef", scan.instrument_configuration_ref.as_deref()),
+                (
+                    "instrumentConfigurationRef",
+                    scan.instrument_configuration_ref.as_deref(),
+                ),
                 ("externalSpectrumID", scan.external_spectrum_id.as_deref()),
                 ("sourceFileRef", scan.source_file_ref.as_deref()),
                 ("spectrumRef", scan.spectrum_ref.as_deref()),
             ],
         );
-        self.add_params(path, &scan.referenceable_param_group_refs, &scan.cv_params, &scan.user_params);
+        self.add_params(
+            path,
+            &scan.referenceable_param_group_refs,
+            &scan.cv_params,
+            &scan.user_params,
+        );
         if let Some(list) = &scan.scan_window_list {
             let list_path = format!("{path}/scanWindowList");
             for (position, window) in list.scan_windows.iter().enumerate() {
-                self.add_params(&format!("{list_path}/scanWindow[{position}]"), &[], &window.cv_params, &window.user_params);
+                self.add_params(
+                    &format!("{list_path}/scanWindow[{position}]"),
+                    &[],
+                    &window.cv_params,
+                    &window.user_params,
+                );
             }
         }
     }
@@ -173,7 +209,10 @@ impl Rows {
             &[
                 ("spectrumRef", precursor.spectrum_ref.as_deref()),
                 ("sourceFileRef", precursor.source_file_ref.as_deref()),
-                ("externalSpectrumID", precursor.external_spectrum_id.as_deref()),
+                (
+                    "externalSpectrumID",
+                    precursor.external_spectrum_id.as_deref(),
+                ),
             ],
         );
         self.add_isolation_window(path, precursor.isolation_window.as_ref());
@@ -181,12 +220,22 @@ impl Rows {
             let list_path = format!("{path}/selectedIonList");
             for (position, ion) in list.selected_ions.iter().enumerate() {
                 let ion_path = format!("{list_path}/selectedIon[{position}]");
-                self.add_params(&ion_path, &ion.referenceable_param_group_refs, &ion.cv_params, &ion.user_params);
+                self.add_params(
+                    &ion_path,
+                    &ion.referenceable_param_group_refs,
+                    &ion.cv_params,
+                    &ion.user_params,
+                );
             }
         }
         if let Some(activation) = &precursor.activation {
             let activation_path = format!("{path}/activation");
-            self.add_params(&activation_path, &activation.referenceable_param_group_refs, &activation.cv_params, &activation.user_params);
+            self.add_params(
+                &activation_path,
+                &activation.referenceable_param_group_refs,
+                &activation.cv_params,
+                &activation.user_params,
+            );
         }
     }
 
@@ -196,7 +245,10 @@ impl Rows {
             &[
                 ("spectrumRef", product.spectrum_ref.as_deref()),
                 ("sourceFileRef", product.source_file_ref.as_deref()),
-                ("externalSpectrumID", product.external_spectrum_id.as_deref()),
+                (
+                    "externalSpectrumID",
+                    product.external_spectrum_id.as_deref(),
+                ),
             ],
         );
         self.add_params(path, &[], &product.cv_params, &product.user_params);
@@ -206,7 +258,12 @@ impl Rows {
     fn add_isolation_window(&mut self, parent: &str, window: Option<&IsolationWindow>) {
         if let Some(window) = window {
             let path = format!("{parent}/isolationWindow");
-            self.add_params(&path, &window.referenceable_param_group_refs, &window.cv_params, &window.user_params);
+            self.add_params(
+                &path,
+                &window.referenceable_param_group_refs,
+                &window.cv_params,
+                &window.user_params,
+            );
         }
     }
 
@@ -221,7 +278,12 @@ impl Rows {
                 ("dataProcessingRef", array.data_processing_ref.as_deref()),
             ],
         );
-        self.add_params(path, &array.referenceable_param_group_refs, &array.cv_params, &array.user_params);
+        self.add_params(
+            path,
+            &array.referenceable_param_group_refs,
+            &array.cv_params,
+            &array.user_params,
+        );
     }
 }
 

@@ -51,6 +51,17 @@ PARSE_ION = {"max_cache_size": 0}
 WRITE_ION = {"out": None, "overwrite": False, "level": 12, "f32_compress": False, "block_size": 8, "mz_window": 20, "headers": []}
 WRITE_MZML = {"out": None, "overwrite": False}
 ION_IMAGE = {"tolerance": 0.125, "level": 1, "on_progress": None}
+DEFAULT_LIBRARY = "https://github.com/josoriom/cipher/releases/latest/download/library_positive.ion"
+DEFAULT_MODEL = "https://github.com/josoriom/cipher/releases/latest/download/model.onnx"
+ANNOTATE_FEATURES = {
+    "library": DEFAULT_LIBRARY,
+    "model": DEFAULT_MODEL,
+    "matches": 3,
+    "ppm_tolerance": 20.0,
+    "mz_tolerance": 0.005,
+    "rt_range": 0.3,
+    "min_relative_intensity": 0.02,
+}
 
 _TIME_UNIT_CODES = {TimeUnit.MINUTES.value: 0, TimeUnit.SECONDS.value: 1}
 _SHAPE_CODES = {PeakShape.GAUSSIAN.value: 0, PeakShape.EMG.value: 1}

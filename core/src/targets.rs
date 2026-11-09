@@ -1,7 +1,10 @@
 use crate::{
-    error::{QuantionError, check_finite, check_not_negative, check_positive},
+    CalculateEicOptions, FindPeaksOptions,
+    error::{
+        QuantionError, check_finite, check_mz_and_rt, check_not_negative, check_positive,
+        check_threads,
+    },
     files::from_fast_error,
-    options::{FindTargetsOptions, FindTransitionsOptions, check_threads},
     sample_file::SampleFile,
     utilities::{
         find_targets::find_targets as read_targets,
@@ -22,15 +25,44 @@ use crate::{
 /// Returns: One Peak per target, in the same order. A target with no peak gets a Peak with every field 0.
 ///
 /// [Documentation](https://phenological.github.io/quantion/?language=rust#find_targets)
-pub(crate) fn check_targets(function: &'static str, targets: &[Target]) -> Result<(), QuantionError> {
+pub(crate) fn check_targets(
+    function: &'static str,
+    targets: &[Target],
+) -> Result<(), QuantionError> {
     for (index, target) in targets.iter().enumerate() {
-        check_positive(function, &format!("targets[{index}].mz"), target.mz)?;
-        check_finite(function, &format!("targets[{index}].rt"), target.rt)?;
+        check_mz_and_rt(function, &format!("targets[{index}]"), target.mz, target.rt)?;
         if let Some(range) = target.range {
             check_not_negative(function, &format!("targets[{index}].range"), range)?;
         }
     }
     Ok(())
+}
+
+/// **FindTargetsOptions** · Options
+///
+/// Settings for find_targets.
+///
+/// Fields:
+/// - `eic`: EIC retention-time range (from, to), tolerances and time unit. See [CalculateEicOptions](https://phenological.github.io/quantion/?language=rust#CalculateEicOptions).
+/// - `find_peaks`: Settings for peak picking. See [FindPeaksOptions](https://phenological.github.io/quantion/?language=rust#FindPeaksOptions).
+/// - `threads`: Number of threads. Default `1`.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#FindTargetsOptions)
+#[derive(Clone, Debug, PartialEq)]
+pub struct FindTargetsOptions {
+    pub eic: CalculateEicOptions,
+    pub find_peaks: FindPeaksOptions,
+    pub threads: usize,
+}
+
+impl Default for FindTargetsOptions {
+    fn default() -> Self {
+        Self {
+            eic: CalculateEicOptions::default(),
+            find_peaks: FindPeaksOptions::default(),
+            threads: 1,
+        }
+    }
 }
 
 /// **find_targets** · Targeted
@@ -45,7 +77,11 @@ pub(crate) fn check_targets(function: &'static str, targets: &[Target]) -> Resul
 /// Returns: One Peak per target, in the same order. A target with no peak gets a Peak with every field 0.
 ///
 /// [Documentation](https://phenological.github.io/quantion/?language=rust#find_targets)
-pub fn find_targets(file: &mut SampleFile, targets: &[Target], options: FindTargetsOptions) -> Result<Vec<Peak>, QuantionError> {
+pub fn find_targets(
+    file: &mut SampleFile,
+    targets: &[Target],
+    options: FindTargetsOptions,
+) -> Result<Vec<Peak>, QuantionError> {
     const FUNCTION: &str = "find_targets";
     options.eic.check(FUNCTION, "eic.")?;
     options.find_peaks.check(FUNCTION)?;
@@ -63,8 +99,37 @@ pub fn find_targets(file: &mut SampleFile, targets: &[Target], options: FindTarg
         eic: options.eic.in_minutes(),
         ..options.clone()
     };
-    read_targets(&mut file.reader(), &targets_in_minutes, options.eic.get_window(), settings)
-        .map_err(|error| from_fast_error(FUNCTION, error))
+    read_targets(
+        &mut file.reader(),
+        &targets_in_minutes,
+        options.eic.get_window(),
+        settings,
+    )
+    .map_err(|error| from_fast_error(FUNCTION, error))
+}
+
+/// **FindTransitionsOptions** · Options
+///
+/// Settings for find_transitions.
+///
+/// Fields:
+/// - `find_peaks`: Settings for peak picking. See [FindPeaksOptions](https://phenological.github.io/quantion/?language=rust#FindPeaksOptions).
+/// - `threads`: Number of threads. Default `1`.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#FindTransitionsOptions)
+#[derive(Clone, Debug, PartialEq)]
+pub struct FindTransitionsOptions {
+    pub find_peaks: FindPeaksOptions,
+    pub threads: usize,
+}
+
+impl Default for FindTransitionsOptions {
+    fn default() -> Self {
+        Self {
+            find_peaks: FindPeaksOptions::default(),
+            threads: 1,
+        }
+    }
 }
 
 /// **find_transitions** · Targeted
@@ -90,12 +155,21 @@ pub fn find_transitions(
     options.find_peaks.check(FUNCTION)?;
     check_threads(FUNCTION, options.threads)?;
     for (index, target) in targets.iter().enumerate() {
-        check_positive(FUNCTION, &format!("targets[{index}].precursor"), target.precursor)?;
-        check_positive(FUNCTION, &format!("targets[{index}].product"), target.product)?;
+        check_positive(
+            FUNCTION,
+            &format!("targets[{index}].precursor"),
+            target.precursor,
+        )?;
+        check_positive(
+            FUNCTION,
+            &format!("targets[{index}].product"),
+            target.product,
+        )?;
         check_finite(FUNCTION, &format!("targets[{index}].rt"), target.rt)?;
         check_positive(FUNCTION, &format!("targets[{index}].range"), target.range)?;
     }
     file.with_mzml(FUNCTION, |mzml| {
-        Ok(read_transitions(mzml, targets, options.clone()).unwrap_or_else(|| vec![Peak::default(); targets.len()]))
+        Ok(read_transitions(mzml, targets, options.clone())
+            .unwrap_or_else(|| vec![Peak::default(); targets.len()]))
     })
 }

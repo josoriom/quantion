@@ -14,18 +14,18 @@ use ionic::{
     source::{ByteRange, CallbackSource, ReadBytes, header_ranges, merge_ranges},
 };
 
-use crate::sample_file::{FileSource, SampleFile};
-use crate::utilities::{
-    bridge::*,
-    calculate_eic::{
-        EicReader, FastError,
+use crate::{
+    sample_file::{FileSource, SampleFile},
+    utilities::{
+        bridge::*,
+        calculate_eic::{EicReader, FastError},
+        find_noise_level::find_noise_level as find_noise_level_rs,
+        fit_peak::PeakParameters,
+        ion::{ScanSource, ScanSummary},
     },
-    find_noise_level::find_noise_level as find_noise_level_rs,
-    fit_peak::PeakParameters,
-    ion::{ScanSource, ScanSummary},
 };
 
-pub const QUANTION_ABI_VERSION: u32 = 2;
+pub const QUANTION_ABI_VERSION: u32 = 3;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn quantion_abi_version() -> u32 {
@@ -37,6 +37,7 @@ pub extern "C" fn quantion_sizeof_peak_options() -> usize {
     core::mem::size_of::<CPeakOptions>()
 }
 
+mod annotate;
 mod model;
 mod public;
 mod warp;
@@ -271,7 +272,10 @@ impl ParsedFile {
     }
 
     pub(crate) fn from_file(file: SampleFile) -> Self {
-        Self { file, broken: false }
+        Self {
+            file,
+            broken: false,
+        }
     }
 
     pub(crate) fn is_broken(&self) -> bool {
@@ -295,35 +299,19 @@ fn mark_file_broken(h: *const ParsedFile) {
 
 impl ScanSource for ParsedFile {
     fn for_each_summary(&mut self, cb: &mut dyn FnMut(usize, ScanSummary)) {
-        match &mut self.file.source {
-            FileSource::Full(mzml) => mzml.for_each_summary(cb),
-            FileSource::Lazy(file) => file.for_each_summary(cb),
-            FileSource::Remote(ion) => ion.for_each_summary(cb),
-        }
+        self.file.for_each_summary(cb)
     }
 
     fn load_scan(&mut self, index: usize, mz: &mut Vec<f64>, intensity: &mut Vec<f64>) -> bool {
-        match &mut self.file.source {
-            FileSource::Full(mzml) => mzml.load_scan(index, mz, intensity),
-            FileSource::Lazy(file) => file.load_scan(index, mz, intensity),
-            FileSource::Remote(ion) => ion.load_scan(index, mz, intensity),
-        }
+        self.file.load_scan(index, mz, intensity)
     }
 
     fn load_array(&mut self, index: usize, accession: u32, values: &mut Vec<f64>) -> bool {
-        match &mut self.file.source {
-            FileSource::Full(mzml) => mzml.load_array(index, accession, values),
-            FileSource::Lazy(file) => file.load_array(index, accession, values),
-            FileSource::Remote(ion) => ion.load_array(index, accession, values),
-        }
+        self.file.load_array(index, accession, values)
     }
 
     fn load_metadata(&mut self, index: usize) -> ionic::IonResult<Vec<crate::files::ScanParam>> {
-        match &mut self.file.source {
-            FileSource::Full(mzml) => mzml.load_metadata(index),
-            FileSource::Lazy(file) => file.load_metadata(index),
-            FileSource::Remote(ion) => ion.load_metadata(index),
-        }
+        self.file.load_metadata(index)
     }
 }
 
@@ -446,9 +434,17 @@ pub unsafe extern "C" fn parse_ion_path(
         return fail(ERR_INVALID_ARGS, "parse_ion");
     }
     let Ok(path) = unsafe { CStr::from_ptr(path_ptr) }.to_str() else {
-        return public::remember(crate::QuantionError::invalid("parse_ion", "source", "must be valid UTF-8 text"));
+        return public::remember(crate::QuantionError::invalid(
+            "parse_ion",
+            "source",
+            "must be valid UTF-8 text",
+        ));
     };
-    open_ion(crate::IonInput::Path(std::path::PathBuf::from(path)), max_cache_size, dest)
+    open_ion(
+        crate::IonInput::Path(std::path::PathBuf::from(path)),
+        max_cache_size,
+        dest,
+    )
 }
 
 const LARGEST_OPEN_GAP: u64 = 131072;
@@ -493,10 +489,6 @@ pub unsafe extern "C" fn plan_open(
     }
 }
 
-
-
-
-
 /// Write the noise window width and the noise intensity for an intensity array.
 ///
 /// # Safety
@@ -525,8 +517,6 @@ pub unsafe extern "C" fn find_noise_level(
         Err(_) => ERR_PANIC,
     }
 }
-
-
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn plan_image(
@@ -578,8 +568,6 @@ pub unsafe extern "C" fn plan_image(
         }
     }
 }
-
-
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn image_begin(
@@ -755,22 +743,42 @@ pub unsafe extern "C" fn image_free(session: *mut crate::utilities::ion_image::I
     }
 }
 
-
-fn build_scan_arrays_bridge(found: Vec<crate::utilities::calculate_eic::ScanArrays>) -> Option<Box<[u8]>> {
+fn build_scan_arrays_bridge(
+    found: Vec<crate::utilities::get_scans::ScanArrays>,
+) -> Option<Box<[u8]>> {
     let scan_count = found.len() as u64;
     let array_count: usize = found.iter().map(|scan| scan.arrays.len()).sum();
-    let value_count: u64 = found.iter().flat_map(|scan| &scan.arrays).map(|values| values.len() as u64).sum();
-    let scans: Vec<crate::Scan> = found.iter().map(|scan| crate::Scan::from(scan.scan.clone())).collect();
+    let value_count: u64 = found
+        .iter()
+        .flat_map(|scan| &scan.arrays)
+        .map(|values| values.len() as u64)
+        .sum();
+    let scans: Vec<crate::Scan> = found
+        .iter()
+        .map(|scan| crate::Scan::from(scan.scan.clone()))
+        .collect();
 
     let mut builder = BridgeBuilder::new(QUANTION_PAYLOAD_SCANS, scan_count);
-    builder.add_section(QUANTION_SECTION_POINT_STARTS, QUANTION_ELEMENT_U64, scan_count + 1);
+    builder.add_section(
+        QUANTION_SECTION_POINT_STARTS,
+        QUANTION_ELEMENT_U64,
+        scan_count + 1,
+    );
     builder.add_section(QUANTION_SECTION_MZ, QUANTION_ELEMENT_F64, 0);
     builder.add_section(QUANTION_SECTION_INTENSITY, QUANTION_ELEMENT_F64, 0);
     for id in SCAN_DETAIL_SECTIONS {
         builder.add_section(id, QUANTION_ELEMENT_F64, scan_count);
     }
-    builder.add_section(QUANTION_SECTION_SCAN_ARRAY_STARTS, QUANTION_ELEMENT_U64, array_count as u64 + 1);
-    builder.add_section(QUANTION_SECTION_SCAN_ARRAY_VALUES, QUANTION_ELEMENT_F64, value_count);
+    builder.add_section(
+        QUANTION_SECTION_SCAN_ARRAY_STARTS,
+        QUANTION_ELEMENT_U64,
+        array_count as u64 + 1,
+    );
+    builder.add_section(
+        QUANTION_SECTION_SCAN_ARRAY_VALUES,
+        QUANTION_ELEMENT_F64,
+        value_count,
+    );
     let mut bridge = builder.build()?;
 
     for (index, scan) in scans.iter().enumerate() {
@@ -817,9 +825,17 @@ fn build_scans_bridge(scans: &[crate::Scan]) -> Option<Box<[u8]>> {
     }
 
     let mut builder = BridgeBuilder::new(QUANTION_PAYLOAD_SCANS, scan_count);
-    builder.add_section(QUANTION_SECTION_POINT_STARTS, QUANTION_ELEMENT_U64, scan_count + 1);
+    builder.add_section(
+        QUANTION_SECTION_POINT_STARTS,
+        QUANTION_ELEMENT_U64,
+        scan_count + 1,
+    );
     builder.add_section(QUANTION_SECTION_MZ, QUANTION_ELEMENT_F64, total_points);
-    builder.add_section(QUANTION_SECTION_INTENSITY, QUANTION_ELEMENT_F64, total_points);
+    builder.add_section(
+        QUANTION_SECTION_INTENSITY,
+        QUANTION_ELEMENT_F64,
+        total_points,
+    );
     for id in SCAN_DETAIL_SECTIONS {
         builder.add_section(id, QUANTION_ELEMENT_F64, scan_count);
     }
@@ -870,7 +886,6 @@ fn build_image_bridge(image: &crate::utilities::ion_image::IonImage) -> Option<B
     bridge.write_u32_section(QUANTION_SECTION_IMAGE_COUNTS, &image.counts);
     Some(bridge.into_bytes())
 }
-
 
 fn read_ids(
     count: usize,
@@ -1170,19 +1185,27 @@ fn pack_byte_ranges(ranges: impl IntoIterator<Item = (u64, u64)>) -> Box<[u8]> {
 
 #[cfg(test)]
 mod tests {
-    use ionic::mzml::structs::{
-        BinaryDataArray, BinaryDataArrayList, CvParam, NumericArray, NumericType, Run, Scan,
-        ScanList, Spectrum, SpectrumList,
+    use ionic::{
+        SectionStorage, WriteOptions,
+        format::DEFAULT_MZ_WINDOW,
+        mzml::structs::{
+            BinaryDataArray, BinaryDataArrayList, CvParam, MzML, NumericArray, NumericType, Run,
+            Scan, ScanList, Spectrum, SpectrumList,
+        },
     };
 
-    use ionic::{SectionStorage, WriteOptions, format::DEFAULT_MZ_WINDOW, mzml::structs::MzML};
-
     use super::{public::*, *};
-    use crate::options::CalculateEicOptions;
-    use crate::utilities::{
-        calculate_eic::{ScanQuery, calculate_eic as calculate_eic_dispatcher, TimeUnit, get_scans as get_scans_rs, plan_eic_ranges, plan_scan_ranges, plan_window_ranges},
-        structs::FromTo,
-        ion::write_mzml_to_ion,
+    use crate::{
+        files::CalculateEicOptions,
+        utilities::{
+            calculate_eic::{
+                TimeUnit, calculate_eic as calculate_eic_dispatcher, plan_eic_ranges,
+                plan_window_ranges,
+            },
+            get_scans::{get_scans as get_scans_rs, plan_scan_ranges},
+            ion::write_mzml_to_ion,
+            structs::{FromTo, Position, ScanQuery},
+        },
     };
 
     const ION_BLOCK_SIZE_BYTES: usize = 1024 * 1024;
@@ -1503,7 +1526,16 @@ mod tests {
     #[test]
     fn plan_eic_rejects_null_out() {
         let code = unsafe {
-            plan_eic(std::ptr::null_mut(), 500.0, 0.0, 10.0, 20.0, 0.005, 0, std::ptr::null_mut())
+            plan_eic(
+                std::ptr::null_mut(),
+                500.0,
+                0.0,
+                10.0,
+                20.0,
+                0.005,
+                0,
+                std::ptr::null_mut(),
+            )
         };
         assert_eq!(code, ERR_PANIC);
     }
@@ -1525,7 +1557,11 @@ mod tests {
         drop_buf_out(out);
         let text = String::from_utf8(bytes).expect("utf-8");
         let fields: Vec<&str> = text.split('\u{1f}').collect();
-        (fields[1].to_string(), fields[2].to_string(), fields[4].to_string())
+        (
+            fields[1].to_string(),
+            fields[2].to_string(),
+            fields[4].to_string(),
+        )
     }
 
     #[test]
@@ -1534,7 +1570,10 @@ mod tests {
         let out = new_buf_out();
         unsafe { plan_eic(handle, -1.0, 0.0, 10.0, 20.0, 0.005, 0, out) };
         let (kind, function, message) = get_last_error();
-        assert_eq!((kind.as_str(), function.as_str()), ("invalid_argument", "calculate_eic"));
+        assert_eq!(
+            (kind.as_str(), function.as_str()),
+            ("invalid_argument", "calculate_eic")
+        );
         assert_eq!(message, "mz must be greater than 0, got -1");
         drop_buf_out(out);
         unsafe { free_mzml(handle) };
@@ -1544,9 +1583,12 @@ mod tests {
     fn plan_scans_gives_the_same_error_as_get_scans() {
         let handle = open_windowed_ion();
         let out = new_buf_out();
-        unsafe { plan_scans(handle, 0, 3.0, 1.0, 1, 0, out) };
+        unsafe { plan_scans(handle, 1, 3.0, 1.0, 0, f64::NAN, f64::NAN, 1, 0, out) };
         let (kind, function, message) = get_last_error();
-        assert_eq!((kind.as_str(), function.as_str()), ("invalid_argument", "get_scans"));
+        assert_eq!(
+            (kind.as_str(), function.as_str()),
+            ("invalid_argument", "get_scans")
+        );
         assert_eq!(message, "to must be at least from (3), got 1");
         drop_buf_out(out);
         unsafe { free_mzml(handle) };
@@ -1557,9 +1599,24 @@ mod tests {
         let handle = open_windowed_ion();
         let out = new_buf_out();
         let mzs = [500.0, -1.0];
-        unsafe { plan_find_targets(handle, mzs.as_ptr(), mzs.len(), 0.0, 10.0, 20.0, 0.005, 0, out) };
+        unsafe {
+            plan_find_targets(
+                handle,
+                mzs.as_ptr(),
+                mzs.len(),
+                0.0,
+                10.0,
+                20.0,
+                0.005,
+                0,
+                out,
+            )
+        };
         let (kind, function, message) = get_last_error();
-        assert_eq!((kind.as_str(), function.as_str()), ("invalid_argument", "find_targets"));
+        assert_eq!(
+            (kind.as_str(), function.as_str()),
+            ("invalid_argument", "find_targets")
+        );
         assert_eq!(message, "targets[1].mz must be greater than 0, got -1");
         drop_buf_out(out);
         unsafe { free_mzml(handle) };
@@ -1951,20 +2008,38 @@ mod tests {
         vec![
             (
                 "rt_range",
-                ScanQuery::RtRange(FromTo {
-                    from: 0.0,
-                    to: 10.0,
-                }),
+                ScanQuery {
+                    rt: Position::Range(FromTo {
+                        from: 0.0,
+                        to: 10.0,
+                    }),
+                    ..Default::default()
+                },
             ),
-            ("closest_rt", ScanQuery::Rt(5.0)),
+            (
+                "closest_rt",
+                ScanQuery {
+                    rt: Position::Closest(5.0),
+                    ..Default::default()
+                },
+            ),
             (
                 "mz_range",
-                ScanQuery::MzRange(FromTo {
-                    from: 0.0,
-                    to: 1000.0,
-                }),
+                ScanQuery {
+                    mz: Position::Range(FromTo {
+                        from: 0.0,
+                        to: 1000.0,
+                    }),
+                    ..Default::default()
+                },
             ),
-            ("closest_mz", ScanQuery::Mz(500.0)),
+            (
+                "closest_mz",
+                ScanQuery {
+                    mz: Position::Closest(500.0),
+                    ..Default::default()
+                },
+            ),
         ]
     }
 
@@ -1985,11 +2060,17 @@ mod tests {
             let reader = Arc::new(RecordingReader::new(windowed_ion_bytes()));
             let mut ion = open_recording_ion(&reader);
 
-            let plan = plan_scan_ranges(&mut ion, query, TimeUnit::MINUTES, 0, &ionic::ByteRangesOptions::default())
-                .expect("plan_scan_ranges failed");
+            let plan = plan_scan_ranges(
+                &mut ion,
+                query,
+                TimeUnit::MINUTES,
+                0,
+                &ionic::ByteRangesOptions::default(),
+            )
+            .expect("plan_scan_ranges failed");
 
             reader.clear_reads();
-            let (_, scans) = get_scans_rs(&mut ion, query, TimeUnit::MINUTES, 0);
+            let scans = get_scans_rs(&mut ion, query, TimeUnit::MINUTES, 0);
             if scans.is_empty() {
                 assert!(
                     plan.is_empty(),
@@ -2065,7 +2146,7 @@ mod tests {
             let bytes = windowed_ion_bytes();
             let reader = Arc::new(RecordingReader::new(bytes.clone()));
             let mut ion = open_recording_ion(&reader);
-            let (_, expected) = get_scans_rs(&mut ion, query, TimeUnit::MINUTES, 0);
+            let expected = get_scans_rs(&mut ion, query, TimeUnit::MINUTES, 0);
             if expected.is_empty() {
                 continue;
             }
@@ -2080,11 +2161,17 @@ mod tests {
             )
             .expect("IonReader::new failed");
 
-            let plan = plan_scan_ranges(&mut served, query, TimeUnit::MINUTES, 0, &ionic::ByteRangesOptions::default())
-                .expect("plan_scan_ranges failed");
+            let plan = plan_scan_ranges(
+                &mut served,
+                query,
+                TimeUnit::MINUTES,
+                0,
+                &ionic::ByteRangesOptions::default(),
+            )
+            .expect("plan_scan_ranges failed");
             gate.allow_only(plan.iter().map(|r| (r.offset, r.length)).collect());
 
-            let (_, got) = get_scans_rs(&mut served, query, TimeUnit::MINUTES, 0);
+            let got = get_scans_rs(&mut served, query, TimeUnit::MINUTES, 0);
             assert_eq!(
                 got.len(),
                 expected.len(),
@@ -2098,15 +2185,41 @@ mod tests {
         let out = new_buf_out();
         let handle = open_windowed_ion();
         assert_eq!(
-            unsafe { plan_scans(handle, 9, 0.0, 10.0, 0, 0, out) },
+            unsafe { plan_scans(handle, 9, 0.0, 10.0, 0, f64::NAN, f64::NAN, 0, 0, out) },
             ERR_PANIC
         );
         assert_eq!(
-            unsafe { plan_scans(std::ptr::null_mut(), 0, 0.0, 10.0, 0, 0, out) },
+            unsafe {
+                plan_scans(
+                    std::ptr::null_mut(),
+                    1,
+                    0.0,
+                    10.0,
+                    0,
+                    f64::NAN,
+                    f64::NAN,
+                    0,
+                    0,
+                    out,
+                )
+            },
             ERR_INVALID_ARGS
         );
         assert_eq!(
-            unsafe { plan_scans(handle, 0, 0.0, 10.0, 0, 0, std::ptr::null_mut()) },
+            unsafe {
+                plan_scans(
+                    handle,
+                    1,
+                    0.0,
+                    10.0,
+                    0,
+                    f64::NAN,
+                    f64::NAN,
+                    0,
+                    0,
+                    std::ptr::null_mut(),
+                )
+            },
             ERR_PANIC
         );
         unsafe { free_mzml(handle) };
@@ -2365,7 +2478,25 @@ mod tests {
         let (rts, mzs, ranges) = ([PEAK_RT], [PEAK_MZ], [0.2]);
         let out = new_buf_out();
         let code = unsafe {
-            find_targets(handle, rts.as_ptr(), mzs.as_ptr(), ranges.as_ptr(), std::ptr::null(), std::ptr::null(), std::ptr::null(), 0, 1, 0.0, 2.0, 20.0, 0.005, 0, std::ptr::null(), 1, out)
+            find_targets(
+                handle,
+                rts.as_ptr(),
+                mzs.as_ptr(),
+                ranges.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                std::ptr::null(),
+                0,
+                1,
+                0.0,
+                2.0,
+                20.0,
+                0.005,
+                0,
+                std::ptr::null(),
+                1,
+                out,
+            )
         };
         (code, take_bytes(out))
     }
@@ -2373,7 +2504,20 @@ mod tests {
     fn features(handle: *mut ParsedFile) -> (c_int, Vec<u8>) {
         let out = new_buf_out();
         let code = unsafe {
-            find_features(handle, 0.0, 2.0, 20.0, 0.005, 0, 495.0, 505.0, 0.005, std::ptr::null(), 1, out)
+            find_features(
+                handle,
+                0.0,
+                2.0,
+                20.0,
+                0.005,
+                0,
+                495.0,
+                505.0,
+                0.005,
+                std::ptr::null(),
+                1,
+                out,
+            )
         };
         (code, take_bytes(out))
     }
@@ -2405,7 +2549,10 @@ mod tests {
         let planned = planned_peak_ion();
         let remote = open_planned(&planned);
         let out = new_buf_out();
-        assert_eq!(unsafe { write_mzml(remote, std::ptr::null(), 0, out) }, ERR_REMOTE_FILE);
+        assert_eq!(
+            unsafe { write_mzml(remote, std::ptr::null(), 0, out) },
+            ERR_REMOTE_FILE
+        );
         drop_buf_out(out);
         unsafe { free_mzml(remote) };
     }

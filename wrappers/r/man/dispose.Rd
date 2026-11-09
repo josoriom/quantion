@@ -24,7 +24,7 @@ Not needed in normal use: the library frees a sample, model or warp model by its
 if (curl::has_internet()) {
   library(quantion)
 
-  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion"
+  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion"
   sample <- parse_ion(url)
   dispose(sample)
 }

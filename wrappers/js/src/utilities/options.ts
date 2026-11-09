@@ -1,6 +1,7 @@
 import { QuantionError, invalidArgument, missingArgument } from "./errors";
 import { PeakShape, TimeUnit } from "../types/types";
 import type {
+  AnnotateFeaturesOptions,
   CalculateBaselineOptions,
   DeisotopeFeaturesOptions,
   DrawPeaksOptions,
@@ -647,6 +648,19 @@ function getWholeNumber(
   return value;
 }
 
+function readSource(
+  given: Record<string, unknown>,
+  key: string,
+  fallback: string,
+  functionName: string,
+): string {
+  const source = getValue(given, key, "string", fallback, functionName, "");
+  if (source.trim() === "") {
+    throw invalidArgument(functionName, key, "must be a path or a URL, got an empty text");
+  }
+  return source;
+}
+
 function readOut(
   given: Record<string, unknown>,
   functionName: string,
@@ -773,3 +787,31 @@ export function getTimeUnitCode(timeUnit: TimeUnit): number {
 export function getShapeCode(shape: PeakShape): number {
   return shape === PeakShape.GAUSSIAN ? 0 : 1;
 }
+
+export const DEFAULT_LIBRARY =
+  "https://github.com/josoriom/cipher/releases/latest/download/library_positive.ion";
+export const DEFAULT_MODEL =
+  "https://github.com/josoriom/cipher/releases/latest/download/model.onnx";
+
+export function readAnnotateFeaturesOptions(
+  value: unknown,
+  functionName: string,
+): Complete<AnnotateFeaturesOptions> {
+  const given = getObject(value, functionName, "");
+  checkKeys(
+    given,
+    ["library", "model", "matches", "ppmTolerance", "mzTolerance", "rtRange", "minRelativeIntensity"],
+    functionName,
+    "",
+  );
+  return {
+    library: readSource(given, "library", DEFAULT_LIBRARY, functionName),
+    model: readSource(given, "model", DEFAULT_MODEL, functionName),
+    matches: getValue(given, "matches", "number", 3, functionName, ""),
+    ppmTolerance: getValue(given, "ppmTolerance", "number", 20, functionName, ""),
+    mzTolerance: getValue(given, "mzTolerance", "number", 0.005, functionName, ""),
+    rtRange: getValue(given, "rtRange", "number", 0.3, functionName, ""),
+    minRelativeIntensity: getValue(given, "minRelativeIntensity", "number", 0.02, functionName, ""),
+  };
+}
+

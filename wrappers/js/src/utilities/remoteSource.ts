@@ -29,6 +29,22 @@ const PART_SIZE = 16n * 1024n * 1024n;
 
 const MAX_PARTS_IN_FLIGHT = 16;
 
+function hideQuery(url: string): string {
+  const parsed = new URL(url);
+  return parsed.search === "" ? url : `${parsed.origin}${parsed.pathname}?…`;
+}
+
+async function fetchOrExplain(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `no answer from ${hideQuery(url)} (${reason}): the network is off, the server is down, or the server refused this page (CORS, or an API key that does not allow this website)`,
+    );
+  }
+}
+
 export function newRemoteSource(url: string): RemoteSource {
   return { url, cache: new ContainmentCache(), total: 0n, multipart: null };
 }
@@ -40,7 +56,7 @@ export async function fetchRange(
   const start = range.offset;
   const end = range.offset + range.length - 1n;
 
-  const response = await fetch(url, {
+  const response = await fetchOrExplain(url, {
     headers: {
       Range: `bytes=${start}-${end}`,
       "Accept-Encoding": "identity",
@@ -49,7 +65,7 @@ export async function fetchRange(
 
   if (response.status !== 206) {
     throw new Error(
-      `range request failed: expected 206 Partial Content, got ${response.status}`,
+      `range request failed for ${hideQuery(url)}: expected 206 Partial Content, got ${response.status}`,
     );
   }
 
@@ -183,8 +199,9 @@ export async function fetchRanges(
       Range: `bytes=${spec}`,
       "Accept-Encoding": "identity",
     },
-  });
+  }).catch(() => null);
 
+  if (response === null) return null;
   if (response.status !== 206) {
     await response.body?.cancel();
     return null;
@@ -338,7 +355,7 @@ function readTotalFromContentRange(response: Response): bigint | null {
 }
 
 async function fetchTotalByHead(url: string): Promise<bigint> {
-  const response = await fetch(url, { method: "HEAD" });
+  const response = await fetchOrExplain(url, { method: "HEAD" });
   if (!response.ok) {
     throw new Error(`size request failed for ${url}: got ${response.status}`);
   }
@@ -364,7 +381,7 @@ const SIGNATURE = [0x49, 0x4f, 0x4e, 0x49, 0x43];
 const FILE_SIZE_OFFSET = 400;
 
 export async function fetchHeader(source: RemoteSource): Promise<Uint8Array> {
-  const response = await fetch(source.url, {
+  const response = await fetchOrExplain(source.url, {
     headers: {
       Range: `bytes=0-${HEADER_BYTES - 1n}`,
       "Accept-Encoding": "identity",
@@ -372,7 +389,7 @@ export async function fetchHeader(source: RemoteSource): Promise<Uint8Array> {
   });
   if (response.status !== 206) {
     throw new Error(
-      `range request failed for ${source.url}: expected 206 Partial Content, got ${response.status}`,
+      `range request failed for ${hideQuery(source.url)}: expected 206 Partial Content, got ${response.status}`,
     );
   }
 

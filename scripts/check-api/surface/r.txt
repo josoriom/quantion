@@ -1,3 +1,5 @@
+function annotate_features(files, features, options = annotate_features_options())
+function annotate_features_options(library = .DEFAULT_LIBRARY, model = .DEFAULT_MODEL, matches = 3L, ppm_tolerance = 20, mz_tolerance = 0.005, rt_range = 0.3, min_relative_intensity = 0.02)
 function calculate_baseline(y, options = calculate_baseline_options())
 function calculate_baseline_options(lambda = 20, max_iterations = 4L)
 function calculate_eic(file, mz, options = calculate_eic_options())

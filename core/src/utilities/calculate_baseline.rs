@@ -1,10 +1,16 @@
-use crate::options::CalculateBaselineOptions;
-use crate::utilities::cheminfo::air_pls::{AirPlsOptions, air_pls};
+use crate::{
+    traces::CalculateBaselineOptions,
+    utilities::cheminfo::air_pls::{AirPlsOptions, air_pls},
+};
 
 pub(crate) const STANDALONE_EDGE_SLOPE_LEVEL: u8 = 5;
 const EDGE_SLOPE_POINTS: usize = 4;
 
-pub fn calculate_baseline(y: &[f64], options: CalculateBaselineOptions, edge_slope_level: u8) -> Vec<f64> {
+pub fn calculate_baseline(
+    y: &[f64],
+    options: CalculateBaselineOptions,
+    edge_slope_level: u8,
+) -> Vec<f64> {
     let n = y.len();
     if n == 0 {
         return Vec::new();

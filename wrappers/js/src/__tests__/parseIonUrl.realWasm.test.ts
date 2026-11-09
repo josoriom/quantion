@@ -1,6 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 
+const ANY = 0;
+const RT_RANGE = 1;
+
 describe("parseIonUrl Real WASM End-to-End", () => {
   let test_ion_data: Uint8Array;
   let wasm_instance: WebAssembly.Instance | null = null;
@@ -196,12 +199,14 @@ describe("parseIonUrl Real WASM End-to-End", () => {
       const get_scans = instance.exports.get_scans as any;
       expect(get_scans).toBeTruthy();
 
-      const query_type = 0;
       const scans_rc = get_scans(
         handle,
-        query_type,
+        RT_RANGE,
         0,
         1000,
+        ANY,
+        NaN,
+        NaN,
         0,
         0,
         output_slot,
@@ -287,14 +292,14 @@ describe("parseIonUrl Real WASM End-to-End", () => {
 
       const get_scans = instance.exports.get_scans as any;
 
-      get_scans(handle_1, 0, 0, 1000, 0, 0, output_slot);
+      get_scans(handle_1, RT_RANGE, 0, 1000, ANY, NaN, NaN, 0, 0, output_slot);
       const handle_1_calls_before = range_read_calls.filter(
         (c) => c.source_id === source_id_1,
       ).length;
 
       range_read_calls = [];
 
-      get_scans(handle_2, 0, 0, 1000, 0, 0, output_slot);
+      get_scans(handle_2, RT_RANGE, 0, 1000, ANY, NaN, NaN, 0, 0, output_slot);
       const handle_2_calls = range_read_calls.filter(
         (c) => c.source_id === source_id_2,
       );

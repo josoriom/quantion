@@ -1,3 +1,4 @@
+import * as sections from "./bridge";
 import {
   PAYLOAD_CONSENSUS_FEATURES,
   PAYLOAD_FEATURES,
@@ -76,9 +77,91 @@ type Column =
       bytesId: number;
       missingId: number;
       kind: "optional text";
-    };
+    }
+  | { name: string; startsId: number; valuesId: number; kind: "number list" };
 
 const RECORD_COLUMNS: Record<number, Column[]> = {
+  [sections.PAYLOAD_FEATURE_ANNOTATIONS]: [
+    { name: "mz", id: sections.SECTION_FEATURE_ANNOTATION_MZ, kind: "number" },
+    { name: "rt", id: sections.SECTION_FEATURE_ANNOTATION_RT, kind: "number" },
+    {
+      name: "label",
+      startsId: sections.SECTION_FEATURE_ANNOTATION_LABEL_STARTS,
+      bytesId: sections.SECTION_FEATURE_ANNOTATION_LABEL_BYTES,
+      missingId: sections.SECTION_FEATURE_ANNOTATION_LABEL_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "id",
+      startsId: sections.SECTION_FEATURE_ANNOTATION_ID_STARTS,
+      bytesId: sections.SECTION_FEATURE_ANNOTATION_ID_BYTES,
+      missingId: sections.SECTION_FEATURE_ANNOTATION_ID_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "database",
+      startsId: sections.SECTION_FEATURE_ANNOTATION_DATABASE_STARTS,
+      bytesId: sections.SECTION_FEATURE_ANNOTATION_DATABASE_BYTES,
+      missingId: sections.SECTION_FEATURE_ANNOTATION_DATABASE_MISSING,
+      kind: "optional text",
+    },
+    { name: "frequency", id: sections.SECTION_FEATURE_ANNOTATION_FREQUENCY, kind: "number" },
+    { name: "score", id: sections.SECTION_FEATURE_ANNOTATION_SCORE, kind: "number" },
+    { name: "cosine", id: sections.SECTION_FEATURE_ANNOTATION_COSINE, kind: "number" },
+  ],
+  [sections.PAYLOAD_FILE_ANNOTATIONS]: [
+    { name: "feature", id: sections.SECTION_FILE_ANNOTATION_FEATURE, kind: "count" },
+    { name: "file", id: sections.SECTION_FILE_ANNOTATION_FILE, kind: "count" },
+    { name: "scanIndex", id: sections.SECTION_FILE_ANNOTATION_SCAN_INDEX, kind: "number" },
+  ],
+  [sections.PAYLOAD_COMPOUND_MATCHES]: [
+    { name: "feature", id: sections.SECTION_COMPOUND_MATCH_FEATURE, kind: "count" },
+    { name: "file", id: sections.SECTION_COMPOUND_MATCH_FILE, kind: "count" },
+    {
+      name: "label",
+      startsId: sections.SECTION_COMPOUND_MATCH_LABEL_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_LABEL_BYTES,
+      kind: "text",
+    },
+    {
+      name: "id",
+      startsId: sections.SECTION_COMPOUND_MATCH_ID_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_ID_BYTES,
+      kind: "text",
+    },
+    {
+      name: "database",
+      startsId: sections.SECTION_COMPOUND_MATCH_DATABASE_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_DATABASE_BYTES,
+      kind: "text",
+    },
+    { name: "score", id: sections.SECTION_COMPOUND_MATCH_SCORE, kind: "number" },
+    { name: "cosine", id: sections.SECTION_COMPOUND_MATCH_COSINE, kind: "number" },
+    {
+      name: "mz",
+      startsId: sections.SECTION_COMPOUND_MATCH_MZ_STARTS,
+      valuesId: sections.SECTION_COMPOUND_MATCH_MZ_VALUES,
+      kind: "number list",
+    },
+    {
+      name: "intensity",
+      startsId: sections.SECTION_COMPOUND_MATCH_INTENSITY_STARTS,
+      valuesId: sections.SECTION_COMPOUND_MATCH_INTENSITY_VALUES,
+      kind: "number list",
+    },
+    {
+      name: "metadataNames",
+      startsId: sections.SECTION_COMPOUND_MATCH_METADATA_NAME_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_METADATA_NAME_BYTES,
+      kind: "text",
+    },
+    {
+      name: "metadataValues",
+      startsId: sections.SECTION_COMPOUND_MATCH_METADATA_VALUE_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_METADATA_VALUE_BYTES,
+      kind: "text",
+    },
+  ],
   [PAYLOAD_PEAKS]: [
     { name: "from", id: SECTION_PEAK_FROM, kind: "number" },
     { name: "to", id: SECTION_PEAK_TO, kind: "number" },
@@ -208,6 +291,12 @@ export function readRecords(buffer: ArrayBuffer): Record<string, unknown>[] {
     } else if (column.kind === "count") {
       const counts = readU32Section(bridge, column.id);
       values.set(column.name, (index) => counts[index]);
+    } else if (column.kind === "number list") {
+      const starts = readCountSection(bridge, column.startsId);
+      const numbers = readF64Section(bridge, column.valuesId);
+      values.set(column.name, (index) =>
+        numbers.slice(starts[index], starts[index + 1]),
+      );
     } else {
       const starts = readCountSection(bridge, column.startsId);
       const bytes = readU8Section(bridge, column.bytesId);

@@ -4,7 +4,10 @@ declare const __INLINE__: boolean;
 declare const __WASM_DATA_URL__: string | undefined;
 declare var require: any;
 
+import { getAnnotationValues } from "./backend";
 import type {
+  AnnotationSettings,
+  AnnotationTables,
   Backend,
   ByteRangeResult,
   EicSettings,
@@ -13,10 +16,12 @@ import type {
   ModelHandle,
   PeakColumns,
   PeakSettings,
+  ScanQuerySettings,
   TargetColumns,
   TransitionColumns,
   WarpModelHandle,
 } from "./backend";
+import { getScanQueryValues } from "./backend";
 import type {
   DataXY,
   Feature,
@@ -47,7 +52,7 @@ const OUTPUT_BUFFER_PAIR_BYTES = 8;
 const NOISE_LEVEL_SLOT_BYTES = 16;
 const NOISE_LEVEL_INTENSITY_OFFSET = 8;
 const PEAK_OPTIONS_STRUCT_BYTES = 80;
-const QUANTION_ABI_VERSION = 2;
+const QUANTION_ABI_VERSION = 3;
 const IMAGE_BATCH_SCANS = 256;
 const LARGEST_WASM_SIZE = 4294967295;
 const IMAGE_BATCH_BUDGET_BYTES = 192 * 1024 * 1024;
@@ -168,7 +173,8 @@ class WasmExports {
         );
       }
     }
-    this.alloc = this.get("alloc");
+    const alloc = this.get("alloc");
+    this.alloc = (size: number) => alloc(size) >>> 0;
     this.free = this.get("free_");
   }
 
@@ -198,6 +204,7 @@ class WasmApi {
   readonly fn: WasmExports;
   private readonly firstSlot: number;
   private readonly secondSlot: number;
+  private readonly thirdSlot: number;
   private readonly errorSlot: number;
   private readonly peakOptionsSlot: number;
   private readonly handleSlot: number;
@@ -225,6 +232,7 @@ class WasmApi {
     this.heap = new WasmHeap(this.fn.memory, this.fn.alloc, this.fn.free);
     this.firstSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
     this.secondSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
+    this.thirdSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
     this.errorSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
     this.peakOptionsSlot = this.heap.allocPermanent(PEAK_OPTIONS_STRUCT_BYTES);
     this.handleSlot = this.heap.allocPermanent(4);
@@ -468,6 +476,68 @@ class WasmApi {
     return this.takeNumbers(this.firstSlot);
   }
 
+  async annotateFeatures(
+    library: number | null,
+    model: number | null,
+    files: number[],
+    mzs: Float64Array,
+    rts: Float64Array,
+    settings: AnnotationSettings,
+  ): Promise<AnnotationTables> {
+    const values = getAnnotationValues(settings);
+    const memory = [
+      toUint8View(Uint32Array.from(files)),
+      toUint8View(mzs),
+      toUint8View(rts),
+    ];
+    if (library !== null && model !== null) {
+      for (const file of files) {
+        await this.prefetch(file, () =>
+          this.withMemory(memory, ([, mzPointer, rtPointer]) =>
+            this.run("plan_annotate_samples", file, mzPointer, rtPointer, mzs.length, ...values, this.firstSlot),
+          ),
+        );
+      }
+      await this.prefetch(library, () =>
+        this.withMemory(memory, ([filePointer, mzPointer, rtPointer]) =>
+          this.run(
+            "plan_annotate_library",
+            library,
+            model,
+            filePointer,
+            files.length,
+            mzPointer,
+            rtPointer,
+            mzs.length,
+            ...values,
+            this.firstSlot,
+          ),
+        ),
+      );
+    }
+    this.withMemory(memory, ([filePointer, mzPointer, rtPointer]) =>
+      this.run(
+        "annotate_features",
+        library ?? 0,
+        model ?? 0,
+        filePointer,
+        files.length,
+        mzPointer,
+        rtPointer,
+        mzs.length,
+        ...values,
+        this.firstSlot,
+        this.secondSlot,
+        this.thirdSlot,
+      ),
+    );
+    return {
+      features: this.takeRecords(this.firstSlot),
+      files: this.takeRecords(this.secondSlot),
+      matches: this.takeRecords(this.thirdSlot),
+    };
+  }
+
   calibrateRts(
     warp: number,
     handles: number[],
@@ -539,13 +609,11 @@ class WasmApi {
 
   async getScans(
     handle: number,
-    queryType: number,
-    from: number,
-    to: number,
+    query: ScanQuerySettings,
     level: number,
     timeUnit: number,
   ): Promise<Scan[]> {
-    const values = [queryType, from, to, level, timeUnit];
+    const values = [...getScanQueryValues(query), level, timeUnit];
     await this.prefetch(handle, () =>
       this.run("plan_scans", handle, ...values, this.firstSlot),
     );
@@ -555,15 +623,13 @@ class WasmApi {
 
   async getScansWithArrays(
     handle: number,
-    queryType: number,
-    from: number,
-    to: number,
+    query: ScanQuerySettings,
     level: number,
     timeUnit: number,
     accessions: Uint32Array,
     keys: string[],
   ): Promise<Scan[]> {
-    const values = [queryType, from, to, level, timeUnit];
+    const values = [...getScanQueryValues(query), level, timeUnit];
     await this.prefetch(handle, () =>
       this.withMemory([toUint8View(accessions)], ([pointer]) =>
         this.run(
@@ -1146,6 +1212,24 @@ export class WasmBackend implements Backend {
     return this.getApi().predictRts(warp as number, handle as number, mzs, rts);
   }
 
+  annotateFeatures(
+    library: FileHandle | null,
+    model: ModelHandle | null,
+    files: FileHandle[],
+    mzs: Float64Array,
+    rts: Float64Array,
+    settings: AnnotationSettings,
+  ): Promise<AnnotationTables> {
+    return this.getApi().annotateFeatures(
+      library as number | null,
+      model as number | null,
+      files as number[],
+      mzs,
+      rts,
+      settings,
+    );
+  }
+
   calibrateRts(
     warp: WarpModelHandle,
     handles: FileHandle[],
@@ -1174,27 +1258,16 @@ export class WasmBackend implements Backend {
 
   getScans(
     handle: FileHandle,
-    queryType: number,
-    from: number,
-    to: number,
+    query: ScanQuerySettings,
     level: number,
     timeUnit: number,
   ): Promise<Scan[]> {
-    return this.getApi().getScans(
-      handle as number,
-      queryType,
-      from,
-      to,
-      level,
-      timeUnit,
-    );
+    return this.getApi().getScans(handle as number, query, level, timeUnit);
   }
 
   getScansWithArrays(
     handle: FileHandle,
-    queryType: number,
-    from: number,
-    to: number,
+    query: ScanQuerySettings,
     level: number,
     timeUnit: number,
     accessions: Uint32Array,
@@ -1202,9 +1275,7 @@ export class WasmBackend implements Backend {
   ): Promise<Scan[]> {
     return this.getApi().getScansWithArrays(
       handle as number,
-      queryType,
-      from,
-      to,
+      query,
       level,
       timeUnit,
       accessions,

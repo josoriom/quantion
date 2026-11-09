@@ -37,10 +37,10 @@ class ScanQueries(unittest.TestCase):
         )
         self.assertEqual(scan["level"], 1)
 
-    def test_rt_and_mz_together_are_refused(self):
+    def test_a_query_with_neither_rt_nor_mz_is_refused(self):
         with self.assertRaises(support.quantion.QuantionError) as caught:
-            support.quantion.get_scans(self.file, rt=2.385, mz=89.0)
-        self.assertEqual(caught.exception.argument, "mz")
+            support.quantion.get_scans(self.file)
+        self.assertEqual(caught.exception.argument, "rt")
 
     def test_a_range_without_to_is_refused(self):
         with self.assertRaises(support.quantion.QuantionError) as caught:
@@ -130,6 +130,21 @@ class ScanArrays(unittest.TestCase):
         self.assertEqual(len(scans), 1)
         self.assertEqual(scans[0]["mz"].tolist(), [100.5, 200.25, 300.125])
         np.testing.assert_array_equal(scans[0]["fingerprint"], get_fingerprint(1))
+
+    def get_rts(self, rt, mz):
+        return [scan["rt"] for scan in support.quantion.get_scans(self.file, rt=rt, mz=mz, options={"level": 2})]
+
+    def test_rt_range_and_mz_range_keep_scans_inside_both(self):
+        self.assertEqual(self.get_rts({"from": 0.5, "to": 2.5}, {"from": 300.5, "to": 302.5}), [2.0])
+
+    def test_rt_range_and_closest_mz_give_one_scan_inside_the_range(self):
+        self.assertEqual(self.get_rts({"from": 1.5, "to": 3.5}, 300.0), [2.0])
+
+    def test_closest_rt_and_mz_range_give_the_nearest_scan_at_that_precursor(self):
+        self.assertEqual(self.get_rts(1.0, {"from": 300.5, "to": 302.5}), [2.0])
+
+    def test_closest_rt_and_closest_mz_pick_the_closest_precursor_first(self):
+        self.assertEqual(self.get_rts(3.0, 300.2), [1.0])
 
     def test_mzml_gives_the_same_arrays(self):
         file = support.quantion.parse_mzml(write_mzml())

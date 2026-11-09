@@ -419,32 +419,6 @@ fn turns_down(left: f64, right: f64, epsilon: f64) -> bool {
 }
 
 #[inline]
-pub fn quad_peak(xs: &[f64], ys: &[f64], i: usize) -> f64 {
-    let xm1 = xs[i - 1];
-    let x0 = xs[i];
-    let xp1 = xs[i + 1];
-    let ym1 = ys[i - 1];
-    let y0 = ys[i];
-    let yp1 = ys[i + 1];
-
-    let a0 = xm1 - x0;
-    let a1 = xp1 - x0;
-    let dy0 = ym1 - y0;
-    let dy1 = yp1 - y0;
-    let denom = a0 * a1 * (a0 - a1);
-    if denom == 0.0 {
-        return x0;
-    }
-    let a = (dy0 * a1 - dy1 * a0) / denom;
-    if a == 0.0 {
-        x0
-    } else {
-        let b = (dy1 * a0 * a0 - dy0 * a1 * a1) / denom;
-        x0 - b / (2.0 * a)
-    }
-}
-
-#[inline]
 fn mean_step(xs: &[f64]) -> f64 {
     let mut sum = 0.0;
     let mut c = 0usize;

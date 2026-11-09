@@ -33,6 +33,7 @@ export {
   findFeatures,
   matchFeatures,
   deisotopeFeatures,
+  annotateFeatures,
 } from "./utilities/api";
 export { SampleFile } from "./utilities/sampleFile";
 export { Model } from "./utilities/model";

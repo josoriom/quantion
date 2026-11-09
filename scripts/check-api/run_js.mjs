@@ -252,6 +252,28 @@ async function main() {
     out.push(`predict_rts.${target.id}.uncertainty = ${number(predicted[index].uncertainty)}`);
   });
 
+  const folder = path.join(directory, "..", "annotate");
+  const samples = await Promise.all(
+    ["sample_peak_and_ms2", "sample_peak_only", "sample_no_peak"].map((name) => quantion.parseIon(path.join(folder, `${name}.ion`))),
+  );
+  const options = { library: path.join(folder, "library.ion"), model: path.join(folder, "model.onnx") };
+  const annotations = await quantion.annotateFeatures(samples, [{ mz: 195.0877, rt: 2.0 }], options);
+  out.push(`annotate_features.count = ${annotations.length}`);
+  annotations.forEach((annotation, index) => {
+    const name = `annotate_features[${index}]`;
+    for (const key of ["label", "id", "database"]) out.push(`${name}.${key} = ${annotation[key] ?? "NA"}`);
+    out.push(`${name}.frequency = ${number(annotation.frequency)}`);
+    for (const key of ["score", "cosine"]) out.push(`${name}.${key} = ${annotation[key] === null ? "NA" : number(annotation[key])}`);
+    for (const file of annotation.files) {
+      out.push(`${name}.files[${file.file}].scan_index = ${file.scanIndex ?? "NA"}`);
+      file.matches.forEach((match, rank) => {
+        const prefix = `${name}.files[${file.file}].matches[${rank}]`;
+        for (const key of ["label", "id", "database"]) out.push(`${prefix}.${key} = ${match[key]}`);
+        for (const key of ["score", "cosine"]) out.push(`${prefix}.${key} = ${number(match[key])}`);
+      });
+    }
+  });
+
   process.stdout.write(out.join("\n") + "\n");
 }
 

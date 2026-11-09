@@ -1,10 +1,11 @@
 use std::fs;
 
 use crate::{
-    DataXY, DrawPeaksOptions, CalculateEicOptions, ErrorKind, FindTargetsOptions, FitPeakOptions, GetPeakOptions, Header,
-    GetIonImageOptions, IonOutput, ParseIonOptions, PeakParameters, ScanQuery, Target, WriteIonOptions,
-    WriteMzmlOptions, calculate_eic, draw_peaks, find_targets, fit_peak, get_ion_image, get_peak, get_scans,
-    parse_ion, parse_mzml, write_ion, write_mzml,
+    CalculateEicOptions, DataXY, DrawPeaksOptions, ErrorKind, FindTargetsOptions, FitPeakOptions,
+    GetIonImageOptions, GetPeakOptions, Header, IonOutput, ParseIonOptions, PeakParameters,
+    Position, ScanQuery, Target, WriteIonOptions, WriteMzmlOptions, calculate_eic, draw_peaks,
+    find_targets, fit_peak, get_ion_image, get_peak, get_scans, parse_ion, parse_mzml, write_ion,
+    write_mzml,
 };
 
 const API_FILE: &str = "tests/fixtures/api/api.ion";
@@ -26,7 +27,9 @@ fn get_gaussian(center: f64, height: f64) -> PeakParameters {
 
 #[test]
 fn a_missing_path_is_a_file_not_found_error() {
-    let error = parse_ion("tests/fixtures/missing.ion", ParseIonOptions::default()).err().expect("an error");
+    let error = parse_ion("tests/fixtures/missing.ion", ParseIonOptions::default())
+        .err()
+        .expect("an error");
     assert_eq!(error.kind, ErrorKind::FileNotFound);
     assert_eq!(error.function, "parse_ion");
 }
@@ -34,16 +37,21 @@ fn a_missing_path_is_a_file_not_found_error() {
 #[test]
 fn a_bad_mz_names_the_function_and_the_argument() {
     let mut file = open_api_file();
-    let error = calculate_eic(&mut file, -1.0, CalculateEicOptions::default()).expect_err("an error");
+    let error =
+        calculate_eic(&mut file, -1.0, CalculateEicOptions::default()).expect_err("an error");
     assert_eq!(error.kind, ErrorKind::InvalidArgument);
     assert_eq!(error.argument.as_deref(), Some("mz"));
-    assert_eq!(error.to_string(), "calculate_eic: mz must be greater than 0, got -1");
+    assert_eq!(
+        error.to_string(),
+        "calculate_eic: mz must be greater than 0, got -1"
+    );
 }
 
 #[test]
 fn the_window_is_read_from_the_eic_options() {
     let mut file = open_api_file();
-    let whole_run = calculate_eic(&mut file, ALANINE_MZ, CalculateEicOptions::default()).expect("whole run");
+    let whole_run =
+        calculate_eic(&mut file, ALANINE_MZ, CalculateEicOptions::default()).expect("whole run");
     let options = CalculateEicOptions {
         from: 2.0,
         to: 3.0,
@@ -90,10 +98,14 @@ fn a_target_without_range_finds_its_peak() {
 #[test]
 fn ion_bytes_open_again() {
     let mut file = open_api_file();
-    let bytes = write_ion(&mut file, WriteIonOptions::default()).expect("write").expect("bytes");
+    let bytes = write_ion(&mut file, WriteIonOptions::default())
+        .expect("write")
+        .expect("bytes");
     let mut again = parse_ion(bytes, ParseIonOptions::default()).expect("open bytes");
-    let first = calculate_eic(&mut file, ALANINE_MZ, CalculateEicOptions::default()).expect("first");
-    let second = calculate_eic(&mut again, ALANINE_MZ, CalculateEicOptions::default()).expect("second");
+    let first =
+        calculate_eic(&mut file, ALANINE_MZ, CalculateEicOptions::default()).expect("first");
+    let second =
+        calculate_eic(&mut again, ALANINE_MZ, CalculateEicOptions::default()).expect("second");
     assert_eq!(first.y, second.y);
 }
 
@@ -107,7 +119,10 @@ fn an_existing_output_needs_overwrite() {
         out: Some(IonOutput::Path(path.clone())),
         ..Default::default()
     };
-    assert_eq!(write_ion(&mut file, options.clone()).expect("first write"), None);
+    assert_eq!(
+        write_ion(&mut file, options.clone()).expect("first write"),
+        None
+    );
     let error = write_ion(&mut file, options.clone()).expect_err("exists");
     assert_eq!(error.kind, ErrorKind::FileExists);
     let replace = WriteIonOptions {
@@ -136,7 +151,9 @@ fn headers_need_a_url() {
 fn a_reserved_header_is_refused() {
     let mut file = open_api_file();
     let options = WriteIonOptions {
-        out: Some(IonOutput::Url("https://example.org/upload/sample.ion".to_string())),
+        out: Some(IonOutput::Url(
+            "https://example.org/upload/sample.ion".to_string(),
+        )),
         headers: vec![Header {
             name: "Content-Length".to_string(),
             value: "1".to_string(),
@@ -151,18 +168,31 @@ fn a_reserved_header_is_refused() {
 #[test]
 fn mzml_bytes_open_again() {
     let mut file = open_api_file();
-    let bytes = write_mzml(&mut file, WriteMzmlOptions::default()).expect("write").expect("bytes");
+    let bytes = write_mzml(&mut file, WriteMzmlOptions::default())
+        .expect("write")
+        .expect("bytes");
     let mut again = parse_mzml(bytes).expect("open mzML bytes");
-    let scans = get_scans(&mut again, ScanQuery::Rt(2.385), Default::default()).expect("scans");
+    let scans = get_scans(
+        &mut again,
+        ScanQuery {
+            rt: Position::Closest(2.385),
+            ..Default::default()
+        },
+        Default::default(),
+    )
+    .expect("scans");
     assert_eq!(scans.len(), 1);
 }
 
 #[test]
 fn an_mzml_sample_cannot_be_imaged() {
     let mut file = open_api_file();
-    let bytes = write_mzml(&mut file, WriteMzmlOptions::default()).expect("write").expect("bytes");
+    let bytes = write_mzml(&mut file, WriteMzmlOptions::default())
+        .expect("write")
+        .expect("bytes");
     let mut mzml = parse_mzml(bytes).expect("open mzML bytes");
-    let error = get_ion_image(&mut mzml, ALANINE_MZ, GetIonImageOptions::default()).expect_err("ion only");
+    let error =
+        get_ion_image(&mut mzml, ALANINE_MZ, GetIonImageOptions::default()).expect_err("ion only");
     assert_eq!(error.argument.as_deref(), Some("file"));
 }
 

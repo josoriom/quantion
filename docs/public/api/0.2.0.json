@@ -158,20 +158,20 @@
       "languages": {
         "rust": {
           "signature": "pub fn parse_ion(input: impl Into<IonInput>, options: ParseIonOptions) -> Result<SampleFile, QuantionError>",
-          "example": "use quantion::{ParseIonOptions, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet file = parse_ion(url, ParseIonOptions::default())?;\nlet cached = parse_ion(url, ParseIonOptions { max_cache_size: 64_000_000 })?;\nprintln!(\"opened {url}\");\n\ndrop(file);\ndrop(cached);",
+          "example": "use quantion::{ParseIonOptions, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet file = parse_ion(url, ParseIonOptions::default())?;\nlet cached = parse_ion(url, ParseIonOptions { max_cache_size: 64_000_000 })?;\nprintln!(\"opened {url}\");\n\ndrop(file);\ndrop(cached);",
           "warning": "The sample is freed when it goes out of scope, so nothing else is needed in normal use. When processing many samples, drop each one after using it, with drop(file), so its memory is freed right away instead of piling up."
         },
         "python": {
           "signature": "def parse_ion(source, options: ParseIonOptions | None = None) -> SampleFile",
-          "example": "from quantion import parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\ncached = parse_ion(url, {\"max_cache_size\": 64_000_000})\nprint(file)\n\nfile.dispose()\ncached.dispose()"
+          "example": "from quantion import parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\ncached = parse_ion(url, {\"max_cache_size\": 64_000_000})\nprint(file)\n\nfile.dispose()\ncached.dispose()"
         },
         "js": {
           "signature": "async function parseIon(source: IonInput, options?: ParseIonOptions): Promise<SampleFile>",
-          "example": "import { parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst cached = await parseIon(url, { maxCacheSize: 64_000_000 });\nconsole.log(file);\n\nfile.dispose();\ncached.dispose();"
+          "example": "import { parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst cached = await parseIon(url, { maxCacheSize: 64_000_000 });\nconsole.log(file);\n\nfile.dispose();\ncached.dispose();"
         },
         "r": {
           "signature": "parse_ion(source, options = parse_ion_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\ncached <- parse_ion(url, options = parse_ion_options(max_cache_size = 64e6))\nprint(sample)\n\ndispose(sample)\ndispose(cached)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\ncached <- parse_ion(url, options = parse_ion_options(max_cache_size = 64e6))\nprint(sample)\n\ndispose(sample)\ndispose(cached)"
         }
       },
       "warning": "The sample is freed by the library once it is no longer used, so dispose is not needed in normal use. When processing many samples, dispose each one after using it, so its memory is freed right away instead of piling up."
@@ -527,19 +527,19 @@
       "languages": {
         "rust": {
           "signature": "pub fn get_scans(file: &mut SampleFile, query: ScanQuery, options: GetScansOptions) -> Result<Vec<Scan>, QuantionError>",
-          "example": "use quantion::{FromTo, GetScansOptions, ParseIonOptions, ScanQuery, TimeUnit, get_scans, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet scans = get_scans(&mut file, ScanQuery::RtRange(FromTo { from: 2.3, to: 2.4 }), GetScansOptions::default())?;\nlet closest = get_scans(&mut file, ScanQuery::Rt(143.0), GetScansOptions { time_unit: TimeUnit::SECONDS, ..Default::default() })?;\nprintln!(\"{}\", scans.len());\nprintln!(\"{}\", closest[0].rt);"
+          "example": "use quantion::{FromTo, GetScansOptions, ParseIonOptions, ScanQuery, TimeUnit, get_scans, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet scans = get_scans(&mut file, ScanQuery::RtRange(FromTo { from: 2.3, to: 2.4 }), GetScansOptions::default())?;\nlet closest = get_scans(&mut file, ScanQuery::Rt(143.0), GetScansOptions { time_unit: TimeUnit::SECONDS, ..Default::default() })?;\nprintln!(\"{}\", scans.len());\nprintln!(\"{}\", closest[0].rt);"
         },
         "python": {
           "signature": "def get_scans(file, *, rt: float | FromTo | None = None, mz: float | FromTo | None = None,\n              options: GetScansOptions | None = None) -> list[Scan]",
-          "example": "from quantion import TimeUnit, get_scans, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\nscans = get_scans(file, rt={\"from\": 2.3, \"to\": 2.4})\nclosest = get_scans(file, rt=143, options={\"time_unit\": TimeUnit.SECONDS})\nprint(len(scans))\nprint(closest[0][\"rt\"])"
+          "example": "from quantion import TimeUnit, get_scans, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\nscans = get_scans(file, rt={\"from\": 2.3, \"to\": 2.4})\nclosest = get_scans(file, rt=143, options={\"time_unit\": TimeUnit.SECONDS})\nprint(len(scans))\nprint(closest[0][\"rt\"])"
         },
         "js": {
           "signature": "async function getScans(file: SampleFile, query: ScanQuery, options?: GetScansOptions): Promise<Scan[]>",
-          "example": "import { TimeUnit, getScans, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst scans = await getScans(file, { rt: { from: 2.3, to: 2.4 } });\nconst closest = await getScans(file, { rt: 143 }, { timeUnit: TimeUnit.SECONDS });\nconsole.log(scans.length);\nconsole.log(closest[0].rt);"
+          "example": "import { TimeUnit, getScans, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst scans = await getScans(file, { rt: { from: 2.3, to: 2.4 } });\nconst closest = await getScans(file, { rt: 143 }, { timeUnit: TimeUnit.SECONDS });\nconsole.log(scans.length);\nconsole.log(closest[0].rt);"
         },
         "r": {
           "signature": "get_scans(file, rt = NULL, mz = NULL, options = get_scans_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\nscans <- get_scans(sample, rt = c(2.3, 2.4))\nclosest <- get_scans(sample, rt = 143, options = get_scans_options(time_unit = \"SECONDS\"))\nprint(nrow(scans))\nprint(closest$rt)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\nscans <- get_scans(sample, rt = c(2.3, 2.4))\nclosest <- get_scans(sample, rt = 143, options = get_scans_options(time_unit = \"SECONDS\"))\nprint(nrow(scans))\nprint(closest$rt)"
         }
       }
     },
@@ -637,19 +637,19 @@
       "languages": {
         "rust": {
           "signature": "pub fn calculate_eic(file: &mut SampleFile, mz: f64, options: CalculateEicOptions) -> Result<DataXY, QuantionError>",
-          "example": "use quantion::{CalculateEicOptions, ParseIonOptions, calculate_eic, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ppm_tolerance: 10.0, ..Default::default() })?;\nprintln!(\"{} points\", eic.x.len());"
+          "example": "use quantion::{CalculateEicOptions, ParseIonOptions, calculate_eic, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ppm_tolerance: 10.0, ..Default::default() })?;\nprintln!(\"{} points\", eic.x.len());"
         },
         "python": {
           "signature": "def calculate_eic(file, mz: float, options: CalculateEicOptions | None = None) -> DataXY",
-          "example": "from quantion import calculate_eic, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3, \"ppm_tolerance\": 10})\nprint(len(eic[\"x\"]), \"points\")"
+          "example": "from quantion import calculate_eic, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3, \"ppm_tolerance\": 10})\nprint(len(eic[\"x\"]), \"points\")"
         },
         "js": {
           "signature": "async function calculateEic(file: SampleFile, mz: number, options?: CalculateEicOptions): Promise<DataXY>",
-          "example": "import { calculateEic, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3, ppmTolerance: 10 });\nconsole.log(eic.x.length, \"points\");"
+          "example": "import { calculateEic, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3, ppmTolerance: 10 });\nconsole.log(eic.x.length, \"points\");"
         },
         "r": {
           "signature": "calculate_eic(file, mz, options = calculate_eic_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\noptions <- calculate_eic_options(from = 2, to = 3, ppm_tolerance = 10)\neic <- calculate_eic(sample, 260.103, options = options)\nprint(head(data.frame(rt = eic$x, intensity = eic$y)))"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\noptions <- calculate_eic_options(from = 2, to = 3, ppm_tolerance = 10)\neic <- calculate_eic(sample, 260.103, options = options)\nprint(head(data.frame(rt = eic$x, intensity = eic$y)))"
         }
       }
     },
@@ -748,19 +748,19 @@
       "languages": {
         "rust": {
           "signature": "pub fn get_ion_image(file: &mut SampleFile, mz: f64, options: GetIonImageOptions) -> Result<IonImage, QuantionError>",
-          "example": "use quantion::{GetIonImageOptions, ParseIonOptions, get_ion_image, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet image = get_ion_image(&mut file, 260.103, GetIonImageOptions { tolerance: 0.05, ..Default::default() })?;\nprintln!(\"{} x {}\", image.width, image.height);"
+          "example": "use quantion::{GetIonImageOptions, ParseIonOptions, get_ion_image, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet image = get_ion_image(&mut file, 260.103, GetIonImageOptions { tolerance: 0.05, ..Default::default() })?;\nprintln!(\"{} x {}\", image.width, image.height);"
         },
         "python": {
           "signature": "def get_ion_image(file, mz: float, options: GetIonImageOptions | None = None) -> IonImage",
-          "example": "from quantion import get_ion_image, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\nimage = get_ion_image(file, 260.103, {\"tolerance\": 0.05})\nprint(image[\"width\"], \"x\", image[\"height\"])"
+          "example": "from quantion import get_ion_image, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\nimage = get_ion_image(file, 260.103, {\"tolerance\": 0.05})\nprint(image[\"width\"], \"x\", image[\"height\"])"
         },
         "js": {
           "signature": "async function getIonImage(file: SampleFile, mz: number, options?: GetIonImageOptions): Promise<IonImage>",
-          "example": "import { getIonImage, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst image = await getIonImage(file, 260.103, { tolerance: 0.05 });\nconsole.log(image.width, \"x\", image.height);"
+          "example": "import { getIonImage, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst image = await getIonImage(file, 260.103, { tolerance: 0.05 });\nconsole.log(image.width, \"x\", image.height);"
         },
         "r": {
           "signature": "get_ion_image(file, mz, options = get_ion_image_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\nimage <- get_ion_image(sample, 260.103, options = get_ion_image_options(tolerance = 0.05))\nprint(c(image$width, image$height))"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\nimage <- get_ion_image(sample, 260.103, options = get_ion_image_options(tolerance = 0.05))\nprint(c(image$width, image$height))"
         }
       }
     },
@@ -858,19 +858,19 @@
       "languages": {
         "rust": {
           "signature": "pub fn find_peaks(data: &DataXY, options: FindPeaksOptions) -> Result<Vec<Peak>, QuantionError>",
-          "example": "use quantion::{CalculateEicOptions, FindPeaksOptions, ParseIonOptions, calculate_eic, find_peaks, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet peaks = find_peaks(&eic, FindPeaksOptions { min_snr: 3.0, ..Default::default() })?;\nprintln!(\"{peaks:?}\");"
+          "example": "use quantion::{CalculateEicOptions, FindPeaksOptions, ParseIonOptions, calculate_eic, find_peaks, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet peaks = find_peaks(&eic, FindPeaksOptions { min_snr: 3.0, ..Default::default() })?;\nprintln!(\"{peaks:?}\");"
         },
         "python": {
           "signature": "def find_peaks(x, y, options: FindPeaksOptions | None = None) -> list[Peak]",
-          "example": "from quantion import calculate_eic, find_peaks, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\npeaks = find_peaks(eic[\"x\"], eic[\"y\"], {\"min_snr\": 3})\nprint(peaks)"
+          "example": "from quantion import calculate_eic, find_peaks, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\npeaks = find_peaks(eic[\"x\"], eic[\"y\"], {\"min_snr\": 3})\nprint(peaks)"
         },
         "js": {
           "signature": "function findPeaks(x: Float64Array, y: Float64Array, options?: FindPeaksOptions): Peak[]",
-          "example": "import { calculateEic, findPeaks, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst peaks = findPeaks(eic.x, eic.y, { minSnr: 3 });\nconsole.log(peaks);"
+          "example": "import { calculateEic, findPeaks, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst peaks = findPeaks(eic.x, eic.y, { minSnr: 3 });\nconsole.log(peaks);"
         },
         "r": {
           "signature": "find_peaks(x, y, options = find_peaks_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\npeaks <- find_peaks(eic$x, eic$y, options = find_peaks_options(min_snr = 3))\nprint(peaks)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\npeaks <- find_peaks(eic$x, eic$y, options = find_peaks_options(min_snr = 3))\nprint(peaks)"
         }
       }
     },
@@ -993,19 +993,19 @@
       "languages": {
         "rust": {
           "signature": "pub fn get_peak(data: &DataXY, rt: f64, options: GetPeakOptions) -> Result<Peak, QuantionError>",
-          "example": "use quantion::{CalculateEicOptions, GetPeakOptions, ParseIonOptions, calculate_eic, get_peak, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet peak = get_peak(&eic, 2.383, GetPeakOptions { range: 0.05, ..Default::default() })?;\nlet anywhere = get_peak(&eic, 2.383, GetPeakOptions::default())?;\nprintln!(\"{peak:?}\");\nprintln!(\"{anywhere:?}\");"
+          "example": "use quantion::{CalculateEicOptions, GetPeakOptions, ParseIonOptions, calculate_eic, get_peak, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet peak = get_peak(&eic, 2.383, GetPeakOptions { range: 0.05, ..Default::default() })?;\nlet anywhere = get_peak(&eic, 2.383, GetPeakOptions::default())?;\nprintln!(\"{peak:?}\");\nprintln!(\"{anywhere:?}\");"
         },
         "python": {
           "signature": "def get_peak(x, y, rt: float, options: GetPeakOptions | None = None) -> Peak",
-          "example": "from quantion import calculate_eic, get_peak, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\npeak = get_peak(eic[\"x\"], eic[\"y\"], 2.383, {\"range\": 0.05})\nanywhere = get_peak(eic[\"x\"], eic[\"y\"], 2.383)\nprint(peak)\nprint(anywhere)"
+          "example": "from quantion import calculate_eic, get_peak, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\npeak = get_peak(eic[\"x\"], eic[\"y\"], 2.383, {\"range\": 0.05})\nanywhere = get_peak(eic[\"x\"], eic[\"y\"], 2.383)\nprint(peak)\nprint(anywhere)"
         },
         "js": {
           "signature": "function getPeak(x: Float64Array, y: Float64Array, rt: number, options?: GetPeakOptions): Peak",
-          "example": "import { calculateEic, getPeak, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst peak = getPeak(eic.x, eic.y, 2.383, { range: 0.05 });\nconst anywhere = getPeak(eic.x, eic.y, 2.383);\nconsole.log(peak);\nconsole.log(anywhere);"
+          "example": "import { calculateEic, getPeak, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst peak = getPeak(eic.x, eic.y, 2.383, { range: 0.05 });\nconst anywhere = getPeak(eic.x, eic.y, 2.383);\nconsole.log(peak);\nconsole.log(anywhere);"
         },
         "r": {
           "signature": "get_peak(x, y, rt, options = get_peak_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\npeak <- get_peak(eic$x, eic$y, rt = 2.383, options = get_peak_options(range = 0.05))\nanywhere <- get_peak(eic$x, eic$y, rt = 2.383)\nprint(peak)\nprint(anywhere)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\npeak <- get_peak(eic$x, eic$y, rt = 2.383, options = get_peak_options(range = 0.05))\nanywhere <- get_peak(eic$x, eic$y, rt = 2.383)\nprint(peak)\nprint(anywhere)"
         }
       }
     },
@@ -1128,19 +1128,19 @@
       "languages": {
         "rust": {
           "signature": "pub fn fit_peak(data: &DataXY, rt: f64, options: FitPeakOptions) -> Result<Option<PeakParameters>, QuantionError>",
-          "example": "use quantion::{CalculateEicOptions, FitPeakOptions, ParseIonOptions, PeakShape, calculate_eic, fit_peak, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet params = fit_peak(&eic, 2.383, FitPeakOptions::default())?;\nlet gaussian = fit_peak(&eic, 2.383, FitPeakOptions { shape: PeakShape::GAUSSIAN, ..Default::default() })?;\nprintln!(\"{params:?}\");\nprintln!(\"{gaussian:?}\");"
+          "example": "use quantion::{CalculateEicOptions, FitPeakOptions, ParseIonOptions, PeakShape, calculate_eic, fit_peak, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet params = fit_peak(&eic, 2.383, FitPeakOptions::default())?;\nlet gaussian = fit_peak(&eic, 2.383, FitPeakOptions { shape: PeakShape::GAUSSIAN, ..Default::default() })?;\nprintln!(\"{params:?}\");\nprintln!(\"{gaussian:?}\");"
         },
         "python": {
           "signature": "def fit_peak(x, y, rt: float, options: FitPeakOptions | None = None) -> PeakParameters | None",
-          "example": "from quantion import PeakShape, calculate_eic, fit_peak, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\nparams = fit_peak(eic[\"x\"], eic[\"y\"], 2.383)\ngaussian = fit_peak(eic[\"x\"], eic[\"y\"], 2.383, {\"shape\": PeakShape.GAUSSIAN})\nprint(params)\nprint(gaussian)"
+          "example": "from quantion import PeakShape, calculate_eic, fit_peak, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\nparams = fit_peak(eic[\"x\"], eic[\"y\"], 2.383)\ngaussian = fit_peak(eic[\"x\"], eic[\"y\"], 2.383, {\"shape\": PeakShape.GAUSSIAN})\nprint(params)\nprint(gaussian)"
         },
         "js": {
           "signature": "function fitPeak(x: Float64Array, y: Float64Array, rt: number, options?: FitPeakOptions): PeakParameters | null",
-          "example": "import { PeakShape, calculateEic, fitPeak, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst params = fitPeak(eic.x, eic.y, 2.383);\nconst gaussian = fitPeak(eic.x, eic.y, 2.383, { shape: PeakShape.GAUSSIAN });\nconsole.log(params);\nconsole.log(gaussian);"
+          "example": "import { PeakShape, calculateEic, fitPeak, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst params = fitPeak(eic.x, eic.y, 2.383);\nconst gaussian = fitPeak(eic.x, eic.y, 2.383, { shape: PeakShape.GAUSSIAN });\nconsole.log(params);\nconsole.log(gaussian);"
         },
         "r": {
           "signature": "fit_peak(x, y, rt, options = fit_peak_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\nparams <- fit_peak(eic$x, eic$y, rt = 2.383)\ngaussian <- fit_peak(eic$x, eic$y, rt = 2.383, options = fit_peak_options(shape = \"GAUSSIAN\"))\nprint(params)\nprint(gaussian)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\nparams <- fit_peak(eic$x, eic$y, rt = 2.383)\ngaussian <- fit_peak(eic$x, eic$y, rt = 2.383, options = fit_peak_options(shape = \"GAUSSIAN\"))\nprint(params)\nprint(gaussian)"
         }
       }
     },
@@ -1273,19 +1273,19 @@
       "languages": {
         "rust": {
           "signature": "pub fn find_noise_level(y: &[f64]) -> NoiseLevel",
-          "example": "use quantion::{CalculateEicOptions, ParseIonOptions, calculate_eic, find_noise_level, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet noise = find_noise_level(&eic.y).intensity;\nprintln!(\"{noise}\");"
+          "example": "use quantion::{CalculateEicOptions, ParseIonOptions, calculate_eic, find_noise_level, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet noise = find_noise_level(&eic.y).intensity;\nprintln!(\"{noise}\");"
         },
         "python": {
           "signature": "def find_noise_level(y) -> NoiseLevel",
-          "example": "from quantion import calculate_eic, find_noise_level, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\nnoise = find_noise_level(eic[\"y\"])[\"intensity\"]\nprint(noise)"
+          "example": "from quantion import calculate_eic, find_noise_level, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\nnoise = find_noise_level(eic[\"y\"])[\"intensity\"]\nprint(noise)"
         },
         "js": {
           "signature": "function findNoiseLevel(y: Float64Array): NoiseLevel",
-          "example": "import { calculateEic, findNoiseLevel, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst noise = findNoiseLevel(eic.y).intensity;\nconsole.log(noise);"
+          "example": "import { calculateEic, findNoiseLevel, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst noise = findNoiseLevel(eic.y).intensity;\nconsole.log(noise);"
         },
         "r": {
           "signature": "find_noise_level(y)",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\nnoise <- find_noise_level(eic$y)$intensity\nprint(noise)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\nnoise <- find_noise_level(eic$y)$intensity\nprint(noise)"
         }
       }
     },
@@ -1358,19 +1358,19 @@
       "languages": {
         "rust": {
           "signature": "pub fn calculate_baseline(y: &[f64], options: CalculateBaselineOptions) -> Result<Vec<f64>, QuantionError>",
-          "example": "use quantion::{CalculateBaselineOptions, CalculateEicOptions, ParseIonOptions, calculate_baseline, calculate_eic, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet baseline = calculate_baseline(&eic.y, CalculateBaselineOptions { lambda: 50.0, ..Default::default() })?;\nprintln!(\"{} values\", baseline.len());"
+          "example": "use quantion::{CalculateBaselineOptions, CalculateEicOptions, ParseIonOptions, calculate_baseline, calculate_eic, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet eic = calculate_eic(&mut file, 260.103, CalculateEicOptions { from: 2.0, to: 3.0, ..Default::default() })?;\nlet baseline = calculate_baseline(&eic.y, CalculateBaselineOptions { lambda: 50.0, ..Default::default() })?;\nprintln!(\"{} values\", baseline.len());"
         },
         "python": {
           "signature": "def calculate_baseline(y, options: CalculateBaselineOptions | None = None) -> np.ndarray",
-          "example": "from quantion import calculate_baseline, calculate_eic, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\nbaseline = calculate_baseline(eic[\"y\"], {\"lambda\": 50})\nprint(len(baseline), \"values\")"
+          "example": "from quantion import calculate_baseline, calculate_eic, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\neic = calculate_eic(file, 260.103, {\"from\": 2, \"to\": 3})\nbaseline = calculate_baseline(eic[\"y\"], {\"lambda\": 50})\nprint(len(baseline), \"values\")"
         },
         "js": {
           "signature": "function calculateBaseline(y: Float64Array, options?: CalculateBaselineOptions): Float64Array",
-          "example": "import { calculateBaseline, calculateEic, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst baseline = calculateBaseline(eic.y, { lambda: 50 });\nconsole.log(baseline.length, \"values\");"
+          "example": "import { calculateBaseline, calculateEic, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconst eic = await calculateEic(file, 260.103, { from: 2, to: 3 });\nconst baseline = calculateBaseline(eic.y, { lambda: 50 });\nconsole.log(baseline.length, \"values\");"
         },
         "r": {
           "signature": "calculate_baseline(y, options = calculate_baseline_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\nbaseline <- calculate_baseline(eic$y, options = calculate_baseline_options(lambda = 50))\nprint(head(baseline))"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\neic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))\nbaseline <- calculate_baseline(eic$y, options = calculate_baseline_options(lambda = 50))\nprint(head(baseline))"
         }
       }
     },
@@ -1468,22 +1468,22 @@
       "languages": {
         "rust": {
           "signature": "pub fn find_targets(file: &mut SampleFile, targets: &[Target], options: FindTargetsOptions) -> Result<Vec<Peak>, QuantionError>",
-          "example": "use quantion::{\n    CalculateEicOptions, FindPeaksOptions, FindTargetsOptions, ParseIonOptions, QuantionError, Target, find_targets,\n    parse_ion,\n};\n\nfn main() -> Result<(), QuantionError> {\n    let ids = [\"compound_1\", \"compound_2\", \"compound_3\"];\n    let targets = vec![\n        Target { id: Some(ids[0].to_string()), mz: 260.1034, rt: 2.383, range: Some(0.05) },\n        Target { id: Some(ids[1].to_string()), mz: 317.1250, rt: 1.903, range: Some(0.05) },\n        Target { id: Some(ids[2].to_string()), mz: 188.0818, rt: 3.060, range: Some(0.05) },\n    ];\n\n    let mut file = parse_ion(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\", ParseIonOptions::default())?;\n    let options = FindTargetsOptions {\n        eic: CalculateEicOptions { from: 1.5, to: 3.5, ..Default::default() },\n        find_peaks: FindPeaksOptions { min_intensity: 1000.0, ..Default::default() },\n        threads: 4,\n    };\n    let peaks = find_targets(&mut file, &targets, options)?;\n\n    for index in 0..peaks.len() {\n        let peak = &peaks[index];\n        println!(\"{}: rt {:.3}  intensity {:.0}  integral {:.0}\", ids[index], peak.rt, peak.intensity, peak.integral);\n    }\n    Ok(())\n}",
+          "example": "use quantion::{\n    CalculateEicOptions, FindPeaksOptions, FindTargetsOptions, ParseIonOptions, QuantionError, Target, find_targets,\n    parse_ion,\n};\n\nfn main() -> Result<(), QuantionError> {\n    let ids = [\"compound_1\", \"compound_2\", \"compound_3\"];\n    let targets = vec![\n        Target { id: Some(ids[0].to_string()), mz: 260.1034, rt: 2.383, range: Some(0.05) },\n        Target { id: Some(ids[1].to_string()), mz: 317.1250, rt: 1.903, range: Some(0.05) },\n        Target { id: Some(ids[2].to_string()), mz: 188.0818, rt: 3.060, range: Some(0.05) },\n    ];\n\n    let mut file = parse_ion(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\", ParseIonOptions::default())?;\n    let options = FindTargetsOptions {\n        eic: CalculateEicOptions { from: 1.5, to: 3.5, ..Default::default() },\n        find_peaks: FindPeaksOptions { min_intensity: 1000.0, ..Default::default() },\n        threads: 4,\n    };\n    let peaks = find_targets(&mut file, &targets, options)?;\n\n    for index in 0..peaks.len() {\n        let peak = &peaks[index];\n        println!(\"{}: rt {:.3}  intensity {:.0}  integral {:.0}\", ids[index], peak.rt, peak.intensity, peak.integral);\n    }\n    Ok(())\n}",
           "output": "compound_1: rt 2.383  intensity 168984  integral 274621\ncompound_2: rt 1.903  intensity 136686  integral 193667\ncompound_3: rt 3.060  intensity 397468  integral 1105423"
         },
         "python": {
           "signature": "def find_targets(file, targets: Sequence[Target], options: FindTargetsOptions | None = None) -> list[Peak]",
-          "example": "from quantion import find_targets, parse_ion\n\ntargets = [\n    {\"id\": \"compound_1\", \"mz\": 260.1034, \"rt\": 2.383, \"range\": 0.05},\n    {\"id\": \"compound_2\", \"mz\": 317.1250, \"rt\": 1.903, \"range\": 0.05},\n    {\"id\": \"compound_3\", \"mz\": 188.0818, \"rt\": 3.060, \"range\": 0.05},\n]\noptions = {\n    \"eic\": {\"from\": 1.5, \"to\": 3.5},\n    \"find_peaks\": {\"min_intensity\": 1000},\n    \"threads\": 4,\n}\n\nfile = parse_ion(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\")\npeaks = find_targets(file, targets, options)\n\nfor index in range(len(peaks)):\n    peak = peaks[index]\n    print(f\"{targets[index]['id']}: rt {peak['rt']:.3f}  intensity {peak['intensity']:.0f}  integral {peak['integral']:.0f}\")",
+          "example": "from quantion import find_targets, parse_ion\n\ntargets = [\n    {\"id\": \"compound_1\", \"mz\": 260.1034, \"rt\": 2.383, \"range\": 0.05},\n    {\"id\": \"compound_2\", \"mz\": 317.1250, \"rt\": 1.903, \"range\": 0.05},\n    {\"id\": \"compound_3\", \"mz\": 188.0818, \"rt\": 3.060, \"range\": 0.05},\n]\noptions = {\n    \"eic\": {\"from\": 1.5, \"to\": 3.5},\n    \"find_peaks\": {\"min_intensity\": 1000},\n    \"threads\": 4,\n}\n\nfile = parse_ion(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\")\npeaks = find_targets(file, targets, options)\n\nfor index in range(len(peaks)):\n    peak = peaks[index]\n    print(f\"{targets[index]['id']}: rt {peak['rt']:.3f}  intensity {peak['intensity']:.0f}  integral {peak['integral']:.0f}\")",
           "output": "compound_1: rt 2.383  intensity 168984  integral 274621\ncompound_2: rt 1.903  intensity 136686  integral 193667\ncompound_3: rt 3.060  intensity 397468  integral 1105423"
         },
         "js": {
           "signature": "async function findTargets(file: SampleFile, targets: Target[], options?: FindTargetsOptions): Promise<Peak[]>",
-          "example": "import { findTargets, parseIon } from \"quantion\";\n\nconst targets = [\n  { id: \"compound_1\", mz: 260.1034, rt: 2.383, range: 0.05 },\n  { id: \"compound_2\", mz: 317.125, rt: 1.903, range: 0.05 },\n  { id: \"compound_3\", mz: 188.0818, rt: 3.06, range: 0.05 },\n];\nconst options = {\n  eic: { from: 1.5, to: 3.5 },\n  findPeaks: { minIntensity: 1000 },\n  threads: 4,\n};\n\nconst file = await parseIon(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\");\nconst peaks = await findTargets(file, targets, options);\n\nfor (let index = 0; index < peaks.length; index++) {\n  const peak = peaks[index];\n  console.log(`${targets[index].id}: rt ${peak.rt.toFixed(3)}  intensity ${peak.intensity.toFixed(0)}  integral ${peak.integral.toFixed(0)}`);\n}",
+          "example": "import { findTargets, parseIon } from \"quantion\";\n\nconst targets = [\n  { id: \"compound_1\", mz: 260.1034, rt: 2.383, range: 0.05 },\n  { id: \"compound_2\", mz: 317.125, rt: 1.903, range: 0.05 },\n  { id: \"compound_3\", mz: 188.0818, rt: 3.06, range: 0.05 },\n];\nconst options = {\n  eic: { from: 1.5, to: 3.5 },\n  findPeaks: { minIntensity: 1000 },\n  threads: 4,\n};\n\nconst file = await parseIon(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\");\nconst peaks = await findTargets(file, targets, options);\n\nfor (let index = 0; index < peaks.length; index++) {\n  const peak = peaks[index];\n  console.log(`${targets[index].id}: rt ${peak.rt.toFixed(3)}  intensity ${peak.intensity.toFixed(0)}  integral ${peak.integral.toFixed(0)}`);\n}",
           "output": "compound_1: rt 2.383  intensity 168984  integral 274621\ncompound_2: rt 1.903  intensity 136686  integral 193667\ncompound_3: rt 3.060  intensity 397468  integral 1105423"
         },
         "r": {
           "signature": "find_targets(file, targets, options = find_targets_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\ntargets <- data.frame(\n  id    = c(\"compound_1\", \"compound_2\", \"compound_3\"),\n  mz    = c(260.1034, 317.1250, 188.0818),\n  rt    = c(2.383, 1.903, 3.060),\n  range = c(0.05, 0.05, 0.05)\n)\noptions <- find_targets_options(\n  eic        = calculate_eic_options(from = 1.5, to = 3.5),\n  find_peaks = find_peaks_options(min_intensity = 1000),\n  threads    = 2L\n)\n\nsample <- parse_ion(url)\npeaks <- find_targets(sample, targets, options = options)\n\nfor (index in seq_len(nrow(peaks))) {\n  peak <- peaks[index, ]\n  line <- sprintf(\"%s: rt %.3f  intensity %.0f  integral %.0f\",\n                  targets$id[index], peak$rt, peak$intensity, peak$integral)\n  cat(line, \"\\n\", sep = \"\")\n}",
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\ntargets <- data.frame(\n  id    = c(\"compound_1\", \"compound_2\", \"compound_3\"),\n  mz    = c(260.1034, 317.1250, 188.0818),\n  rt    = c(2.383, 1.903, 3.060),\n  range = c(0.05, 0.05, 0.05)\n)\noptions <- find_targets_options(\n  eic        = calculate_eic_options(from = 1.5, to = 3.5),\n  find_peaks = find_peaks_options(min_intensity = 1000),\n  threads    = 2L\n)\n\nsample <- parse_ion(url)\npeaks <- find_targets(sample, targets, options = options)\n\nfor (index in seq_len(nrow(peaks))) {\n  peak <- peaks[index, ]\n  line <- sprintf(\"%s: rt %.3f  intensity %.0f  integral %.0f\",\n                  targets$id[index], peak$rt, peak$intensity, peak$integral)\n  cat(line, \"\\n\", sep = \"\")\n}",
           "output": "compound_1: rt 2.383  intensity 168984  integral 274621\ncompound_2: rt 1.903  intensity 136686  integral 193667\ncompound_3: rt 3.060  intensity 397468  integral 1105423"
         }
       },
@@ -1669,22 +1669,22 @@
       "languages": {
         "rust": {
           "signature": "pub fn find_features(file: &mut SampleFile, options: FindFeaturesOptions) -> Result<Vec<Feature>, QuantionError>",
-          "example": "use quantion::{CalculateEicOptions, FindFeaturesOptions, GridOptions, ParseIonOptions, QuantionError, find_features, parse_ion};\n\nfn main() -> Result<(), QuantionError> {\n    let mut file = parse_ion(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\", ParseIonOptions::default())?;\n    let options = FindFeaturesOptions {\n        eic: CalculateEicOptions { from: 2.3, to: 2.45, ..Default::default() },\n        grid: GridOptions { start: 255.0, end: 265.0, ..Default::default() },\n        threads: 2,\n        ..Default::default()\n    };\n    let features = find_features(&mut file, options)?;\n\n    println!(\"{} features\", features.len());\n    let mut count = 3;\n    if features.len() < count {\n        count = features.len();\n    }\n    for index in 0..count {\n        let feature = &features[index];\n        println!(\"m/z {:.4}  rt {:.3}  intensity {:.0}\", feature.mz, feature.rt, feature.intensity);\n    }\n    Ok(())\n}",
+          "example": "use quantion::{CalculateEicOptions, FindFeaturesOptions, GridOptions, ParseIonOptions, QuantionError, find_features, parse_ion};\n\nfn main() -> Result<(), QuantionError> {\n    let mut file = parse_ion(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\", ParseIonOptions::default())?;\n    let options = FindFeaturesOptions {\n        eic: CalculateEicOptions { from: 2.3, to: 2.45, ..Default::default() },\n        grid: GridOptions { start: 255.0, end: 265.0, ..Default::default() },\n        threads: 2,\n        ..Default::default()\n    };\n    let features = find_features(&mut file, options)?;\n\n    println!(\"{} features\", features.len());\n    let mut count = 3;\n    if features.len() < count {\n        count = features.len();\n    }\n    for index in 0..count {\n        let feature = &features[index];\n        println!(\"m/z {:.4}  rt {:.3}  intensity {:.0}\", feature.mz, feature.rt, feature.intensity);\n    }\n    Ok(())\n}",
           "output": "6 features\nm/z 264.1105  rt 2.378  intensity 13816\nm/z 262.1092  rt 2.378  intensity 3380\nm/z 260.1034  rt 2.383  intensity 168984"
         },
         "python": {
           "signature": "def find_features(file, options: FindFeaturesOptions | None = None) -> list[Feature]",
-          "example": "from quantion import find_features, parse_ion\n\noptions = {\n    \"eic\": {\"from\": 2.3, \"to\": 2.45},\n    \"grid\": {\"start\": 255, \"end\": 265},\n    \"threads\": 2,\n}\n\nfile = parse_ion(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\")\nfeatures = find_features(file, options)\n\nprint(f\"{len(features)} features\")\ncount = 3\nif len(features) < count:\n    count = len(features)\nfor index in range(count):\n    feature = features[index]\n    print(f\"m/z {feature['mz']:.4f}  rt {feature['rt']:.3f}  intensity {feature['intensity']:.0f}\")",
+          "example": "from quantion import find_features, parse_ion\n\noptions = {\n    \"eic\": {\"from\": 2.3, \"to\": 2.45},\n    \"grid\": {\"start\": 255, \"end\": 265},\n    \"threads\": 2,\n}\n\nfile = parse_ion(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\")\nfeatures = find_features(file, options)\n\nprint(f\"{len(features)} features\")\ncount = 3\nif len(features) < count:\n    count = len(features)\nfor index in range(count):\n    feature = features[index]\n    print(f\"m/z {feature['mz']:.4f}  rt {feature['rt']:.3f}  intensity {feature['intensity']:.0f}\")",
           "output": "6 features\nm/z 264.1105  rt 2.378  intensity 13816\nm/z 262.1092  rt 2.378  intensity 3380\nm/z 260.1034  rt 2.383  intensity 168984"
         },
         "js": {
           "signature": "async function findFeatures(file: SampleFile, options?: FindFeaturesOptions): Promise<Feature[]>",
-          "example": "import { findFeatures, parseIon } from \"quantion\";\n\nconst options = {\n  eic: { from: 2.3, to: 2.45 },\n  grid: { start: 255, end: 265 },\n  threads: 2,\n};\n\nconst file = await parseIon(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\");\nconst features = await findFeatures(file, options);\n\nconsole.log(`${features.length} features`);\nlet count = 3;\nif (features.length < count) {\n  count = features.length;\n}\nfor (let index = 0; index < count; index++) {\n  const feature = features[index];\n  console.log(`m/z ${feature.mz.toFixed(4)}  rt ${feature.rt.toFixed(3)}  intensity ${feature.intensity.toFixed(0)}`);\n}",
+          "example": "import { findFeatures, parseIon } from \"quantion\";\n\nconst options = {\n  eic: { from: 2.3, to: 2.45 },\n  grid: { start: 255, end: 265 },\n  threads: 2,\n};\n\nconst file = await parseIon(\"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\");\nconst features = await findFeatures(file, options);\n\nconsole.log(`${features.length} features`);\nlet count = 3;\nif (features.length < count) {\n  count = features.length;\n}\nfor (let index = 0; index < count; index++) {\n  const feature = features[index];\n  console.log(`m/z ${feature.mz.toFixed(4)}  rt ${feature.rt.toFixed(3)}  intensity ${feature.intensity.toFixed(0)}`);\n}",
           "output": "6 features\nm/z 264.1105  rt 2.378  intensity 13816\nm/z 262.1092  rt 2.378  intensity 3380\nm/z 260.1034  rt 2.383  intensity 168984"
         },
         "r": {
           "signature": "find_features(file, options = find_features_options())",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\noptions <- find_features_options(\n  eic     = calculate_eic_options(from = 2.3, to = 2.45),\n  grid    = grid_options(start = 255, end = 265),\n  threads = 2L\n)\n\nsample <- parse_ion(url)\nfeatures <- find_features(sample, options = options)\n\ncat(sprintf(\"%d features\\n\", nrow(features)))\ncount <- 3\nif (nrow(features) < count) {\n  count <- nrow(features)\n}\nfor (index in seq_len(count)) {\n  feature <- features[index, ]\n  line <- sprintf(\"m/z %.4f  rt %.3f  intensity %.0f\",\n                  feature$mz, feature$rt, feature$intensity)\n  cat(line, \"\\n\", sep = \"\")\n}",
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\noptions <- find_features_options(\n  eic     = calculate_eic_options(from = 2.3, to = 2.45),\n  grid    = grid_options(start = 255, end = 265),\n  threads = 2L\n)\n\nsample <- parse_ion(url)\nfeatures <- find_features(sample, options = options)\n\ncat(sprintf(\"%d features\\n\", nrow(features)))\ncount <- 3\nif (nrow(features) < count) {\n  count <- nrow(features)\n}\nfor (index in seq_len(count)) {\n  feature <- features[index, ]\n  line <- sprintf(\"m/z %.4f  rt %.3f  intensity %.0f\",\n                  feature$mz, feature$rt, feature$intensity)\n  cat(line, \"\\n\", sep = \"\")\n}",
           "output": "6 features\nm/z 264.1105  rt 2.378  intensity 13816\nm/z 262.1092  rt 2.378  intensity 3380\nm/z 260.1034  rt 2.383  intensity 168984"
         }
       },
@@ -1990,19 +1990,19 @@
       "languages": {
         "rust": {
           "signature": "impl WarpModel { pub fn predict_rts(&self, file: &mut SampleFile, targets: &[Target]) -> Result<Vec<PredictedRt>, QuantionError> }",
-          "example": "use quantion::{ParseIonOptions, Target, load_model, load_warp, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet model = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")?;\nlet warp = load_warp(&model)?;\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet targets = vec![Target { id: Some(\"compound_1\".into()), mz: 260.103, rt: 2.383, range: None }];\nlet predicted = warp.predict_rts(&mut file, &targets)?;\nprintln!(\"{predicted:?}\");"
+          "example": "use quantion::{ParseIonOptions, Target, load_model, load_warp, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet model = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")?;\nlet warp = load_warp(&model)?;\nlet mut file = parse_ion(url, ParseIonOptions::default())?;\nlet targets = vec![Target { id: Some(\"compound_1\".into()), mz: 260.103, rt: 2.383, range: None }];\nlet predicted = warp.predict_rts(&mut file, &targets)?;\nprintln!(\"{predicted:?}\");"
         },
         "python": {
           "signature": "warp.predict_rts(file: SampleFile, targets: Sequence[Target]) -> list[PredictedRt]",
-          "example": "from quantion import load_model, load_warp, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nmodel = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")\nwarp = load_warp(model)\nfile = parse_ion(url)\npredicted = warp.predict_rts(file, [{\"id\": \"compound_1\", \"mz\": 260.103, \"rt\": 2.383}])\nprint(predicted)"
+          "example": "from quantion import load_model, load_warp, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nmodel = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")\nwarp = load_warp(model)\nfile = parse_ion(url)\npredicted = warp.predict_rts(file, [{\"id\": \"compound_1\", \"mz\": 260.103, \"rt\": 2.383}])\nprint(predicted)"
         },
         "js": {
           "signature": "warp.predictRts(file: SampleFile, targets: Target[]): Promise<PredictedRt[]>",
-          "example": "import { loadModel, loadWarp, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst model = await loadModel(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\");\nconst warp = loadWarp(model);\nconst file = await parseIon(url);\nconst predicted = await warp.predictRts(file, [{ id: \"compound_1\", mz: 260.103, rt: 2.383 }]);\nconsole.log(predicted);"
+          "example": "import { loadModel, loadWarp, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst model = await loadModel(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\");\nconst warp = loadWarp(model);\nconst file = await parseIon(url);\nconst predicted = await warp.predictRts(file, [{ id: \"compound_1\", mz: 260.103, rt: 2.383 }]);\nconsole.log(predicted);"
         },
         "r": {
           "signature": "predict_rts(warp, file, targets)",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfixtures <- \"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures\"\nmodel <- load_model(paste0(fixtures, \"/shift_model.onnx\"))\nwarp <- load_warp(model)\nsample <- parse_ion(url)\npredicted <- predict_rts(warp, sample, data.frame(id = \"compound_1\", mz = 260.103, rt = 2.383))\nprint(predicted)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfixtures <- \"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures\"\nmodel <- load_model(paste0(fixtures, \"/shift_model.onnx\"))\nwarp <- load_warp(model)\nsample <- parse_ion(url)\npredicted <- predict_rts(warp, sample, data.frame(id = \"compound_1\", mz = 260.103, rt = 2.383))\nprint(predicted)"
         }
       }
     },
@@ -2100,19 +2100,19 @@
       "languages": {
         "rust": {
           "signature": "impl WarpModel { pub fn calibrate(&self, anchor_samples: &mut [SampleFile], target_lists: &[Vec<Target>]) -> Result<Vec<Target>, QuantionError> }",
-          "example": "use quantion::{ParseIonOptions, Target, load_model, load_warp, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nlet model = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")?;\nlet warp = load_warp(&model)?;\nlet anchor_1 = parse_ion(url, ParseIonOptions::default())?;\nlet anchor_2 = parse_ion(url, ParseIonOptions::default())?;\nlet mut anchors = vec![anchor_1, anchor_2];\nlet seen = vec![\n    vec![Target { id: Some(\"compound_1\".into()), mz: 260.103, rt: 2.381, range: None }],\n    vec![Target { id: Some(\"compound_1\".into()), mz: 260.103, rt: 2.392, range: None }],\n];\nlet targets = warp.calibrate(&mut anchors, &seen)?;\nprintln!(\"{targets:?}\");"
+          "example": "use quantion::{ParseIonOptions, Target, load_model, load_warp, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet model = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")?;\nlet warp = load_warp(&model)?;\nlet anchor_1 = parse_ion(url, ParseIonOptions::default())?;\nlet anchor_2 = parse_ion(url, ParseIonOptions::default())?;\nlet mut anchors = vec![anchor_1, anchor_2];\nlet seen = vec![\n    vec![Target { id: Some(\"compound_1\".into()), mz: 260.103, rt: 2.381, range: None }],\n    vec![Target { id: Some(\"compound_1\".into()), mz: 260.103, rt: 2.392, range: None }],\n];\nlet targets = warp.calibrate(&mut anchors, &seen)?;\nprintln!(\"{targets:?}\");"
         },
         "python": {
           "signature": "warp.calibrate(anchor_samples: Sequence[SampleFile], target_lists: Sequence[Sequence[Target]]) -> list[Target]",
-          "example": "from quantion import load_model, load_warp, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nmodel = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")\nwarp = load_warp(model)\nanchor_1 = parse_ion(url)\nanchor_2 = parse_ion(url)\nanchors = [anchor_1, anchor_2]\nseen = [\n    [{\"id\": \"compound_1\", \"mz\": 260.103, \"rt\": 2.381}],\n    [{\"id\": \"compound_1\", \"mz\": 260.103, \"rt\": 2.392}],\n]\ntargets = warp.calibrate(anchors, seen)\nprint(targets)"
+          "example": "from quantion import load_model, load_warp, parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nmodel = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")\nwarp = load_warp(model)\nanchor_1 = parse_ion(url)\nanchor_2 = parse_ion(url)\nanchors = [anchor_1, anchor_2]\nseen = [\n    [{\"id\": \"compound_1\", \"mz\": 260.103, \"rt\": 2.381}],\n    [{\"id\": \"compound_1\", \"mz\": 260.103, \"rt\": 2.392}],\n]\ntargets = warp.calibrate(anchors, seen)\nprint(targets)"
         },
         "js": {
           "signature": "warp.calibrate(anchorSamples: SampleFile[], targetLists: Target[][]): Promise<Target[]>",
-          "example": "import { loadModel, loadWarp, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst model = await loadModel(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\");\nconst warp = loadWarp(model);\nconst anchor1 = await parseIon(url);\nconst anchor2 = await parseIon(url);\nconst anchors = [anchor1, anchor2];\nconst seen = [\n  [{ id: \"compound_1\", mz: 260.103, rt: 2.381 }],\n  [{ id: \"compound_1\", mz: 260.103, rt: 2.392 }],\n];\nconst targets = await warp.calibrate(anchors, seen);\nconsole.log(targets);"
+          "example": "import { loadModel, loadWarp, parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst model = await loadModel(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\");\nconst warp = loadWarp(model);\nconst anchor1 = await parseIon(url);\nconst anchor2 = await parseIon(url);\nconst anchors = [anchor1, anchor2];\nconst seen = [\n  [{ id: \"compound_1\", mz: 260.103, rt: 2.381 }],\n  [{ id: \"compound_1\", mz: 260.103, rt: 2.392 }],\n];\nconst targets = await warp.calibrate(anchors, seen);\nconsole.log(targets);"
         },
         "r": {
           "signature": "calibrate(warp, anchor_samples, target_lists)",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfixtures <- \"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures\"\nmodel <- load_model(paste0(fixtures, \"/shift_model.onnx\"))\nwarp <- load_warp(model)\nanchor_1 <- parse_ion(url)\nanchor_2 <- parse_ion(url)\nanchors <- list(anchor_1, anchor_2)\nseen <- list(\n  data.frame(id = \"compound_1\", mz = 260.103, rt = 2.381),\n  data.frame(id = \"compound_1\", mz = 260.103, rt = 2.392)\n)\ntargets <- calibrate(warp, anchors, seen)\nprint(targets)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfixtures <- \"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures\"\nmodel <- load_model(paste0(fixtures, \"/shift_model.onnx\"))\nwarp <- load_warp(model)\nanchor_1 <- parse_ion(url)\nanchor_2 <- parse_ion(url)\nanchors <- list(anchor_1, anchor_2)\nseen <- list(\n  data.frame(id = \"compound_1\", mz = 260.103, rt = 2.381),\n  data.frame(id = \"compound_1\", mz = 260.103, rt = 2.392)\n)\ntargets <- calibrate(warp, anchors, seen)\nprint(targets)"
         }
       }
     },
@@ -2157,15 +2157,15 @@
         "rust": null,
         "python": {
           "signature": "file.dispose(); model.dispose(); warp.dispose()",
-          "example": "from quantion import parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\nfile.dispose()"
+          "example": "from quantion import parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\nfile.dispose()"
         },
         "js": {
           "signature": "file.dispose(); model.dispose(); warp.dispose()",
-          "example": "import { parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nfile.dispose();"
+          "example": "import { parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nfile.dispose();"
         },
         "r": {
           "signature": "dispose(object)",
-          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\ndispose(sample)"
+          "example": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\ndispose(sample)"
         }
       },
       "warning": "Not needed in normal use: the library frees a sample, model or warp model by itself once it is no longer used. When processing many samples, dispose each one after using it, so its memory is freed right away instead of piling up."

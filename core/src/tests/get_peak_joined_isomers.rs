@@ -1,11 +1,12 @@
-use super::helpers;
-
 use helpers::{Eic, load_chromatograms, param_f64};
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    
-    get_peak::get_peak,
-    structs::{DataXY, Peak, Roi},
+
+use super::helpers;
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        get_peak::get_peak,
+        structs::{DataXY, Peak, Roi},
+    },
 };
 
 const RT_TOLERANCE: f64 = 0.02;
@@ -68,7 +69,10 @@ fn pipeline_options() -> FindPeaksOptions {
 fn pick(case: &Case, target: &Target) -> Peak {
     get_peak(
         &case.data,
-        &Roi { rt: target.target_rt, range: target.window },
+        &Roi {
+            rt: target.target_rt,
+            range: target.window,
+        },
         &pipeline_options(),
     )
 }

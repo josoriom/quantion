@@ -4,14 +4,13 @@ use std::{
     sync::OnceLock,
 };
 
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    find_peaks::find_peaks,
-    structs::DataXY,
-};
+use helpers::{Eic, approx_eq, dump_peaks, load_chromatograms_from};
 
 use super::helpers;
-use helpers::{Eic, approx_eq, dump_peaks, load_chromatograms_from};
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{find_peaks::find_peaks, structs::DataXY},
+};
 
 struct Test {
     data: DataXY,

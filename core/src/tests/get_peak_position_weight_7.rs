@@ -1,15 +1,11 @@
-// Bug #7 guard: when a target retention time is given, the peak sitting on it must win over a
-// slightly taller neighbour. The bug was that position_weight fell off as 1 - (drift/max_drift)^2,
-// which is nearly flat near the target, so a neighbour only had to be a few percent taller to win.
-// Geometry copied from the real alanine/sarcosine/beta-alanine case: two peaks 0.0865 min apart,
-// the far one 6.33% taller, at the default max_drift of 0.5.
-// Fully synthetic (no fixture) so it runs identically here and in bugs-quantion/tests/.
+// The peak at the target RT must beat a neighbour 0.0865 min away that is 6.33% taller (max_drift 0.5).
 
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    
-    get_peak::get_peak,
-    structs::{DataXY, Roi},
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        get_peak::get_peak,
+        structs::{DataXY, Roi},
+    },
 };
 
 const SCAN_STEP: f64 = 0.0043;
@@ -53,7 +49,10 @@ fn peak_at(target: f64) -> f64 {
     let data = two_peaks();
     let peak = get_peak(
         &data,
-        &Roi { rt: target, range: DEFAULT_MAX_DRIFT },
+        &Roi {
+            rt: target,
+            range: DEFAULT_MAX_DRIFT,
+        },
         &options(),
     );
     peak.rt

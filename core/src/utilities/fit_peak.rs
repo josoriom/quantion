@@ -134,7 +134,9 @@ pub fn draw_peaks(peaks: &[PeakParameters], from: f64, to: f64, points: usize) -
     } else {
         0.0
     };
-    let x: Vec<f64> = (0..points).map(|point| from + step * point as f64).collect();
+    let x: Vec<f64> = (0..points)
+        .map(|point| from + step * point as f64)
+        .collect();
     let curves: Vec<Box<dyn Fn(f64) -> f64>> = peaks.iter().map(build_curve).collect();
     let y = x
         .iter()

@@ -4,7 +4,7 @@ import { actions, findEntry, getGroupEntries, pages } from "../state/documentati
 import { useDocumentation } from "../state/DocumentationContext";
 import { ExperimentalIcon } from "./ExperimentalBadge";
 
-function PageButton({ name, label }) {
+function PageButton({ name, label, experimental }) {
   const { state, dispatch } = useDocumentation();
   return (
     <button
@@ -14,6 +14,11 @@ function PageButton({ name, label }) {
       onClick={() => dispatch({ type: actions.entryChosen, entryName: name })}
     >
       {label ?? name}
+      {experimental && (
+        <span className="experimental-mark" title="Experimental and not stable">
+          <ExperimentalIcon />
+        </span>
+      )}
     </button>
   );
 }
@@ -56,7 +61,7 @@ function SidebarGroup({ group, isOpen, onToggle, onOpen }) {
       {isOpen && (
         <div className="group-items">
           {entries.map((entry) => (
-            <PageButton key={entry.name} name={entry.name} />
+            <PageButton key={entry.name} name={entry.name} experimental={entry.experimental} />
           ))}
         </div>
       )}

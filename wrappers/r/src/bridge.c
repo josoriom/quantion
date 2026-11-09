@@ -345,6 +345,7 @@ typedef struct
 #define COLUMN_COUNT 1
 #define COLUMN_TEXT 2
 #define COLUMN_OPTIONAL_TEXT 3
+#define COLUMN_NUMBER_LIST 4
 
 static const record_column PEAK_COLUMNS[] = {
     {"from", 18, 0, COLUMN_NUMBER}, {"to", 19, 0, COLUMN_NUMBER},
@@ -381,6 +382,22 @@ static const record_column SCAN_METADATA_COLUMNS[] = {
     {"value", 100, 101, COLUMN_OPTIONAL_TEXT, 102}, {"unit", 103, 104, COLUMN_OPTIONAL_TEXT, 105},
     {"unit_accession", 106, 107, COLUMN_OPTIONAL_TEXT, 108}};
 
+static const record_column FEATURE_ANNOTATION_COLUMNS[] = {
+    {"mz", 109, 0, COLUMN_NUMBER}, {"rt", 110, 0, COLUMN_NUMBER},
+    {"label", 111, 112, COLUMN_OPTIONAL_TEXT, 113}, {"id", 114, 115, COLUMN_OPTIONAL_TEXT, 116},
+    {"database", 117, 118, COLUMN_OPTIONAL_TEXT, 119}, {"frequency", 120, 0, COLUMN_NUMBER},
+    {"score", 121, 0, COLUMN_NUMBER}, {"cosine", 122, 0, COLUMN_NUMBER}};
+
+static const record_column FILE_ANNOTATION_COLUMNS[] = {
+    {"feature", 123, 0, COLUMN_COUNT}, {"file", 124, 0, COLUMN_COUNT}, {"scan_index", 125, 0, COLUMN_NUMBER}};
+
+static const record_column COMPOUND_MATCH_COLUMNS[] = {
+    {"feature", 126, 0, COLUMN_COUNT}, {"file", 127, 0, COLUMN_COUNT},
+    {"label", 128, 129, COLUMN_TEXT}, {"id", 130, 131, COLUMN_TEXT}, {"database", 132, 133, COLUMN_TEXT},
+    {"score", 134, 0, COLUMN_NUMBER}, {"cosine", 135, 0, COLUMN_NUMBER},
+    {"mz", 136, 137, COLUMN_NUMBER_LIST}, {"intensity", 138, 139, COLUMN_NUMBER_LIST},
+    {"metadata_names", 140, 141, COLUMN_TEXT}, {"metadata_values", 142, 143, COLUMN_TEXT}};
+
 static const record_column *columns_for_kind(uint16_t kind, int *count)
 {
   switch (kind)
@@ -406,6 +423,15 @@ static const record_column *columns_for_kind(uint16_t kind, int *count)
   case QUANTION_PAYLOAD_SCAN_METADATA:
     *count = sizeof(SCAN_METADATA_COLUMNS) / sizeof(SCAN_METADATA_COLUMNS[0]);
     return SCAN_METADATA_COLUMNS;
+  case QUANTION_PAYLOAD_FEATURE_ANNOTATIONS:
+    *count = sizeof(FEATURE_ANNOTATION_COLUMNS) / sizeof(FEATURE_ANNOTATION_COLUMNS[0]);
+    return FEATURE_ANNOTATION_COLUMNS;
+  case QUANTION_PAYLOAD_FILE_ANNOTATIONS:
+    *count = sizeof(FILE_ANNOTATION_COLUMNS) / sizeof(FILE_ANNOTATION_COLUMNS[0]);
+    return FILE_ANNOTATION_COLUMNS;
+  case QUANTION_PAYLOAD_COMPOUND_MATCHES:
+    *count = sizeof(COMPOUND_MATCH_COLUMNS) / sizeof(COMPOUND_MATCH_COLUMNS[0]);
+    return COMPOUND_MATCH_COLUMNS;
   default:
     *count = 0;
     return NULL;
@@ -449,6 +475,28 @@ static SEXP text_column(const bridge_view *bridge, uint32_t starts_id, uint32_t 
   return column;
 }
 
+static SEXP number_list_column(const bridge_view *bridge, uint32_t starts_id, uint32_t values_id, R_xlen_t rows)
+{
+  const bridge_section *starts = find_section(bridge, starts_id);
+  const bridge_section *values = find_section(bridge, values_id);
+  if (starts->byte_length / 8 != (uint64_t)rows + 1)
+    error("quantion bridge: list starts do not match the record count");
+  SEXP column = PROTECT(Rf_allocVector(VECSXP, rows));
+  for (R_xlen_t index = 0; index < rows; index++)
+  {
+    uint64_t from = read_u64(bridge->raw, starts->byte_offset + (uint64_t)index * 8);
+    uint64_t to = read_u64(bridge->raw, starts->byte_offset + (uint64_t)(index + 1) * 8);
+    if (to < from || to * 8 > values->byte_length)
+      error("quantion bridge: list starts run past the values");
+    SEXP list = Rf_allocVector(REALSXP, (R_xlen_t)(to - from));
+    SET_VECTOR_ELT(column, index, list);
+    if (to > from)
+      memcpy(REAL(list), bridge->raw + values->byte_offset + from * 8, (size_t)(to - from) * 8);
+  }
+  UNPROTECT(1);
+  return column;
+}
+
 static void mark_missing(SEXP column, const bridge_view *bridge, uint32_t missing_id, R_xlen_t rows)
 {
   const bridge_section *section = find_section(bridge, missing_id);
@@ -480,6 +528,8 @@ static SEXP records_bridge_build(void *data)
       column = number_column(&bridge, spec[index].id, rows);
     else if (spec[index].kind == COLUMN_COUNT)
       column = count_column(&bridge, spec[index].id, rows);
+    else if (spec[index].kind == COLUMN_NUMBER_LIST)
+      column = number_list_column(&bridge, spec[index].id, spec[index].second_id, rows);
     else
       column = text_column(&bridge, spec[index].id, spec[index].second_id, rows);
     SET_VECTOR_ELT(columns, index, column);
@@ -1000,21 +1050,24 @@ SEXP C_write_mzml(SEXP file, SEXP out_path, SEXP overwrite)
   return take_numbers(&out, NULL, 1);
 }
 
-SEXP C_get_scans(SEXP file, SEXP query_type, SEXP from, SEXP to, SEXP level, SEXP time_unit)
+#define SCAN_QUERY_ARGUMENTS(query) \
+  (uint8_t)REAL(query)[0], REAL(query)[1], REAL(query)[2], (uint8_t)REAL(query)[3], REAL(query)[4], REAL(query)[5]
+
+SEXP C_get_scans(SEXP file, SEXP query, SEXP level, SEXP time_unit)
 {
   check_bound();
   Buf out = (Buf){0};
-  check_code(get_scans(get_sample(file), (uint8_t)asInteger(query_type), asReal(from), asReal(to),
-                       (uint8_t)asInteger(level), get_time_unit(time_unit), &out));
+  check_code(get_scans(get_sample(file), SCAN_QUERY_ARGUMENTS(query), (uint8_t)asInteger(level),
+                       get_time_unit(time_unit), &out));
   return take_with(scans_build, &out);
 }
 
-SEXP C_plan_scans(SEXP file, SEXP query_type, SEXP from, SEXP to, SEXP level, SEXP time_unit)
+SEXP C_plan_scans(SEXP file, SEXP query, SEXP level, SEXP time_unit)
 {
   check_bound();
   Buf out = (Buf){0};
-  check_code(plan_scans(get_sample(file), (uint8_t)asInteger(query_type), asReal(from), asReal(to),
-                        (uint8_t)asInteger(level), get_time_unit(time_unit), &out));
+  check_code(plan_scans(get_sample(file), SCAN_QUERY_ARGUMENTS(query), (uint8_t)asInteger(level),
+                        get_time_unit(time_unit), &out));
   return take_ranges(&out);
 }
 
@@ -1043,22 +1096,22 @@ static uint32_t *get_accessions(SEXP accessions)
   return numbers;
 }
 
-SEXP C_get_scans_with_arrays(SEXP file, SEXP query_type, SEXP from, SEXP to, SEXP level, SEXP time_unit, SEXP accessions)
+SEXP C_get_scans_with_arrays(SEXP file, SEXP query, SEXP level, SEXP time_unit, SEXP accessions)
 {
   check_bound();
   Buf out = (Buf){0};
-  check_code(get_scans_with_arrays(get_sample(file), (uint8_t)asInteger(query_type), asReal(from), asReal(to),
-                                   (uint8_t)asInteger(level), get_time_unit(time_unit),
+  check_code(get_scans_with_arrays(get_sample(file), SCAN_QUERY_ARGUMENTS(query), (uint8_t)asInteger(level),
+                                   get_time_unit(time_unit),
                                    get_accessions(accessions), (size_t)XLENGTH(accessions), &out));
   return take_with(scan_arrays_build, &out);
 }
 
-SEXP C_plan_scans_with_arrays(SEXP file, SEXP query_type, SEXP from, SEXP to, SEXP level, SEXP time_unit, SEXP accessions)
+SEXP C_plan_scans_with_arrays(SEXP file, SEXP query, SEXP level, SEXP time_unit, SEXP accessions)
 {
   check_bound();
   Buf out = (Buf){0};
-  check_code(plan_scans_with_arrays(get_sample(file), (uint8_t)asInteger(query_type), asReal(from), asReal(to),
-                                    (uint8_t)asInteger(level), get_time_unit(time_unit),
+  check_code(plan_scans_with_arrays(get_sample(file), SCAN_QUERY_ARGUMENTS(query), (uint8_t)asInteger(level),
+                                    get_time_unit(time_unit),
                                     get_accessions(accessions), (size_t)XLENGTH(accessions), &out));
   return take_ranges(&out);
 }
@@ -1378,6 +1431,55 @@ SEXP C_plan_predict_rts(SEXP warp, SEXP file, SEXP mzs, SEXP rts)
   Buf out = (Buf){0};
   check_message_code(plan_predict_rts(get_warp_model(warp), get_sample(file), REAL(mzs), REAL(rts),
                                       (size_t)XLENGTH(mzs), &out), &out);
+  return take_ranges(&out);
+}
+
+static ParsedFile **get_samples(SEXP samples)
+{
+  R_xlen_t count = XLENGTH(samples);
+  ParsedFile **files = (ParsedFile **)R_alloc((size_t)(count > 0 ? count : 1), sizeof(ParsedFile *));
+  for (R_xlen_t index = 0; index < count; index++)
+    files[index] = get_sample(VECTOR_ELT(samples, index));
+  return files;
+}
+
+#define ANNOTATION_SETTINGS(settings) \
+  (size_t)REAL(settings)[0], REAL(settings)[1], REAL(settings)[2], REAL(settings)[3], REAL(settings)[4]
+
+SEXP C_annotate_features(SEXP library, SEXP model, SEXP samples, SEXP mzs, SEXP rts, SEXP settings)
+{
+  check_bound();
+  Buf features = (Buf){0};
+  Buf files = (Buf){0};
+  Buf matches = (Buf){0};
+  ParsedFile *library_file = Rf_isNull(library) ? NULL : get_sample(library);
+  ModelHandle *model_handle = Rf_isNull(model) ? NULL : get_model(model);
+  check_code(annotate_features(library_file, model_handle, get_samples(samples), (size_t)XLENGTH(samples), REAL(mzs),
+                               REAL(rts), (size_t)XLENGTH(mzs), ANNOTATION_SETTINGS(settings), &features, &files,
+                               &matches));
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 3));
+  SET_VECTOR_ELT(result, 0, take_records(&features));
+  SET_VECTOR_ELT(result, 1, take_records(&files));
+  SET_VECTOR_ELT(result, 2, take_records(&matches));
+  UNPROTECT(1);
+  return result;
+}
+
+SEXP C_plan_annotate_samples(SEXP file, SEXP mzs, SEXP rts, SEXP settings)
+{
+  check_bound();
+  Buf out = (Buf){0};
+  check_code(plan_annotate_samples(get_sample(file), REAL(mzs), REAL(rts), (size_t)XLENGTH(mzs),
+                                   ANNOTATION_SETTINGS(settings), &out));
+  return take_ranges(&out);
+}
+
+SEXP C_plan_annotate_library(SEXP library, SEXP model, SEXP samples, SEXP mzs, SEXP rts, SEXP settings)
+{
+  check_bound();
+  Buf out = (Buf){0};
+  check_code(plan_annotate_library(get_sample(library), get_model(model), get_samples(samples), (size_t)XLENGTH(samples),
+                                   REAL(mzs), REAL(rts), (size_t)XLENGTH(mzs), ANNOTATION_SETTINGS(settings), &out));
   return take_ranges(&out);
 }
 

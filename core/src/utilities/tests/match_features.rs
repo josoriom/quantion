@@ -4,21 +4,24 @@ mod tests {
 
     use ionic::{WriteOptions, mzml::structs::*};
 
-    use crate::options::FindPeaksOptions;
-    use crate::options::CalculateEicOptions;
-    use crate::utilities::{
-        calculate_eic::{CentroidScan, SpectrumKind, SpectrumSummary},
-        find_features::{Feature, FeatureSettings, MzScanGrid, MzTolerance},
-        ion::write_mzml_to_ion,
-        match_features::{
-            FeatureClusterer, MatchSettings, SearchBounds, TaggedFeature,
-            aggregate_into_consensus, assign_best_per_sample, collect_filled_slots,
-            compute_search_bounds, dedup, match_features, require_minimum_frequency,
-            resolve_cluster, weighted_centroid_mz,
+    use crate::{
+        files::CalculateEicOptions,
+        traces::FindPeaksOptions,
+        utilities::{
+            calculate_eic::SpectrumKind,
+            find_features::{Feature, FeatureSettings, MzScanGrid, MzTolerance},
+            get_scans::CentroidScan,
+            ion::write_mzml_to_ion,
+            match_features::{
+                FeatureClusterer, MatchSettings, SearchBounds, TaggedFeature,
+                aggregate_into_consensus, assign_best_per_sample, collect_filled_slots,
+                compute_search_bounds, dedup, match_features, require_minimum_frequency,
+                resolve_cluster, weighted_centroid_mz,
+            },
+            math::median,
+            mz_estimator::MzEstimatorKind,
+            structs::{FromTo, SpectrumSummary},
         },
-        math::median,
-        mz_estimator::MzEstimatorKind,
-        structs::FromTo,
     };
 
     fn make_scan(rt: f64, mz: Vec<f64>, intensity: Vec<f64>) -> CentroidScan {

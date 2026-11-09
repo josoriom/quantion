@@ -1,15 +1,16 @@
-use super::helpers;
-
 use std::path::{Path, PathBuf};
 
 use helpers::{Eic, load_chromatograms_from, param_bool, param_f64};
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    find_noise_level::find_noise_level,
-    
-    get_peak::get_peak,
-    shape_filter::PeakShape,
-    structs::{DataXY, Roi},
+
+use super::helpers;
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        find_noise_level::find_noise_level,
+        get_peak::get_peak,
+        shape_filter::PeakShape,
+        structs::{DataXY, Roi},
+    },
 };
 
 fn ion_path() -> PathBuf {
@@ -49,7 +50,10 @@ fn assert_get_peak(id: &str, eic: &Eic) {
         y: eic.intensity.clone(),
     };
     let target = param_f64(eic, "opt.target");
-    let roi = Roi { rt: target, range: param_f64(eic, "opt.roi_half_width") };
+    let roi = Roi {
+        rt: target,
+        range: param_f64(eic, "opt.roi_half_width"),
+    };
     let peak = get_peak(&data, &roi, &options_from(eic));
     let found = peak.intensity > 0.0;
 

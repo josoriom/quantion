@@ -25,7 +25,7 @@ One row per attribute or param, in the order of the mzML tree. Values are text. 
 if (curl::has_internet()) {
   library(quantion)
 
-  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion"
+  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion"
   file <- parse_ion(url)
   scans <- get_scans(file, rt = c(2.3, 2.4))
   rows <- get_scan_metadata(file, scans$index[1])

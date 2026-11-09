@@ -126,6 +126,33 @@ describeArrays("getScans arrays", () => {
     });
   });
 
+  async function getRts(query: object) {
+    const scans = await getScans(await openFile(), query as never, { level: 2 });
+    return scans.map((scan) => scan.rt);
+  }
+
+  it("keeps scans inside an rt range and an mz range", async () => {
+    expect(await getRts({ rt: { from: 0.5, to: 2.5 }, mz: { from: 300.5, to: 302.5 } })).toEqual([2]);
+  });
+
+  it("gives one scan for an rt range and the closest mz", async () => {
+    expect(await getRts({ rt: { from: 1.5, to: 3.5 }, mz: 300 })).toEqual([2]);
+  });
+
+  it("gives the nearest scan at a precursor range for the closest rt", async () => {
+    expect(await getRts({ rt: 1, mz: { from: 300.5, to: 302.5 } })).toEqual([2]);
+  });
+
+  it("picks the closest precursor first when rt and mz are both one number", async () => {
+    expect(await getRts({ rt: 3, mz: 300.2 })).toEqual([1]);
+  });
+
+  it("refuses a query with neither rt nor mz, and unknown keys", async () => {
+    const file = await openFile();
+    await expect(getScans(file, {} as never)).rejects.toMatchObject({ argument: "rt" });
+    await expect(getScans(file, { rt: 1, level: 2 } as never)).rejects.toMatchObject({ kind: "unknown_option" });
+  });
+
   it("reads a custom array with mz and intensity", async () => {
     const scans = await getScans(
       await openFile(),

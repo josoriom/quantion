@@ -210,6 +210,34 @@ main <- function() {
       sprintf("predict_rts.%s.uncertainty = %s", ids[index], number(predicted$uncertainty[index])))
   }
 
+  folder <- file.path(directory, "..", "annotate")
+  samples <- lapply(c("sample_peak_and_ms2", "sample_peak_only", "sample_no_peak"),
+                    function(name) parse_ion(file.path(folder, paste0(name, ".ion"))))
+  options <- annotate_features_options(library = file.path(folder, "library.ion"), model = file.path(folder, "model.onnx"))
+  found <- annotate_features(samples, data.frame(mz = 195.0877, rt = 2.0), options)
+  text <- function(value) if (is.na(value)) "NA" else value
+  out <- c(out, sprintf("annotate_features.count = %d", nrow(found)))
+  for (index in seq_len(nrow(found))) {
+    name <- sprintf("annotate_features[%d]", index - 1)
+    for (key in c("label", "id", "database")) out <- c(out, sprintf("%s.%s = %s", name, key, text(found[[key]][index])))
+    out <- c(out, sprintf("%s.frequency = %s", name, number(found$frequency[index])))
+    for (key in c("score", "cosine")) {
+      value <- found[[key]][index]
+      out <- c(out, sprintf("%s.%s = %s", name, key, if (is.na(value)) "NA" else number(value)))
+    }
+    files <- found$files[[index]]
+    for (row in seq_len(nrow(files))) {
+      scan <- if (is.na(files$scan_index[row])) "NA" else as.character(files$scan_index[row])
+      out <- c(out, sprintf("%s.files[%d].scan_index = %s", name, files$file[row], scan))
+      matches <- files$matches[[row]]
+      for (rank in seq_len(nrow(matches))) {
+        prefix <- sprintf("%s.files[%d].matches[%d]", name, files$file[row], rank - 1)
+        for (key in c("label", "id", "database")) out <- c(out, sprintf("%s.%s = %s", prefix, key, matches[[key]][rank]))
+        for (key in c("score", "cosine")) out <- c(out, sprintf("%s.%s = %s", prefix, key, number(matches[[key]][rank])))
+      }
+    }
+  }
+
   cat(paste(out, collapse = "\n"), "\n", sep = "")
 }
 

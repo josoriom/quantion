@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define QUANTION_ABI_VERSION 2
+#define QUANTION_ABI_VERSION 3
 
 #define QUANTION_BRIDGE_MAGIC 1112821329
 
@@ -36,6 +36,12 @@
 #define QUANTION_PAYLOAD_MODEL_METADATA 11
 
 #define QUANTION_PAYLOAD_SCAN_METADATA 12
+
+#define QUANTION_PAYLOAD_FEATURE_ANNOTATIONS 13
+
+#define QUANTION_PAYLOAD_FILE_ANNOTATIONS 14
+
+#define QUANTION_PAYLOAD_COMPOUND_MATCHES 15
 
 #define QUANTION_ELEMENT_F64 1
 
@@ -211,6 +217,76 @@
 
 #define QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING 108
 
+#define QUANTION_SECTION_FEATURE_ANNOTATION_MZ 109
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_RT 110
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_STARTS 111
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_BYTES 112
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_MISSING 113
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_ID_STARTS 114
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_ID_BYTES 115
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_ID_MISSING 116
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_STARTS 117
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_BYTES 118
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_MISSING 119
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_FREQUENCY 120
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_SCORE 121
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_COSINE 122
+
+#define QUANTION_SECTION_FILE_ANNOTATION_FEATURE 123
+
+#define QUANTION_SECTION_FILE_ANNOTATION_FILE 124
+
+#define QUANTION_SECTION_FILE_ANNOTATION_SCAN_INDEX 125
+
+#define QUANTION_SECTION_COMPOUND_MATCH_FEATURE 126
+
+#define QUANTION_SECTION_COMPOUND_MATCH_FILE 127
+
+#define QUANTION_SECTION_COMPOUND_MATCH_LABEL_STARTS 128
+
+#define QUANTION_SECTION_COMPOUND_MATCH_LABEL_BYTES 129
+
+#define QUANTION_SECTION_COMPOUND_MATCH_ID_STARTS 130
+
+#define QUANTION_SECTION_COMPOUND_MATCH_ID_BYTES 131
+
+#define QUANTION_SECTION_COMPOUND_MATCH_DATABASE_STARTS 132
+
+#define QUANTION_SECTION_COMPOUND_MATCH_DATABASE_BYTES 133
+
+#define QUANTION_SECTION_COMPOUND_MATCH_SCORE 134
+
+#define QUANTION_SECTION_COMPOUND_MATCH_COSINE 135
+
+#define QUANTION_SECTION_COMPOUND_MATCH_MZ_STARTS 136
+
+#define QUANTION_SECTION_COMPOUND_MATCH_MZ_VALUES 137
+
+#define QUANTION_SECTION_COMPOUND_MATCH_INTENSITY_STARTS 138
+
+#define QUANTION_SECTION_COMPOUND_MATCH_INTENSITY_VALUES 139
+
+#define QUANTION_SECTION_COMPOUND_MATCH_METADATA_NAME_STARTS 140
+
+#define QUANTION_SECTION_COMPOUND_MATCH_METADATA_NAME_BYTES 141
+
+#define QUANTION_SECTION_COMPOUND_MATCH_METADATA_VALUE_STARTS 142
+
+#define QUANTION_SECTION_COMPOUND_MATCH_METADATA_VALUE_BYTES 143
+
 typedef struct ImageSession ImageSession;
 
 typedef struct ModelHandle ModelHandle;
@@ -369,6 +445,68 @@ int image_fold(struct ParsedFile *h, struct ImageSession *session, uintptr_t fro
 int image_finish(struct ImageSession *session, struct Buf *out);
 
 void image_free(struct ImageSession *session);
+
+/**
+ * Match each feature against the library. `files` holds `file_count` open samples.
+ *
+ * # Safety
+ * `library` and every handle in `files` must be valid `ParsedFile`s; `model` a valid model.
+ * `mzs` and `rts` must point to `feature_count` values. `out` must be a valid writable `Buf`.
+ */
+int annotate_features(struct ParsedFile *library,
+                      const struct ModelHandle *model,
+                      struct ParsedFile *const *files,
+                      uintptr_t file_count,
+                      const double *mzs,
+                      const double *rts,
+                      uintptr_t feature_count,
+                      uintptr_t matches,
+                      double ppm_tolerance,
+                      double mz_tolerance,
+                      double rt_range,
+                      double min_relative_intensity,
+                      struct Buf *out_features,
+                      struct Buf *out_files,
+                      struct Buf *out_matches);
+
+/**
+ * Plan the byte ranges `annotate_features` reads from one sample.
+ *
+ * # Safety
+ * `file` must be a valid `ParsedFile`. `mzs` and `rts` must point to `feature_count` values.
+ * `out` must be a valid writable `Buf`.
+ */
+int plan_annotate_samples(struct ParsedFile *file,
+                          const double *mzs,
+                          const double *rts,
+                          uintptr_t feature_count,
+                          uintptr_t matches,
+                          double ppm_tolerance,
+                          double mz_tolerance,
+                          double rt_range,
+                          double min_relative_intensity,
+                          struct Buf *out);
+
+/**
+ * Plan the byte ranges `annotate_features` reads from the library, for every sample at once.
+ *
+ * # Safety
+ * `library` and every handle in `files` must be valid `ParsedFile`s; `model` a valid model.
+ * `mzs` and `rts` must point to `feature_count` values. `out` must be a valid writable `Buf`.
+ */
+int plan_annotate_library(struct ParsedFile *library,
+                          const struct ModelHandle *model,
+                          struct ParsedFile *const *files,
+                          uintptr_t file_count,
+                          const double *mzs,
+                          const double *rts,
+                          uintptr_t feature_count,
+                          uintptr_t matches,
+                          double ppm_tolerance,
+                          double mz_tolerance,
+                          double rt_range,
+                          double min_relative_intensity,
+                          struct Buf *out);
 
 int model_load_path(const uint8_t *path_ptr,
                     uintptr_t path_len,
@@ -534,16 +672,19 @@ int plan_eic(struct ParsedFile *handle,
              struct Buf *out);
 
 /**
- * Read scans. `query_type`: 0 rt range, 1 closest rt, 2 m/z range, 3 closest m/z.
+ * Read scans by rt, by precursor m/z, or both. Each `*_kind`: 0 any, 1 range (`from` to `to`), 2 closest to `from`.
  * `time_unit` is 0 for minutes, 1 for seconds.
  *
  * # Safety
  * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
  */
 int get_scans(struct ParsedFile *handle,
-              uint8_t query_type,
-              double from,
-              double to,
+              uint8_t rt_kind,
+              double rt_from,
+              double rt_to,
+              uint8_t mz_kind,
+              double mz_from,
+              double mz_to,
               uint8_t level,
               uint8_t time_unit,
               struct Buf *out);
@@ -555,9 +696,12 @@ int get_scans(struct ParsedFile *handle,
  * `handle` must be a valid `ParsedFile`. `accessions` must hold `array_count` numbers. `out` must be a valid writable `Buf`.
  */
 int get_scans_with_arrays(struct ParsedFile *handle,
-                          uint8_t query_type,
-                          double from,
-                          double to,
+                          uint8_t rt_kind,
+                          double rt_from,
+                          double rt_to,
+                          uint8_t mz_kind,
+                          double mz_from,
+                          double mz_to,
                           uint8_t level,
                           uint8_t time_unit,
                           const uint32_t *accessions,
@@ -571,9 +715,12 @@ int get_scans_with_arrays(struct ParsedFile *handle,
  * `handle` must be a valid `ParsedFile`. `accessions` must hold `array_count` numbers. `out` must be a valid writable `Buf`.
  */
 int plan_scans_with_arrays(struct ParsedFile *handle,
-                           uint8_t query_type,
-                           double from,
-                           double to,
+                           uint8_t rt_kind,
+                           double rt_from,
+                           double rt_to,
+                           uint8_t mz_kind,
+                           double mz_from,
+                           double mz_to,
                            uint8_t level,
                            uint8_t time_unit,
                            const uint32_t *accessions,
@@ -587,9 +734,12 @@ int plan_scans_with_arrays(struct ParsedFile *handle,
  * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
  */
 int plan_scans(struct ParsedFile *handle,
-               uint8_t query_type,
-               double from,
-               double to,
+               uint8_t rt_kind,
+               double rt_from,
+               double rt_to,
+               uint8_t mz_kind,
+               double mz_from,
+               double mz_to,
                uint8_t level,
                uint8_t time_unit,
                struct Buf *out);

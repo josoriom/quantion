@@ -1,10 +1,11 @@
-use crate::options::FindPeaksOptions;
-use crate::options::CalculateEicOptions;
-use crate::utilities::{
-    calculate_eic::{SpectrumKind},
-    find_features::{Feature, FeatureError, FeatureSettings, GridScan, detect_features},
-    
-    shape_filter::PeakShape,
+use crate::{
+    files::CalculateEicOptions,
+    traces::FindPeaksOptions,
+    utilities::{
+        calculate_eic::SpectrumKind,
+        find_features::{Feature, FeatureError, FeatureSettings, GridScan, detect_features},
+        shape_filter::PeakShape,
+    },
 };
 
 const TARGET_MZ: f64 = 500.0;
@@ -71,8 +72,7 @@ fn feature_at_apex(features: &[Feature]) -> Option<&Feature> {
 fn detect(chrom_apex: f64, profile_points: usize, kind: SpectrumKind) -> Vec<Feature> {
     let (time, scans) = profile_run(chrom_apex, profile_points);
     let grid = vec![TARGET_MZ];
-    detect_features(&scans, &grid, &time, kind, &detection_options())
-        .expect("detection should run")
+    detect_features(&scans, &grid, &time, kind, &detection_options()).expect("detection should run")
 }
 
 #[test]

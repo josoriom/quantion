@@ -1,14 +1,16 @@
-use crate::options::FindPeaksOptions;
 use ionic::mzml::structs::{
     BinaryDataArray, BinaryDataArrayList, Chromatogram, IsolationWindow, MzML, NumericArray,
 };
 #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
 use rayon::{ThreadPoolBuilder, prelude::*};
 
-use crate::options::FindTransitionsOptions;
-use crate::utilities::{
-    get_peak::get_peak,
-    structs::{DataXY, Peak, Roi, Transition},
+use crate::{
+    targets::FindTransitionsOptions,
+    traces::FindPeaksOptions,
+    utilities::{
+        get_peak::get_peak,
+        structs::{DataXY, Peak, Roi, Transition},
+    },
 };
 
 const ACC_TIME_ARRAY: &str = "MS:1000595";

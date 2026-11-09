@@ -18,6 +18,9 @@ pub const QUANTION_PAYLOAD_FOUND_FEATURES: u16 = 9;
 pub const QUANTION_PAYLOAD_WARP_TARGETS: u16 = 10;
 pub const QUANTION_PAYLOAD_MODEL_METADATA: u16 = 11;
 pub const QUANTION_PAYLOAD_SCAN_METADATA: u16 = 12;
+pub const QUANTION_PAYLOAD_FEATURE_ANNOTATIONS: u16 = 13;
+pub const QUANTION_PAYLOAD_FILE_ANNOTATIONS: u16 = 14;
+pub const QUANTION_PAYLOAD_COMPOUND_MATCHES: u16 = 15;
 
 pub const QUANTION_ELEMENT_F64: u32 = 1;
 pub const QUANTION_ELEMENT_U32: u32 = 2;
@@ -117,6 +120,42 @@ pub const QUANTION_SECTION_SCAN_METADATA_UNIT_MISSING: u32 = 105;
 pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS: u32 = 106;
 pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES: u32 = 107;
 pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING: u32 = 108;
+
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_MZ: u32 = 109;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_RT: u32 = 110;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_STARTS: u32 = 111;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_BYTES: u32 = 112;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_MISSING: u32 = 113;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_ID_STARTS: u32 = 114;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_ID_BYTES: u32 = 115;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_ID_MISSING: u32 = 116;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_STARTS: u32 = 117;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_BYTES: u32 = 118;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_MISSING: u32 = 119;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_FREQUENCY: u32 = 120;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_SCORE: u32 = 121;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_COSINE: u32 = 122;
+pub const QUANTION_SECTION_FILE_ANNOTATION_FEATURE: u32 = 123;
+pub const QUANTION_SECTION_FILE_ANNOTATION_FILE: u32 = 124;
+pub const QUANTION_SECTION_FILE_ANNOTATION_SCAN_INDEX: u32 = 125;
+pub const QUANTION_SECTION_COMPOUND_MATCH_FEATURE: u32 = 126;
+pub const QUANTION_SECTION_COMPOUND_MATCH_FILE: u32 = 127;
+pub const QUANTION_SECTION_COMPOUND_MATCH_LABEL_STARTS: u32 = 128;
+pub const QUANTION_SECTION_COMPOUND_MATCH_LABEL_BYTES: u32 = 129;
+pub const QUANTION_SECTION_COMPOUND_MATCH_ID_STARTS: u32 = 130;
+pub const QUANTION_SECTION_COMPOUND_MATCH_ID_BYTES: u32 = 131;
+pub const QUANTION_SECTION_COMPOUND_MATCH_DATABASE_STARTS: u32 = 132;
+pub const QUANTION_SECTION_COMPOUND_MATCH_DATABASE_BYTES: u32 = 133;
+pub const QUANTION_SECTION_COMPOUND_MATCH_SCORE: u32 = 134;
+pub const QUANTION_SECTION_COMPOUND_MATCH_COSINE: u32 = 135;
+pub const QUANTION_SECTION_COMPOUND_MATCH_MZ_STARTS: u32 = 136;
+pub const QUANTION_SECTION_COMPOUND_MATCH_MZ_VALUES: u32 = 137;
+pub const QUANTION_SECTION_COMPOUND_MATCH_INTENSITY_STARTS: u32 = 138;
+pub const QUANTION_SECTION_COMPOUND_MATCH_INTENSITY_VALUES: u32 = 139;
+pub const QUANTION_SECTION_COMPOUND_MATCH_METADATA_NAME_STARTS: u32 = 140;
+pub const QUANTION_SECTION_COMPOUND_MATCH_METADATA_NAME_BYTES: u32 = 141;
+pub const QUANTION_SECTION_COMPOUND_MATCH_METADATA_VALUE_STARTS: u32 = 142;
+pub const QUANTION_SECTION_COMPOUND_MATCH_METADATA_VALUE_BYTES: u32 = 143;
 
 const ALIGNMENT: u64 = 8;
 
@@ -339,6 +378,11 @@ pub enum Column<'a> {
         missing_id: u32,
         values: &'a [Option<&'a str>],
     },
+    NumberLists {
+        starts_id: u32,
+        values_id: u32,
+        values: &'a [&'a [f64]],
+    },
 }
 
 pub fn build_record_bridge(
@@ -381,6 +425,18 @@ pub fn build_record_bridge(
                 builder.add_section(*bytes_id, QUANTION_ELEMENT_U8, total);
                 builder.add_section(*missing_id, QUANTION_ELEMENT_U8, values.len() as u64);
             }
+            Column::NumberLists {
+                starts_id,
+                values_id,
+                values,
+            } => {
+                let mut total: u64 = 0;
+                for list in values.iter() {
+                    total = total.checked_add(list.len() as u64)?;
+                }
+                builder.add_section(*starts_id, QUANTION_ELEMENT_U64, values.len() as u64 + 1);
+                builder.add_section(*values_id, QUANTION_ELEMENT_F64, total);
+            }
         }
     }
     let mut bridge = builder.build()?;
@@ -422,6 +478,25 @@ pub fn build_record_bridge(
                 bridge.write_u64_section(*starts_id, &starts);
                 bridge.write_text_section(*bytes_id, &texts);
                 bridge.write_u8_section(*missing_id, &missing);
+            }
+            Column::NumberLists {
+                starts_id,
+                values_id,
+                values,
+            } => {
+                let mut starts = Vec::with_capacity(values.len() + 1);
+                let mut next: u64 = 0;
+                starts.push(0u64);
+                for list in values.iter() {
+                    next += list.len() as u64;
+                    starts.push(next);
+                }
+                let flat: Vec<f64> = values
+                    .iter()
+                    .flat_map(|list| list.iter().copied())
+                    .collect();
+                bridge.write_u64_section(*starts_id, &starts);
+                bridge.write_f64_section(*values_id, &flat);
             }
         }
     }

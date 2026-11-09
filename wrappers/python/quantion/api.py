@@ -22,6 +22,7 @@ from quantion._bridge import (
 )
 from quantion._errors import QuantionError, _check, _invalid, _missing, _unknown_option
 from quantion._options import (
+    ANNOTATE_FEATURES,
     DEFAULT_SCAN_ARRAYS,
     read_scan_arrays,
     read_scan_metadata_tags,
@@ -51,7 +52,11 @@ from quantion._options import (
     read_options,
 )
 from quantion._types import (
+    AnnotateFeaturesOptions,
     CalculateBaselineOptions,
+    CompoundMatch,
+    FeatureAnnotation,
+    FileAnnotation,
     DataXY,
     DrawPeaksOptions,
     CalculateEicOptions,
@@ -88,10 +93,9 @@ from quantion.warp_model import WarpModel
 
 _abi: Optional[_ABI] = None
 
-_QUERY_RT_RANGE = 0
-_QUERY_CLOSEST_RT = 1
-_QUERY_MZ_RANGE = 2
-_QUERY_CLOSEST_MZ = 3
+_POSITION_ANY = 0
+_POSITION_RANGE = 1
+_POSITION_CLOSEST = 2
 _IMAGE_SCANS_PER_STEP = 256
 _MAX_LEVEL = 255
 
@@ -406,31 +410,35 @@ def write_mzml(file: SampleFile, options: Optional[WriteMzmlOptions] = None) -> 
     return buf_to_bytes(abi, buffer) if out is None else None
 
 
-def _get_scan_query(function: str, name: str, value: Any, range_query: int, closest_query: int):
+def _get_position(function: str, name: str, value: Any) -> list:
+    if value is None:
+        return [c_uint8(_POSITION_ANY), c_double(math.nan), c_double(math.nan)]
     if isinstance(value, Mapping):
         window = _read_record(function, name, value, ("from", "to"))
-        return (range_query,
-                get_number(function, f"{name}.from", window["from"]),
-                get_number(function, f"{name}.to", window["to"]))
-    return closest_query, get_number(function, name, value), math.nan
+        return [c_uint8(_POSITION_RANGE),
+                c_double(get_number(function, f"{name}.from", window["from"])),
+                c_double(get_number(function, f"{name}.to", window["to"]))]
+    return [c_uint8(_POSITION_CLOSEST), c_double(get_number(function, name, value)), c_double(math.nan)]
 
 
 def get_scans(
     file: SampleFile,
-    *,
     rt: "float | FromTo | None" = None,
     mz: "float | FromTo | None" = None,
     options: Optional[GetScansOptions] = None,
 ) -> List[Scan]:
     """get_scans · Files
 
-    Read scans by retention time or precursor m/z. A range returns every scan in it; one number returns the closest scan, as a list of one.
+    Read scans by retention time, by precursor m/z, or by both. Ranges return every scan inside them; when rt or mz is one value, you get the closest scan, as a list of one.
+
+    Warning:
+        It is best to write the argument names rt and mz to avoid confusion. Without names, rt comes before mz, so a number given without a name is taken as rt.
 
     Args:
         file: The sample to read, from parse_ion or parse_mzml.
-        rt: Which scans, by retention time: a range or one value. Each FromTo has from, to. See FromTo: https://phenological.github.io/quantion/?language=python#FromTo
+        rt: Which scans by retention time: a range or one value. Optional when mz is given. Each FromTo has from, to. See FromTo: https://phenological.github.io/quantion/?language=python#FromTo
             Example: window: FromTo = {"from": 1.0, "to": 2.5}
-        mz: Or by precursor m/z: a range or one value. Give rt or mz, not both. Each FromTo has from, to. See FromTo: https://phenological.github.io/quantion/?language=python#FromTo
+        mz: Which scans by precursor m/z: a range or one value. Give rt, mz or both. Each FromTo has from, to. See FromTo: https://phenological.github.io/quantion/?language=python#FromTo
             Example: window: FromTo = {"from": 1.0, "to": 2.5}
         options: Optional settings: level = 1, time_unit = MINUTES, arrays = {"key": "mz", "accession": "MS:1000514"}, {"key": "intensity", "accession": "MS:1000515"}. See GetScansOptions: https://phenological.github.io/quantion/?language=python#GetScansOptions
 
@@ -443,12 +451,7 @@ def get_scans(
     settings = read_options(function, options, GET_SCANS)
     if rt is None and mz is None:
         raise _missing(function, "rt")
-    if rt is not None and mz is not None:
-        raise _invalid(function, "mz", "cannot be given together with rt")
-    if rt is not None:
-        query, start, end = _get_scan_query(function, "rt", rt, _QUERY_RT_RANGE, _QUERY_CLOSEST_RT)
-    else:
-        query, start, end = _get_scan_query(function, "mz", mz, _QUERY_MZ_RANGE, _QUERY_CLOSEST_MZ)
+    query = _get_position(function, "rt", rt) + _get_position(function, "mz", mz)
     level = _get_level(function, "level", settings["level"])
     time_unit = get_time_unit(function, "time_unit", settings["time_unit"])
     keys, numbers = read_scan_arrays(function, settings["arrays"])
@@ -457,19 +460,16 @@ def get_scans(
         accessions = (c_uint32 * len(numbers))(*numbers)
         count = c_size_t(len(numbers))
         _prefetch(file, function, lambda out: abi.plan_scans_with_arrays(
-            file.handle, c_uint8(query), c_double(start), c_double(end), c_uint8(level), c_uint8(time_unit),
-            accessions, count, out))
+            file.handle, *query, c_uint8(level), c_uint8(time_unit), accessions, count, out))
         buffer = _Buf()
         _check(abi, function, abi.get_scans_with_arrays(
-            file.handle, c_uint8(query), c_double(start), c_double(end), c_uint8(level), c_uint8(time_unit),
-            accessions, count, ctypes.byref(buffer)))
+            file.handle, *query, c_uint8(level), c_uint8(time_unit), accessions, count, ctypes.byref(buffer)))
         return buf_to_scan_arrays(abi, buffer, keys)
     _prefetch(file, function, lambda out: abi.plan_scans(
-        file.handle, c_uint8(query), c_double(start), c_double(end), c_uint8(level), c_uint8(time_unit), out))
+        file.handle, *query, c_uint8(level), c_uint8(time_unit), out))
     buffer = _Buf()
     _check(abi, function, abi.get_scans(
-        file.handle, c_uint8(query), c_double(start), c_double(end), c_uint8(level), c_uint8(time_unit),
-        ctypes.byref(buffer)))
+        file.handle, *query, c_uint8(level), c_uint8(time_unit), ctypes.byref(buffer)))
     return buf_to_scans(abi, buffer)
 
 
@@ -1243,3 +1243,152 @@ def _parse_ion_remote(url: str, max_cache_size: int) -> SampleFile:
     file._range_callback = callback
     file._remote_source = source
     return file
+
+
+ANNOTATION_FEATURE_KEYS = ("mz", "rt")
+ANNOTATION_FEATURE_OPTIONAL_KEYS = ("from", "to", "intensity", "integral", "n_points", "frequency")
+
+
+def _read_annotation_features(function: str, features: Sequence[Feature]) -> Tuple[np.ndarray, np.ndarray]:
+    if not isinstance(features, (list, tuple)):
+        raise _invalid(function, "features", "must be a list of features")
+    mzs = np.empty(len(features), dtype=np.float64)
+    rts = np.empty(len(features), dtype=np.float64)
+    for index, feature in enumerate(features):
+        argument = f"features[{index}]"
+        record = _read_record(function, argument, feature, ANNOTATION_FEATURE_KEYS, ANNOTATION_FEATURE_OPTIONAL_KEYS)
+        mzs[index] = get_number(function, f"{argument}.mz", record["mz"])
+        rts[index] = get_number(function, f"{argument}.rt", record["rt"])
+    return mzs, rts
+
+
+def _read_annotation_files(function: str, files: Sequence[SampleFile]) -> List[SampleFile]:
+    if not isinstance(files, (list, tuple)):
+        raise _invalid(function, "files", "must be a list of samples")
+    for index, file in enumerate(files):
+        if not isinstance(file, SampleFile):
+            raise _invalid(function, f"files[{index}]", "must be a sample from parse_ion or parse_mzml")
+    return list(files)
+
+
+def _read_annotation_settings(function: str, settings: Mapping[str, Any]) -> list:
+    return [
+        c_size_t(get_count(function, "matches", settings["matches"])),
+        c_double(get_number(function, "ppm_tolerance", settings["ppm_tolerance"])),
+        c_double(get_number(function, "mz_tolerance", settings["mz_tolerance"])),
+        c_double(get_number(function, "rt_range", settings["rt_range"])),
+        c_double(get_number(function, "min_relative_intensity", settings["min_relative_intensity"])),
+    ]
+
+
+def _read_annotation_source(function: str, argument: str, value: Any) -> str:
+    if not isinstance(value, (str, os.PathLike)) or not os.fspath(value).strip():
+        raise _invalid(function, argument, "must be a path or a URL")
+    return os.fspath(value)
+
+
+def _get_compound_match(row: Mapping[str, Any]) -> CompoundMatch:
+    names = row["metadata_names"].split("\x1f") if row["metadata_names"] else []
+    values = row["metadata_values"].split("\x1f") if row["metadata_names"] else []
+    return {
+        "label": row["label"],
+        "id": row["id"],
+        "database": row["database"],
+        "score": row["score"],
+        "cosine": row["cosine"],
+        "mz": row["mz"],
+        "intensity": row["intensity"],
+        "metadata": dict(zip(names, values)),
+    }
+
+
+def _get_number_or_none(value: float) -> Optional[float]:
+    return None if math.isnan(value) else value
+
+
+def _get_annotations(feature_rows: list, file_rows: list, match_rows: list) -> List[FeatureAnnotation]:
+    matches: Dict[Tuple[int, int], List[CompoundMatch]] = {}
+    for row in match_rows:
+        matches.setdefault((row["feature"], row["file"]), []).append(_get_compound_match(row))
+    files: Dict[int, List[FileAnnotation]] = {}
+    for row in file_rows:
+        files.setdefault(row["feature"], []).append({
+            "file": row["file"],
+            "scan_index": None if math.isnan(row["scan_index"]) else int(row["scan_index"]),
+            "matches": matches.get((row["feature"], row["file"]), []),
+        })
+    return [
+        {
+            "mz": row["mz"],
+            "rt": row["rt"],
+            "label": row["label"],
+            "id": row["id"],
+            "database": row["database"],
+            "frequency": row["frequency"],
+            "score": _get_number_or_none(row["score"]),
+            "cosine": _get_number_or_none(row["cosine"]),
+            "files": files.get(position, []),
+        }
+        for position, row in enumerate(feature_rows)
+    ]
+
+
+def annotate_features(
+    files: Sequence[SampleFile],
+    features: Sequence[Feature],
+    options: Optional[AnnotateFeaturesOptions] = None,
+) -> List[FeatureAnnotation]:
+    """annotate_features · Untargeted
+
+    Annotate features by matching their MS2 spectra against a spectral library. For each feature and sample, the positive MS2 scan closest to the peak apex is used: its precursor must match the feature m/z within the tolerance, and its RT must be within rt_range. A spectrum encoder turns the scan into a vector, which is scored against the library spectra with the same precursor m/z. The library (an Ionic .ion file) and the encoder (an ONNX model) are read from a path or a URL; by default both come from the josoriom/cipher releases.
+
+    Warning:
+        This is an experimental feature.
+
+    Args:
+        files: The samples, from parse_ion or parse_mzml. Must not be empty.
+        features: The features to name: mz and rt each. find_features and match_features output works as is. Empty gives an empty result.
+        options: Optional settings: library = "https://github.com/josoriom/cipher/releases/latest/download/library_positive.ion", model = "https://github.com/josoriom/cipher/releases/latest/download/model.onnx", matches = 3, ppm_tolerance = 20, mz_tolerance = 0.005, rt_range = 0.3, min_relative_intensity = 0.02. See AnnotateFeaturesOptions: https://phenological.github.io/quantion/?language=python#AnnotateFeaturesOptions
+
+    Returns:
+        One FeatureAnnotation per feature, in the same order.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#annotate_features
+    """
+    function = "annotate_features"
+    settings = read_options(function, options, ANNOTATE_FEATURES)
+    samples = _read_annotation_files(function, files)
+    mzs, rts = _read_annotation_features(function, features)
+    library_source = _read_annotation_source(function, "library", settings["library"])
+    model_source = _read_annotation_source(function, "model", settings["model"])
+    numbers = _read_annotation_settings(function, settings)
+    abi = _get_abi()
+    handles = (ctypes.c_void_p * max(len(samples), 1))(*[sample.handle for sample in samples])
+    count = c_size_t(len(samples))
+    feature_count = c_size_t(len(mzs))
+    outputs = (_Buf(), _Buf(), _Buf())
+    if len(mzs) == 0:
+        _check(abi, function, abi.annotate_features(
+            None, None, handles, count, _as_f64_ptr(mzs), _as_f64_ptr(rts), feature_count, *numbers,
+            *[ctypes.byref(output) for output in outputs]))
+        for output in outputs:
+            buf_to_records(abi, output)
+        return []
+    library = parse_ion(library_source)
+    model = load_model(model_source)
+    try:
+        for sample in samples:
+            _prefetch(sample, function, lambda out, sample=sample: abi.plan_annotate_samples(
+                sample.handle, _as_f64_ptr(mzs), _as_f64_ptr(rts), feature_count, *numbers, out))
+        _prefetch(library, function, lambda out: abi.plan_annotate_library(
+            library.handle, model.handle, handles, count, _as_f64_ptr(mzs), _as_f64_ptr(rts), feature_count,
+            *numbers, out))
+        _check(abi, function, abi.annotate_features(
+            library.handle, model.handle, handles, count, _as_f64_ptr(mzs), _as_f64_ptr(rts), feature_count,
+            *numbers, *[ctypes.byref(output) for output in outputs]))
+        feature_rows, file_rows, match_rows = (buf_to_records(abi, output) for output in outputs)
+        return _get_annotations(feature_rows, file_rows, match_rows)
+    finally:
+        library.dispose()
+        model.dispose()
+

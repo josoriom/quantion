@@ -2,6 +2,7 @@ import iconAddress from "../../../assets/icon.svg";
 import { GitHubLinks } from "./GitHubLinks";
 import { VersionMenu } from "./VersionMenu";
 import { IonicText } from "./IonicText";
+import { SearchBox } from "./SearchBox";
 
 export function Header() {
   return (
@@ -16,6 +17,7 @@ export function Header() {
         </p>
       </div>
       <VersionMenu />
+      <SearchBox />
       <GitHubLinks />
     </header>
   );

@@ -15,9 +15,9 @@ test_that("one rt gives the closest scan", {
   expect_true(all(c("level", "precursor_mz", "base_peak_intensity", "x", "y", "z") %in% names(scans)))
 })
 
-test_that("rt and mz together are refused", {
+test_that("a query with neither rt nor mz is refused", {
   skip_if(!nzchar(sample_file), "no api.ion sample next to the package")
-  expect_error(get_scans(parse_ion(sample_file), rt = 2.385, mz = 89), "rt or mz must be given, not both")
+  expect_error(get_scans(parse_ion(sample_file)), "rt or mz must be given")
 })
 
 test_that("three numbers are refused", {
@@ -75,6 +75,26 @@ open_arrays_file <- function() {
 
 fingerprint_array <- list(key = "fingerprint", accession = "MS:1000786")
 whole_run <- c(0, 10)
+
+get_rts <- function(rt, mz) {
+  get_scans(open_arrays_file(), rt = rt, mz = mz, options = get_scans_options(level = 2L))$rt
+}
+
+test_that("an rt range and an mz range keep scans inside both", {
+  expect_equal(get_rts(c(0.5, 2.5), c(300.5, 302.5)), 2)
+})
+
+test_that("an rt range and the closest mz give one scan inside the range", {
+  expect_equal(get_rts(c(1.5, 3.5), 300), 2)
+})
+
+test_that("the closest rt and an mz range give the nearest scan at that precursor", {
+  expect_equal(get_rts(1, c(300.5, 302.5)), 2)
+})
+
+test_that("the closest rt and the closest mz pick the closest precursor first", {
+  expect_equal(get_rts(3, 300.2), 1)
+})
 
 test_that("default arrays give mz and intensity only", {
   scans <- get_scans(open_arrays_file(), rt = whole_run, options = get_scans_options(level = 2L))

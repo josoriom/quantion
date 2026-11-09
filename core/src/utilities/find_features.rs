@@ -1,4 +1,3 @@
-use crate::options::FindPeaksOptions;
 use std::{
     cmp::Ordering,
     collections::HashSet,
@@ -6,22 +5,24 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+use ionic::{IonReader, source::ByteRange};
 #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
 use rayon::prelude::*;
 
-use ionic::{IonReader, source::ByteRange};
-
-use crate::options::CalculateEicOptions;
-use crate::utilities::{
-    calculate_eic::{
-        EicReader, FastError, MS1_LEVEL, SpectrumKind, get_scan_times,
-        get_spectrum_kind, lower_bound, mz_tolerance_for, plan_window_ranges, read_mz_window,
-        summed_intensity_in_window, with_eic_apex_intensity,
+use crate::{
+    files::CalculateEicOptions,
+    traces::FindPeaksOptions,
+    utilities::{
+        calculate_eic::{
+            EicReader, FastError, MS1_LEVEL, SpectrumKind, get_scan_times, get_spectrum_kind,
+            lower_bound, mz_tolerance_for, plan_window_ranges, read_mz_window,
+            summed_intensity_in_window, with_eic_apex_intensity,
+        },
+        find_masses::find_masses,
+        find_peaks::find_peaks,
+        parallel::run_with_threads,
+        structs::{DataXY, FromTo},
     },
-    find_masses::find_masses,
-    find_peaks::find_peaks,
-    parallel::run_with_threads,
-    structs::{DataXY, FromTo},
 };
 
 #[derive(Clone, Debug)]
@@ -41,12 +42,12 @@ impl MzTolerance {
     }
 
     fn tol_at(&self, center: f64) -> f64 {
-        let tol_ppm = if self.ppm > 0.0 {
-            (self.ppm * 1e-6) * center
-        } else {
-            0.0
+        let options = CalculateEicOptions {
+            ppm_tolerance: self.ppm,
+            mz_tolerance: self.mz_absolute,
+            ..Default::default()
         };
-        tol_ppm.max(self.mz_absolute)
+        mz_tolerance_for(center, options)
     }
 }
 
@@ -109,6 +110,16 @@ pub struct Feature {
     pub n_points: usize,
     pub(crate) noise: f64,
     pub frequency: Option<f64>,
+}
+
+impl Feature {
+    pub fn new(mz: f64, rt: f64) -> Self {
+        Self {
+            mz,
+            rt,
+            ..Default::default()
+        }
+    }
 }
 
 impl std::fmt::Debug for Feature {
@@ -432,7 +443,11 @@ fn eic_row_for_mass(scans: &[GridScan], target_mz: f64, options: CalculateEicOpt
         .collect()
 }
 
-pub(crate) fn max_eic_per_mass(scans: &[GridScan], masses: &[f64], options: CalculateEicOptions) -> Vec<f64> {
+pub(crate) fn max_eic_per_mass(
+    scans: &[GridScan],
+    masses: &[f64],
+    options: CalculateEicOptions,
+) -> Vec<f64> {
     if masses.is_empty() {
         return Vec::new();
     }
@@ -472,7 +487,12 @@ pub(crate) fn max_eic_per_mass(scans: &[GridScan], masses: &[f64], options: Calc
     max_sum
 }
 
-fn keep_reaching(scans: &[GridScan], masses: &[f64], threshold: f64, options: CalculateEicOptions) -> Vec<f64> {
+fn keep_reaching(
+    scans: &[GridScan],
+    masses: &[f64],
+    threshold: f64,
+    options: CalculateEicOptions,
+) -> Vec<f64> {
     let max_value = max_eic_per_mass(scans, masses, options);
     masses
         .iter()
@@ -484,7 +504,12 @@ fn keep_reaching(scans: &[GridScan], masses: &[f64], threshold: f64, options: Ca
 #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
 const CHUNKS_PER_THREAD: usize = 8;
 
-fn filter_by_max(scans: &[GridScan], masses: &[f64], threshold: f64, options: CalculateEicOptions) -> Vec<f64> {
+fn filter_by_max(
+    scans: &[GridScan],
+    masses: &[f64],
+    threshold: f64,
+    options: CalculateEicOptions,
+) -> Vec<f64> {
     if masses.is_empty() {
         return Vec::new();
     }
@@ -577,7 +602,12 @@ fn apex_scan_index(time: &[f64], eic: &[f64], rt_from: f64, rt_to: f64) -> Optio
     apex
 }
 
-fn peak_apex_mz(apex_scan: &GridScan, center_mz: f64, options: CalculateEicOptions, kind: SpectrumKind) -> f64 {
+fn peak_apex_mz(
+    apex_scan: &GridScan,
+    center_mz: f64,
+    options: CalculateEicOptions,
+    kind: SpectrumKind,
+) -> f64 {
     let tolerance = mz_tolerance_for(center_mz, options);
     let mz_lo = center_mz - tolerance;
     let mz_hi = center_mz + tolerance;
@@ -624,7 +654,11 @@ pub(crate) fn deduplicate_masses(mut masses: Vec<f64>, options: CalculateEicOpti
     out
 }
 
-fn deduplicate_features(xs: Vec<Feature>, eic: CalculateEicOptions, rt_tolerance: f64) -> Vec<Feature> {
+fn deduplicate_features(
+    xs: Vec<Feature>,
+    eic: CalculateEicOptions,
+    rt_tolerance: f64,
+) -> Vec<Feature> {
     if xs.is_empty() {
         return xs;
     }
@@ -742,14 +776,13 @@ pub(crate) fn dedup_points(
             .then_with(|| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal))
     });
 
+    let tolerance = CalculateEicOptions {
+        ppm_tolerance,
+        mz_tolerance,
+        ..Default::default()
+    };
     let mz_close = |a: f64, b: f64| -> bool {
-        let c = 0.5 * (a + b).abs();
-        let tol_ppm = if ppm_tolerance > 0.0 {
-            (ppm_tolerance * 1e-6) * c
-        } else {
-            0.0
-        };
-        let tol = tol_ppm.max(mz_tolerance) * 1.2;
+        let tol = mz_tolerance_for(0.5 * (a + b).abs(), tolerance) * 1.2;
         (a - b).abs() <= tol
     };
 

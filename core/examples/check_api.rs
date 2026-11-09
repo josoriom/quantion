@@ -1,10 +1,13 @@
 use std::path::Path;
 
 use quantion::{
-    DataXY, CalculateEicOptions, DeisotopeFeaturesOptions, Feature, FindFeaturesOptions, FindPeaksOptions, FindTargetsOptions, FindTransitionsOptions,
-    GetPeakOptions, GetScanMetadataOptions, GridOptions, MatchFeaturesOptions, ParseIonOptions, Peak, SampleFile, ScanQuery, Target,
-    Transition, FromTo, calculate_eic, deisotope_features, find_features, find_noise_level, find_peaks, find_targets, find_transitions,
-    get_peak, get_scan_metadata, get_scans, load_model, load_warp, match_features, parse_ion,
+    AnnotateFeaturesOptions, CalculateEicOptions, DataXY, DeisotopeFeaturesOptions, Feature,
+    FindFeaturesOptions, FindPeaksOptions, FindTargetsOptions, FindTransitionsOptions, FromTo,
+    GetPeakOptions, GetScanMetadataOptions, GridOptions, MatchFeaturesOptions, ParseIonOptions,
+    Peak, Position, SampleFile, ScanQuery, Target, Transition, annotate_features, calculate_eic,
+    deisotope_features, find_features, find_noise_level, find_peaks, find_targets,
+    find_transitions, get_peak, get_scan_metadata, get_scans, load_model, load_warp,
+    match_features, parse_ion,
 };
 
 const FROM_RT: f64 = 0.0;
@@ -119,13 +122,27 @@ fn open(fixture: &Path) -> SampleFile {
 }
 
 fn count_scans(fixture: &Path) -> usize {
-    let query = ScanQuery::RtRange(FromTo { from: FROM_RT, to: TO_RT });
-    get_scans(&mut open(fixture), query, Default::default()).expect("get_scans").len()
+    let query = ScanQuery {
+        rt: Position::Range(FromTo {
+            from: FROM_RT,
+            to: TO_RT,
+        }),
+        ..Default::default()
+    };
+    get_scans(&mut open(fixture), query, Default::default())
+        .expect("get_scans")
+        .len()
 }
 
 fn scan_metadata(fixture: &Path, out: &mut Vec<String>) {
     let mut file = open(fixture);
-    let query = ScanQuery::RtRange(FromTo { from: FROM_RT, to: TO_RT });
+    let query = ScanQuery {
+        rt: Position::Range(FromTo {
+            from: FROM_RT,
+            to: TO_RT,
+        }),
+        ..Default::default()
+    };
     let scans = get_scans(&mut file, query, Default::default()).expect("get_scans");
     let first = scans.first().expect("a first scan").index;
     let last = scans.last().expect("a last scan").index;
@@ -135,13 +152,29 @@ fn scan_metadata(fixture: &Path, out: &mut Vec<String>) {
     out.push(format!("get_scan_metadata.count = {}", rows.len()));
     for (position, row) in rows.iter().enumerate() {
         let kind = format!("{:?}", row.kind);
-        let fields = [Some(row.path.as_str()), Some(kind.as_str()), row.accession.as_deref(), Some(row.name.as_str()), row.value.as_deref(), row.unit.as_deref(), row.unit_accession.as_deref()];
+        let fields = [
+            Some(row.path.as_str()),
+            Some(kind.as_str()),
+            row.accession.as_deref(),
+            Some(row.name.as_str()),
+            row.value.as_deref(),
+            row.unit.as_deref(),
+            row.unit_accession.as_deref(),
+        ];
         let text: Vec<&str> = fields.iter().map(|field| field.unwrap_or("NA")).collect();
-        out.push(format!("get_scan_metadata.{position} = {}", text.join(" | ")));
+        out.push(format!(
+            "get_scan_metadata.{position} = {}",
+            text.join(" | ")
+        ));
     }
-    let options = GetScanMetadataOptions { tags: vec!["scan".to_string()] };
+    let options = GetScanMetadataOptions {
+        tags: vec!["scan".to_string()],
+    };
     let scan_rows = get_scan_metadata(&mut file, last, options).expect("get_scan_metadata");
-    out.push(format!("get_scan_metadata.scan.count = {}", scan_rows.len()));
+    out.push(format!(
+        "get_scan_metadata.scan.count = {}",
+        scan_rows.len()
+    ));
 }
 
 fn extract_eic(fixture: &Path, channel: &Channel) -> DataXY {
@@ -184,7 +217,10 @@ fn report_targets(fixture: &Path, channel: &Channel, prefix: &str, out: &mut Vec
 }
 
 fn report_transitions(fixture: &Path, channel: &Channel, prefix: &str, out: &mut Vec<String>) {
-    let folder = fixture.parent().and_then(Path::parent).expect("fixtures folder");
+    let folder = fixture
+        .parent()
+        .and_then(Path::parent)
+        .expect("fixtures folder");
     let targets: Vec<Transition> = channel
         .targets
         .iter()
@@ -200,7 +236,8 @@ fn report_transitions(fixture: &Path, channel: &Channel, prefix: &str, out: &mut
         find_peaks: chrom_peak_options(channel),
         threads: THREADS,
     };
-    let rows = find_transitions(&mut open(&folder.join("srm.ion")), &targets, options).expect("find_transitions");
+    let rows = find_transitions(&mut open(&folder.join("srm.ion")), &targets, options)
+        .expect("find_transitions");
     for ((id, _), peak) in channel.targets.iter().zip(&rows) {
         let name = format!("{prefix}.{id}");
         out.push(format!("{name}.rt = {}", number(peak.rt)));
@@ -242,7 +279,8 @@ fn consensus_features(directory: &str, out: &mut Vec<String>) {
     };
     let found = match_features(directory, options).expect("match_features");
     report_matched("match_features", &found, out);
-    let cleaned = deisotope_features(found, DeisotopeFeaturesOptions::default()).expect("deisotope_features");
+    let cleaned =
+        deisotope_features(found, DeisotopeFeaturesOptions::default()).expect("deisotope_features");
     report_matched("deisotope_features", &cleaned, out);
 }
 
@@ -319,9 +357,7 @@ fn predicted_rts(fixture: &Path, directory: &str, out: &mut Vec<String>) {
             })
         })
         .collect();
-    let predicted = warp
-        .predict_rts(&mut file, &targets)
-        .expect("predict_rts");
+    let predicted = warp.predict_rts(&mut file, &targets).expect("predict_rts");
     out.push(format!("predict_rts.count = {}", predicted.len()));
     for (name, prediction) in names.iter().zip(&predicted) {
         out.push(format!("predict_rts.{name}.rt = {}", number(prediction.rt)));
@@ -329,6 +365,51 @@ fn predicted_rts(fixture: &Path, directory: &str, out: &mut Vec<String>) {
             "predict_rts.{name}.uncertainty = {}",
             number(prediction.uncertainty)
         ));
+    }
+}
+
+fn annotations(directory: &str, out: &mut Vec<String>) {
+    let folder = Path::new(directory).join("..").join("annotate");
+    let mut files: Vec<SampleFile> = ["sample_peak_and_ms2", "sample_peak_only", "sample_no_peak"]
+        .iter()
+        .map(|name| open(&folder.join(format!("{name}.ion"))))
+        .collect();
+    let options = AnnotateFeaturesOptions {
+        library: folder.join("library.ion").to_string_lossy().into_owned(),
+        model: folder.join("model.onnx").to_string_lossy().into_owned(),
+        ..Default::default()
+    };
+    let features = [Feature::new(195.0877, 2.0)];
+    let found = annotate_features(&mut files, &features, options).expect("annotate_features");
+    let text = |value: &Option<String>| value.clone().unwrap_or_else(|| "NA".to_string());
+    let value = |value: Option<f64>| value.map(number).unwrap_or_else(|| "NA".to_string());
+    out.push(format!("annotate_features.count = {}", found.len()));
+    for (index, annotation) in found.iter().enumerate() {
+        let name = format!("annotate_features[{index}]");
+        out.push(format!("{name}.label = {}", text(&annotation.label)));
+        out.push(format!("{name}.id = {}", text(&annotation.id)));
+        out.push(format!("{name}.database = {}", text(&annotation.database)));
+        out.push(format!(
+            "{name}.frequency = {}",
+            number(annotation.frequency)
+        ));
+        out.push(format!("{name}.score = {}", value(annotation.score)));
+        out.push(format!("{name}.cosine = {}", value(annotation.cosine)));
+        for file in &annotation.files {
+            let scan = file
+                .scan_index
+                .map(|index| index.to_string())
+                .unwrap_or_else(|| "NA".to_string());
+            out.push(format!("{name}.files[{}].scan_index = {scan}", file.file));
+            for (rank, found) in file.matches.iter().enumerate() {
+                let prefix = format!("{name}.files[{}].matches[{rank}]", file.file);
+                out.push(format!("{prefix}.label = {}", found.label));
+                out.push(format!("{prefix}.id = {}", found.id));
+                out.push(format!("{prefix}.database = {}", found.database));
+                out.push(format!("{prefix}.score = {}", number(found.score)));
+                out.push(format!("{prefix}.cosine = {}", number(found.cosine)));
+            }
+        }
     }
 }
 
@@ -348,6 +429,7 @@ fn main() {
     features(&fixture, &mut out);
     consensus_features(&directory, &mut out);
     predicted_rts(&fixture, &directory, &mut out);
+    annotations(&directory, &mut out);
 
     println!("{}", out.join("\n"));
 }

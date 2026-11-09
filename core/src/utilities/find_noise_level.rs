@@ -1,9 +1,6 @@
 use std::borrow::Cow;
 
-use crate::utilities::cheminfo::{
-    kmeans,
-    noise_san_plot::{NoiseSanPlotOptions, noise_san_plot},
-};
+use crate::utilities::cheminfo::kmeans;
 
 /// **NoiseLevel** · Results
 ///
@@ -72,36 +69,6 @@ where
         }
     } else {
         NoiseLevel::default()
-    }
-}
-
-pub fn find_noise_level_san_plot<'a, Y>(y: Y) -> NoiseLevel
-where
-    Y: IntoF64Slice<'a>,
-{
-    let y = y.into_f64_slice();
-    if y.is_empty() {
-        return NoiseLevel::default();
-    }
-
-    let result = noise_san_plot(
-        y.as_ref(),
-        NoiseSanPlotOptions {
-            cut_off: Some(0.5),
-            refine: false,
-            fix_offset: false,
-            ..Default::default()
-        },
-    );
-    let intensity = if result.positive.is_finite() && result.positive > 0.0 {
-        result.positive
-    } else {
-        0.0
-    };
-
-    NoiseLevel {
-        width: 0,
-        intensity,
     }
 }
 

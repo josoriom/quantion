@@ -387,11 +387,17 @@ fn load_array_from_spectra(
     accession: u32,
     values: &mut Vec<f64>,
 ) -> bool {
-    let Some(list) = spectra.get(index).and_then(|spectrum| spectrum.binary_data_array_list.as_ref()) else {
+    let Some(list) = spectra
+        .get(index)
+        .and_then(|spectrum| spectrum.binary_data_array_list.as_ref())
+    else {
         return false;
     };
     let found = list.binary_data_arrays.iter().find(|array| {
-        array.cv_params.iter().any(|param| accession_tail(param.accession.as_deref()) == accession)
+        array
+            .cv_params
+            .iter()
+            .any(|param| accession_tail(param.accession.as_deref()) == accession)
     });
     let Some(data) = found.and_then(|array| array.binary.as_ref()) else {
         return false;

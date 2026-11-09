@@ -1,9 +1,11 @@
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    calculate_eic::{SpectrumKind, lower_bound, upper_bound},
-    find_peaks::find_peaks,
-    mz_estimator::SampleMz,
-    structs::DataXY,
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        calculate_eic::{SpectrumKind, lower_bound, upper_bound},
+        find_peaks::find_peaks,
+        mz_estimator::SampleMz,
+        structs::DataXY,
+    },
 };
 
 pub fn find_masses(

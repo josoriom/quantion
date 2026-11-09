@@ -1,15 +1,16 @@
 use core::ffi::c_int;
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
-    ptr, slice,
+    ptr,
 };
 
 use super::{
-    public::{fail, remember},
     Buf, ERR_ENCODE, ERR_INVALID_ARGS, ERR_PANIC, FileSource, OK, ParsedFile, clear_buf, f64_to_u8,
     file_is_broken, mark_file_broken,
     model::ModelHandle,
-    pack_byte_ranges, write_buf,
+    pack_byte_ranges,
+    public::{fail, read_targets_at, read_values, remember},
+    write_buf,
 };
 use crate::utilities::{
     bridge::{
@@ -24,7 +25,6 @@ use crate::utilities::{
         plan_predict_rts_ranges,
     },
 };
-
 
 pub struct WarpModelHandle {
     warp: WarpModel,
@@ -78,7 +78,7 @@ pub unsafe extern "C" fn predict_rts_from_file(
 
     match catch_unwind(AssertUnwindSafe(|| -> Result<(), c_int> {
         let file = unsafe { &mut *(h as *mut ParsedFile) };
-        let targets = get_targets(mzs_ptr, rts_ptr, n);
+        let targets = read_targets_at(mzs_ptr, rts_ptr, n);
         let mut reader = match file.source_mut() {
             FileSource::Full(mzml) => EicReader::Mzml(mzml.as_mut()),
             FileSource::Lazy(ion) => EicReader::Ion(ion.as_mut()),
@@ -123,7 +123,7 @@ pub unsafe extern "C" fn plan_predict_rts(
 
     match catch_unwind(AssertUnwindSafe(|| -> Result<(), c_int> {
         let file = unsafe { &mut *h };
-        let targets = get_targets(mzs_ptr, rts_ptr, n);
+        let targets = read_targets_at(mzs_ptr, rts_ptr, n);
         let warp = unsafe { &(*warp).warp };
         let ranges = match file.source_mut() {
             FileSource::Lazy(ion) => plan_predict_rts_ranges(warp, ion.as_mut(), &targets),
@@ -174,12 +174,15 @@ pub unsafe extern "C" fn calibrate_rts(
         return fail(ERR_INVALID_ARGS, "calibrate");
     }
     clear_buf(out);
-    let files = get_slice(files, file_count);
-    let lengths = get_slice(list_lengths, list_count);
+    let files = read_values(files, file_count);
+    let lengths = read_values(list_lengths, list_count);
     if lengths.iter().sum::<usize>() != target_count {
         return fail(ERR_INVALID_ARGS, "calibrate");
     }
-    if files.iter().any(|file| file.is_null() || file_is_broken(*file)) {
+    if files
+        .iter()
+        .any(|file| file.is_null() || file_is_broken(*file))
+    {
         return remember(crate::QuantionError::invalid(
             "calibrate",
             "anchor_samples",
@@ -188,7 +191,7 @@ pub unsafe extern "C" fn calibrate_rts(
     }
 
     let warp = unsafe { &(*warp).warp };
-    let mut targets = get_targets(mzs_ptr, rts_ptr, target_count);
+    let mut targets = read_targets_at(mzs_ptr, rts_ptr, target_count);
     match get_ids(ids_off, ids_len, ids_buf, ids_buf_len, target_count) {
         Some(ids) => targets
             .iter_mut()
@@ -238,14 +241,6 @@ fn split_targets(targets: Vec<Target>, lengths: &[usize]) -> Vec<Vec<Target>> {
         .collect()
 }
 
-fn get_slice<'a, T>(values: *const T, count: usize) -> &'a [T] {
-    if count == 0 {
-        &[]
-    } else {
-        unsafe { slice::from_raw_parts(values, count) }
-    }
-}
-
 fn build_targets_bridge(targets: &[Target]) -> Option<Box<[u8]>> {
     let ids: Vec<&str> = targets.iter().map(|target| target.get_id()).collect();
     let mz: Vec<f64> = targets.iter().map(|target| target.mz).collect();
@@ -271,23 +266,6 @@ fn build_targets_bridge(targets: &[Target]) -> Option<Box<[u8]>> {
     )
 }
 
-fn get_targets(mzs_ptr: *const f64, rts_ptr: *const f64, n: usize) -> Vec<Target> {
-    if n == 0 {
-        return Vec::new();
-    }
-    let mzs = unsafe { slice::from_raw_parts(mzs_ptr, n) };
-    let rts = unsafe { slice::from_raw_parts(rts_ptr, n) };
-    mzs.iter()
-        .zip(rts)
-        .map(|(mz, rt)| Target {
-            id: None,
-            mz: *mz,
-            rt: *rt,
-            range: None,
-        })
-        .collect()
-}
-
 fn get_ids(
     ids_off: *const u32,
     ids_len: *const u32,
@@ -295,12 +273,12 @@ fn get_ids(
     ids_buf_len: usize,
     n: usize,
 ) -> Option<Vec<String>> {
-    let offsets = get_slice(ids_off, n);
-    let lengths = get_slice(ids_len, n);
+    let offsets = read_values(ids_off, n);
+    let lengths = read_values(ids_len, n);
     let bytes = if ids_buf.is_null() {
         &[][..]
     } else {
-        get_slice(ids_buf, ids_buf_len)
+        read_values(ids_buf, ids_buf_len)
     };
     offsets
         .iter()

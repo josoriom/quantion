@@ -3,15 +3,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    find_peaks::find_peaks,
-    get_boundaries::{BoundariesOptions, get_boundaries},
-    structs::DataXY,
-};
+use helpers::load_chromatograms_from;
 
 use super::helpers;
-use helpers::load_chromatograms_from;
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        find_peaks::find_peaks,
+        get_boundaries::{BoundariesOptions, get_boundaries},
+        structs::DataXY,
+    },
+};
 
 struct Feature {
     id: String,

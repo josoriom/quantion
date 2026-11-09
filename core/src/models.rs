@@ -49,7 +49,11 @@ impl WarpModel {
     /// Returns: One PredictedRt per target, in the same order.
     ///
     /// [Documentation](https://phenological.github.io/quantion/?language=rust#predict_rts)
-    pub fn predict_rts(&self, file: &mut SampleFile, targets: &[Target]) -> Result<Vec<PredictedRt>, QuantionError> {
+    pub fn predict_rts(
+        &self,
+        file: &mut SampleFile,
+        targets: &[Target],
+    ) -> Result<Vec<PredictedRt>, QuantionError> {
         const FUNCTION: &str = "predict_rts";
         self.predict_rts_from_reader(&mut file.reader(), targets)
             .map_err(|error| from_warp_error(FUNCTION, error))
@@ -66,7 +70,11 @@ impl WarpModel {
     /// Returns: One Target per id with the median rt.
     ///
     /// [Documentation](https://phenological.github.io/quantion/?language=rust#calibrate)
-    pub fn calibrate(&self, anchor_samples: &mut [SampleFile], target_lists: &[Vec<Target>]) -> Result<Vec<Target>, QuantionError> {
+    pub fn calibrate(
+        &self,
+        anchor_samples: &mut [SampleFile],
+        target_lists: &[Vec<Target>],
+    ) -> Result<Vec<Target>, QuantionError> {
         const FUNCTION: &str = "calibrate";
         let mut readers: Vec<_> = anchor_samples.iter_mut().map(SampleFile::reader).collect();
         self.calibrate_from_readers(&mut readers, target_lists)

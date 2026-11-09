@@ -1,11 +1,11 @@
+use helpers::load_chromatograms;
+
+use super::helpers;
 use crate::utilities::{
     fit_peak::{PeakSeed, PeakShape, draw_peak, fit_peak},
     functions::{emg_fn, gaussian_fn, sigma_from_fwhm},
     structs::DataXY,
 };
-
-use super::helpers;
-use helpers::load_chromatograms;
 
 fn linspace(from: f64, to: f64, points: usize) -> Vec<f64> {
     (0..points)
@@ -120,9 +120,14 @@ fn emg_matches_the_direct_formula_near_the_center() {
         let direct = a
             * (std::f64::consts::PI / 2.0).sqrt()
             * (0.5 * a * a - (rt - 2.38) / tau).exp()
-            * crate::utilities::math::erfc_approx((a - (rt - 2.38) / sigma) / std::f64::consts::SQRT_2);
+            * crate::utilities::math::erfc_approx(
+                (a - (rt - 2.38) / sigma) / std::f64::consts::SQRT_2,
+            );
         let stable = emg_fn(rt, 1.0, 2.38, sigma, tau);
-        assert!((direct - stable).abs() < 1e-12, "rt {rt}: direct {direct}, stable {stable}");
+        assert!(
+            (direct - stable).abs() < 1e-12,
+            "rt {rt}: direct {direct}, stable {stable}"
+        );
     }
 }
 
@@ -131,7 +136,10 @@ fn erfcx_matches_its_definition() {
     for x in linspace(0.0, 20.0, 201) {
         let expected = (x * x).exp() * crate::utilities::math::erfc_approx(x);
         let actual = crate::utilities::math::erfcx_approx(x);
-        assert!((expected - actual).abs() <= 1e-12 * expected.max(1.0), "x {x}: {expected} vs {actual}");
+        assert!(
+            (expected - actual).abs() <= 1e-12 * expected.max(1.0),
+            "x {x}: {expected} vs {actual}"
+        );
     }
     assert!(crate::utilities::math::erfcx_approx(1e6).is_finite());
 }
@@ -158,7 +166,10 @@ fn emg_fit_reports_the_apex_as_height_and_center() {
         .iter()
         .map(|&v| emg_fn(v, 1000.0, 4.9, sigma_from_fwhm(0.15), 0.1))
         .collect();
-    let data = DataXY { x: x.clone(), y: y.clone() };
+    let data = DataXY {
+        x: x.clone(),
+        y: y.clone(),
+    };
     let params = fit_peak(&data, &apex(&data), PeakShape::EMG).expect("fit");
     let drawn = draw_peak(&data, &params);
     let mut top = 0;
@@ -167,16 +178,42 @@ fn emg_fit_reports_the_apex_as_height_and_center() {
             top = index;
         }
     }
-    assert!((drawn.y[top] - params.height).abs() < 1e-4 * params.height, "max {} height {}", drawn.y[top], params.height);
-    assert!((drawn.x[top] - params.center).abs() < 2e-3, "apex at {} center {}", drawn.x[top], params.center);
+    assert!(
+        (drawn.y[top] - params.height).abs() < 1e-4 * params.height,
+        "max {} height {}",
+        drawn.y[top],
+        params.height
+    );
+    assert!(
+        (drawn.x[top] - params.center).abs() < 2e-3,
+        "apex at {} center {}",
+        drawn.x[top],
+        params.center
+    );
     let data_apex = apex(&data);
-    assert!((params.height - data_apex.intensity).abs() < 0.01 * data_apex.intensity, "height {} data apex {}", params.height, data_apex.intensity);
-    assert!((params.center - data_apex.rt).abs() < 2e-3, "center {} data apex {}", params.center, data_apex.rt);
+    assert!(
+        (params.height - data_apex.intensity).abs() < 0.01 * data_apex.intensity,
+        "height {} data apex {}",
+        params.height,
+        data_apex.intensity
+    );
+    assert!(
+        (params.center - data_apex.rt).abs() < 2e-3,
+        "center {} data apex {}",
+        params.center,
+        data_apex.rt
+    );
 }
 
 #[test]
 fn gaussian_is_unchanged() {
-    let params = crate::utilities::fit_peak::PeakParameters { height: 500.0, center: 3.0, fwhm: 0.1, tail: 0.0, r2: 0.0 };
+    let params = crate::utilities::fit_peak::PeakParameters {
+        height: 500.0,
+        center: 3.0,
+        fwhm: 0.1,
+        tail: 0.0,
+        r2: 0.0,
+    };
     let drawn = crate::utilities::fit_peak::draw_peaks(&[params], 2.5, 3.5, 1001);
     let middle = drawn.y[500];
     assert!((middle - 500.0).abs() < 1e-9, "middle {middle}");

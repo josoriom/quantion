@@ -1,9 +1,10 @@
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    
-    get_peak::get_peak,
-    shape_filter::PeakShape,
-    structs::{DataXY, Roi},
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        get_peak::get_peak,
+        shape_filter::PeakShape,
+        structs::{DataXY, Roi},
+    },
 };
 
 const STEP_MINUTES: f64 = 0.006;
@@ -46,7 +47,14 @@ fn build_eic(from: f64, to: f64, signal: impl Fn(usize, f64) -> f64) -> DataXY {
 }
 
 fn find_at(eic: &DataXY, target: f64) -> f64 {
-    let peak = get_peak(eic, &Roi { rt: target, range: 0.5 }, &options());
+    let peak = get_peak(
+        eic,
+        &Roi {
+            rt: target,
+            range: 0.5,
+        },
+        &options(),
+    );
     assert!(peak.intensity > 0.0, "expected a peak near rt {target}");
     assert!(
         (peak.rt - target).abs() < 0.1,
@@ -103,7 +111,14 @@ fn picks_peak_closest_to_target_over_taller_neighbor() {
         let target = gaussian(time, 28.63, 300_000.0, 0.03);
         taller_neighbor + target + ripple(index, 20_000.0)
     });
-    let peak = get_peak(&eic, &Roi { rt: 28.63, range: 0.2 }, &options());
+    let peak = get_peak(
+        &eic,
+        &Roi {
+            rt: 28.63,
+            range: 0.2,
+        },
+        &options(),
+    );
     assert!(peak.intensity > 0.0, "expected a peak near rt 28.63");
     assert!(
         (peak.rt - 28.4).abs() > 0.1,

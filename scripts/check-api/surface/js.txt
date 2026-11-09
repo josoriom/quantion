@@ -1,5 +1,16 @@
 entry src/index-node.ts
 
+function annotateFeatures(files: SampleFile[], features: Array<{ mz: number; rt: number; }>, options?: AnnotateFeaturesOptions): Promise<FeatureAnnotation[]>
+
+interface AnnotateFeaturesOptions
+    library?: string | undefined
+    matches?: number | undefined
+    minRelativeIntensity?: number | undefined
+    model?: string | undefined
+    mzTolerance?: number | undefined
+    ppmTolerance?: number | undefined
+    rtRange?: number | undefined
+
 type BinaryInput = BinaryInput
 
 function calculateBaseline(y: Float64Array, options?: CalculateBaselineOptions): Float64Array
@@ -16,6 +27,16 @@ interface CalculateEicOptions
     ppmTolerance?: number | undefined
     timeUnit?: TimeUnit | undefined
     to?: number | undefined
+
+interface CompoundMatch
+    cosine: number
+    database: string
+    id: string
+    intensity: Float64Array<ArrayBufferLike>
+    label: string
+    metadata: Record<string, string>
+    mz: Float64Array<ArrayBufferLike>
+    score: number
 
 interface DataXY
     x: Float64Array<ArrayBufferLike>
@@ -47,6 +68,22 @@ interface Feature
     nPoints: number
     rt: number
     to: number
+
+interface FeatureAnnotation
+    cosine: number | null
+    database: string | null
+    files: FileAnnotation[]
+    frequency: number
+    id: string | null
+    label: string | null
+    mz: number
+    rt: number
+    score: number | null
+
+interface FileAnnotation
+    file: number
+    matches: CompoundMatch[]
+    scanIndex: number | null
 
 function findFeatures(file: SampleFile, options?: FindFeaturesOptions): Promise<Feature[]>
 
@@ -298,6 +335,17 @@ interface WriteMzmlOptions
 
 entry src/index-wasm.ts
 
+function annotateFeatures(files: SampleFile[], features: Array<{ mz: number; rt: number; }>, options?: AnnotateFeaturesOptions): Promise<FeatureAnnotation[]>
+
+interface AnnotateFeaturesOptions
+    library?: string | undefined
+    matches?: number | undefined
+    minRelativeIntensity?: number | undefined
+    model?: string | undefined
+    mzTolerance?: number | undefined
+    ppmTolerance?: number | undefined
+    rtRange?: number | undefined
+
 type BinaryInput = BinaryInput
 
 function calculateBaseline(y: Float64Array, options?: CalculateBaselineOptions): Float64Array
@@ -314,6 +362,16 @@ interface CalculateEicOptions
     ppmTolerance?: number | undefined
     timeUnit?: TimeUnit | undefined
     to?: number | undefined
+
+interface CompoundMatch
+    cosine: number
+    database: string
+    id: string
+    intensity: Float64Array<ArrayBufferLike>
+    label: string
+    metadata: Record<string, string>
+    mz: Float64Array<ArrayBufferLike>
+    score: number
 
 interface DataXY
     x: Float64Array<ArrayBufferLike>
@@ -345,6 +403,22 @@ interface Feature
     nPoints: number
     rt: number
     to: number
+
+interface FeatureAnnotation
+    cosine: number | null
+    database: string | null
+    files: FileAnnotation[]
+    frequency: number
+    id: string | null
+    label: string | null
+    mz: number
+    rt: number
+    score: number | null
+
+interface FileAnnotation
+    file: number
+    matches: CompoundMatch[]
+    scanIndex: number | null
 
 function findFeatures(file: SampleFile, options?: FindFeaturesOptions): Promise<Feature[]>
 

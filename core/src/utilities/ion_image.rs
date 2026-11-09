@@ -236,22 +236,6 @@ pub fn plan_ion_image_ranges(
     ranges_for_candidates(ion, &candidates, lower, upper)
 }
 
-pub fn compute_ion_image(
-    reader: &mut EicReader,
-    target_mz: f64,
-    tolerance: f64,
-    ms_level: u8,
-) -> IonImage {
-    let lower = target_mz - tolerance;
-    let upper = target_mz + tolerance;
-
-    let candidates = collect_candidates(reader, ms_level);
-    let mut sums = PixelSums::new();
-    let mut bounds = PixelBounds::new();
-    fold_candidates(reader, &candidates, lower, upper, &mut sums, &mut bounds);
-    build_image(&sums, &bounds)
-}
-
 pub struct ImageSession {
     target_mz: f64,
     tolerance: f64,

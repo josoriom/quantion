@@ -93,8 +93,8 @@ typedef int32_t (*fn_plan_open)(const uint8_t *, size_t, Buf *);
 typedef int32_t (*fn_plan_eic)(MzML *, double, double, double, double, double, uint8_t, Buf *);
 typedef int32_t (*fn_plan_find_targets)(MzML *, const double *, size_t, double, double, double, double, uint8_t, Buf *);
 typedef int32_t (*fn_plan_find_features)(MzML *, double, double, double, double, uint8_t, double, double, double, Buf *);
-typedef int32_t (*fn_plan_scans)(MzML *, uint8_t, double, double, uint8_t, uint8_t, Buf *);
-typedef int32_t (*fn_scans_with_arrays)(MzML *, uint8_t, double, double, uint8_t, uint8_t, const uint32_t *, size_t, Buf *);
+typedef int32_t (*fn_plan_scans)(MzML *, uint8_t, double, double, uint8_t, double, double, uint8_t, uint8_t, Buf *);
+typedef int32_t (*fn_scans_with_arrays)(MzML *, uint8_t, double, double, uint8_t, double, double, uint8_t, uint8_t, const uint32_t *, size_t, Buf *);
 typedef int32_t (*fn_plan_image)(MzML *, double, double, uint8_t, Buf *);
 typedef int32_t (*fn_parse_ion_path)(const char *, size_t, MzML **);
 typedef void (*fn_free_mzml)(MzML *);
@@ -114,7 +114,7 @@ typedef int32_t (*fn_calculate_baseline)(const double *, size_t, double, size_t,
 typedef int32_t (*fn_deisotope_features)(const double *, size_t, double, double, Buf *);
 typedef int32_t (*fn_find_features)(const MzML *, double, double, double, double, uint8_t, double, double, double, const CPeakOptions *, size_t, Buf *);
 typedef int32_t (*fn_match_features)(const char *, double, double, double, double, uint8_t, double, double, double, double, double, double, double, const CPeakOptions *, size_t, Buf *);
-typedef int32_t (*fn_get_scans)(const MzML *, uint8_t, double, double, uint8_t, uint8_t, Buf *);
+typedef int32_t (*fn_get_scans)(const MzML *, uint8_t, double, double, uint8_t, double, double, uint8_t, uint8_t, Buf *);
 typedef int32_t (*fn_scan_metadata)(MzML *, size_t, const char *, Buf *);
 typedef int32_t (*fn_plan_scan_metadata)(MzML *, size_t, Buf *);
 typedef int32_t (*fn_get_ion_image)(const MzML *, double, double, uint8_t, Buf *);
@@ -129,6 +129,12 @@ typedef int32_t (*fn_calibrate_rts)(const WarpModel *, const MzML *const *, size
                                     const double *, const double *, size_t, Buf *);
 typedef int32_t (*fn_predict_rts_from_file)(const WarpModel *, const MzML *, const double *, const double *, size_t, Buf *);
 typedef int32_t (*fn_plan_predict_rts)(const WarpModel *, MzML *, const double *, const double *, size_t, Buf *);
+typedef int32_t (*fn_annotate_features)(MzML *, const Model *, MzML *const *, size_t, const double *, const double *, size_t,
+                                        size_t, double, double, double, double, Buf *, Buf *, Buf *);
+typedef int32_t (*fn_plan_annotate_samples)(MzML *, const double *, const double *, size_t, size_t, double, double, double,
+                                            double, Buf *);
+typedef int32_t (*fn_plan_annotate_library)(MzML *, const Model *, MzML *const *, size_t, const double *, const double *,
+                                            size_t, size_t, double, double, double, double, Buf *);
 
 typedef struct
 {
@@ -177,6 +183,9 @@ typedef struct
   fn_calibrate_rts calibrate_rts;
   fn_predict_rts_from_file predict_rts_from_file;
   fn_plan_predict_rts plan_predict_rts;
+  fn_annotate_features annotate_features;
+  fn_plan_annotate_samples plan_annotate_samples;
+  fn_plan_annotate_library plan_annotate_library;
 } msabi_t;
 
 static msabi_t ABI{};
@@ -415,6 +424,12 @@ static int abi_load(const char *path, const char **err)
   if (resolve_required((void **)&ABI.predict_rts_from_file, "predict_rts_from_file"))
     goto fail;
   if (resolve_required((void **)&ABI.plan_predict_rts, "plan_predict_rts"))
+    goto fail;
+  if (resolve_required((void **)&ABI.annotate_features, "annotate_features"))
+    goto fail;
+  if (resolve_required((void **)&ABI.plan_annotate_samples, "plan_annotate_samples"))
+    goto fail;
+  if (resolve_required((void **)&ABI.plan_annotate_library, "plan_annotate_library"))
     goto fail;
 
   ABI.find_noise_level = (fn_find_noise_level)DLSYM(LIB_HANDLE, "find_noise_level");
@@ -1147,8 +1162,8 @@ static Napi::Value PlanScans(const Napi::CallbackInfo &info)
   if (!handle)
     return ThrowClosed(env, "get_scans");
   OwnedBuf out;
-  int32_t rc = ABI.plan_scans(handle, Byte(info, 1), Number(info, 2), Number(info, 3), Byte(info, 4), Byte(info, 5),
-                              out.Out());
+  int32_t rc = ABI.plan_scans(handle, Byte(info, 1), Number(info, 2), Number(info, 3), Byte(info, 4), Number(info, 5),
+                              Number(info, 6), Byte(info, 7), Byte(info, 8), out.Out());
   if (rc != 0)
     return ThrowRc(env, "get_scans", rc);
   return RangesToArray(env, out.buf);
@@ -1255,8 +1270,8 @@ static Napi::Value GetScans(const Napi::CallbackInfo &info)
   if (!handle)
     return ThrowClosed(env, "get_scans");
   OwnedBuf out;
-  int32_t rc = ABI.get_scans(handle, Byte(info, 1), Number(info, 2), Number(info, 3), Byte(info, 4), Byte(info, 5),
-                             out.Out());
+  int32_t rc = ABI.get_scans(handle, Byte(info, 1), Number(info, 2), Number(info, 3), Byte(info, 4), Number(info, 5),
+                             Number(info, 6), Byte(info, 7), Byte(info, 8), out.Out());
   if (rc != 0)
     return ThrowRc(env, "get_scans", rc);
   return TakeArrayBuffer(env, out.Out());
@@ -1264,9 +1279,9 @@ static Napi::Value GetScans(const Napi::CallbackInfo &info)
 
 static int32_t CallScansWithArrays(const Napi::CallbackInfo &info, fn_scans_with_arrays call, MzML *handle, Buf *out)
 {
-  Napi::Uint32Array accessions = info[6].As<Napi::Uint32Array>();
-  return call(handle, Byte(info, 1), Number(info, 2), Number(info, 3), Byte(info, 4), Byte(info, 5),
-              accessions.Data(), accessions.ElementLength(), out);
+  Napi::Uint32Array accessions = info[9].As<Napi::Uint32Array>();
+  return call(handle, Byte(info, 1), Number(info, 2), Number(info, 3), Byte(info, 4), Number(info, 5), Number(info, 6),
+              Byte(info, 7), Byte(info, 8), accessions.Data(), accessions.ElementLength(), out);
 }
 
 static Napi::Value PlanScansWithArrays(const Napi::CallbackInfo &info)
@@ -1504,6 +1519,90 @@ static Napi::Value DisposeWarpModel(const Napi::CallbackInfo &info)
   return info.Env().Undefined();
 }
 
+static bool ReadFileHandles(Napi::Env env, Napi::Value value, std::vector<MzML *> *files)
+{
+  if (!value.IsArray())
+  {
+    Napi::TypeError::New(env, "files must be an array of sample files").ThrowAsJavaScriptException();
+    return false;
+  }
+  Napi::Array values = value.As<Napi::Array>();
+  files->resize(values.Length());
+  for (uint32_t i = 0; i < values.Length(); i++)
+  {
+    (*files)[i] = GetHandle(values.Get(i));
+    if (!(*files)[i])
+    {
+      Napi::TypeError::New(env, "files must be loaded sample files").ThrowAsJavaScriptException();
+      return false;
+    }
+  }
+  return true;
+}
+
+static Napi::Value AnnotateFeatures(const Napi::CallbackInfo &info)
+{
+  Napi::Env env = info.Env();
+  MzML *library = info[0].IsNull() ? nullptr : GetHandle(info[0]);
+  Model *model = info[1].IsNull() ? nullptr : GetModel(info[1]);
+  std::vector<MzML *> files;
+  if (!ReadFileHandles(env, info[2], &files))
+    return env.Undefined();
+  Napi::Float64Array mzs = info[3].As<Napi::Float64Array>();
+  Napi::Float64Array rts = info[4].As<Napi::Float64Array>();
+  OwnedBuf features;
+  OwnedBuf fileRows;
+  OwnedBuf matches;
+  int32_t rc = ABI.annotate_features(library, model, files.data(), files.size(), Float64Ptr(mzs), Float64Ptr(rts),
+                                     mzs.ElementLength(), (size_t)Number(info, 5), Number(info, 6), Number(info, 7),
+                                     Number(info, 8), Number(info, 9), features.Out(), fileRows.Out(), matches.Out());
+  if (rc != 0)
+    return ThrowRc(env, "annotate_features", rc);
+  Napi::Array result = Napi::Array::New(env, 3);
+  result.Set((uint32_t)0, TakeArrayBuffer(env, features.Out()));
+  result.Set((uint32_t)1, TakeArrayBuffer(env, fileRows.Out()));
+  result.Set((uint32_t)2, TakeArrayBuffer(env, matches.Out()));
+  return result;
+}
+
+static Napi::Value PlanAnnotateSamples(const Napi::CallbackInfo &info)
+{
+  Napi::Env env = info.Env();
+  MzML *handle = GetHandle(info[0]);
+  if (!handle)
+    return ThrowClosed(env, "annotate_features");
+  Napi::Float64Array mzs = info[1].As<Napi::Float64Array>();
+  Napi::Float64Array rts = info[2].As<Napi::Float64Array>();
+  OwnedBuf out;
+  int32_t rc = ABI.plan_annotate_samples(handle, Float64Ptr(mzs), Float64Ptr(rts), mzs.ElementLength(),
+                                         (size_t)Number(info, 3), Number(info, 4), Number(info, 5), Number(info, 6),
+                                         Number(info, 7), out.Out());
+  if (rc != 0)
+    return ThrowRc(env, "annotate_features", rc);
+  return RangesToArray(env, out.buf);
+}
+
+static Napi::Value PlanAnnotateLibrary(const Napi::CallbackInfo &info)
+{
+  Napi::Env env = info.Env();
+  MzML *library = GetHandle(info[0]);
+  Model *model = GetModel(info[1]);
+  if (!library || !model)
+    return ThrowClosed(env, "annotate_features");
+  std::vector<MzML *> files;
+  if (!ReadFileHandles(env, info[2], &files))
+    return env.Undefined();
+  Napi::Float64Array mzs = info[3].As<Napi::Float64Array>();
+  Napi::Float64Array rts = info[4].As<Napi::Float64Array>();
+  OwnedBuf out;
+  int32_t rc = ABI.plan_annotate_library(library, model, files.data(), files.size(), Float64Ptr(mzs), Float64Ptr(rts),
+                                         mzs.ElementLength(), (size_t)Number(info, 5), Number(info, 6), Number(info, 7),
+                                         Number(info, 8), Number(info, 9), out.Out());
+  if (rc != 0)
+    return ThrowRc(env, "annotate_features", rc);
+  return RangesToArray(env, out.buf);
+}
+
 static Napi::Value CalibrateRts(const Napi::CallbackInfo &info)
 {
   Napi::Env env = info.Env();
@@ -1648,6 +1747,9 @@ static Napi::Object Init(Napi::Env env, Napi::Object exports)
   exports.Set("loadWarp", Napi::Function::New(env, LoadWarp));
   exports.Set("disposeWarpModel", Napi::Function::New(env, DisposeWarpModel));
   exports.Set("calibrateRts", Napi::Function::New(env, CalibrateRts));
+  exports.Set("annotateFeatures", Napi::Function::New(env, AnnotateFeatures));
+  exports.Set("planAnnotateSamples", Napi::Function::New(env, PlanAnnotateSamples));
+  exports.Set("planAnnotateLibrary", Napi::Function::New(env, PlanAnnotateLibrary));
   exports.Set("predictRts", Napi::Function::New(env, PredictRts));
   exports.Set("planPredictRts", Napi::Function::New(env, PlanPredictRts));
   return exports;

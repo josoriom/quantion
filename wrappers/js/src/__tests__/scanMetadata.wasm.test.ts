@@ -28,6 +28,15 @@ describeWithBundle("getScanMetadata on wasm", () => {
 
   afterAll(() => server.stop());
 
+  it("reads scans by rt and mz together, in memory and over a URL", async () => {
+    const query = { rt: { from: 1.5, to: 4.5 }, mz: 303 };
+    for (const file of [await quantion.parseIon(library), await quantion.parseIon(server.url)]) {
+      const scans = await quantion.getScans(file, query, { level: 2 });
+      expect(scans.map((scan: { rt: number }) => scan.rt)).toEqual([4]);
+      file.dispose();
+    }
+  });
+
   it("reads the metadata of a file in memory", async () => {
     const file = await quantion.parseIon(library);
     for (let position = 0; position < SCAN_COUNT; position += 1) {

@@ -51,7 +51,8 @@ def module_file(path):
 
 def read_until_body(text, start):
     end = text.index("{", start)
-    return " ".join(text[start:end].split())
+    signature = " ".join(text[start:end].split())
+    return signature.replace("( ", "(").replace(", )", ")")
 
 
 def read_block(text, start):
@@ -76,8 +77,17 @@ def public_lines(block, pattern):
     return lines
 
 
-def describe(path, name):
+def read_definition_text(path, name):
     text = module_file(path).read_text(encoding="utf-8").split("\n#[cfg(test)]")[0]
+    pattern = r"pub use ([a-z_0-9]+)::(?:\{[^}]*\b" + name + r"\b[^}]*\}|" + name + r")\s*;"
+    reexport = re.search(pattern, text)
+    if reexport:
+        return read_definition_text(f"{path}::{reexport.group(1)}", name)
+    return text
+
+
+def describe(path, name):
+    text = read_definition_text(path, name)
     out = []
     function = re.search(r"pub fn " + name + r"\b", text)
     struct = re.search(r"pub struct " + name + r"\b", text)

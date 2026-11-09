@@ -2,13 +2,14 @@
 // find_noise_level returned the peak's own apex as the noise floor, so get_peak rejected it.
 // Fully synthetic (no fixture) so it runs identically here and in quantion/core/tests/.
 
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    find_noise_level::find_noise_level,
-    
-    get_peak::get_peak,
-    shape_filter::PeakShape,
-    structs::{DataXY, Roi},
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        find_noise_level::find_noise_level,
+        get_peak::get_peak,
+        shape_filter::PeakShape,
+        structs::{DataXY, Roi},
+    },
 };
 
 fn options() -> FindPeaksOptions {
@@ -41,7 +42,14 @@ fn lone_peak_eic(points: usize, center_index: usize, apex: f64, width_points: f6
 fn finds_isolated_lone_peak_1() {
     let eic = lone_peak_eic(200, 100, 350_000.0, 4.0);
     let center = eic.x[100];
-    let peak = get_peak(&eic, &Roi { rt: center, range: 1.0 }, &options());
+    let peak = get_peak(
+        &eic,
+        &Roi {
+            rt: center,
+            range: 1.0,
+        },
+        &options(),
+    );
     assert!(
         peak.intensity > 0.0,
         "get_peak must find a lone 350k peak on a flat baseline"

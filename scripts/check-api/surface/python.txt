@@ -1,3 +1,12 @@
+typeddict AnnotateFeaturesOptions total=False
+    library?: str
+    matches?: int
+    min_relative_intensity?: float
+    model?: str
+    mz_tolerance?: float
+    ppm_tolerance?: float
+    rt_range?: float
+
 typeddict CalculateBaselineOptions total=False
     lambda?: float
     max_iterations?: int
@@ -8,6 +17,16 @@ typeddict CalculateEicOptions total=False
     ppm_tolerance?: float
     time_unit?: TimeUnit | str
     to?: float
+
+typeddict CompoundMatch total=True
+    cosine: float
+    database: str
+    id: str
+    intensity: np.ndarray
+    label: str
+    metadata: Dict[str, str]
+    mz: np.ndarray
+    score: float
 
 typeddict DataXY total=True
     x: np.ndarray
@@ -31,6 +50,22 @@ typeddict Feature total=False
     n_points: int
     rt: float
     to: float
+
+typeddict FeatureAnnotation total=True
+    cosine: float | None
+    database: str | None
+    files: List[FileAnnotation]
+    frequency: float
+    id: str | None
+    label: str | None
+    mz: float
+    rt: float
+    score: float | None
+
+typeddict FileAnnotation total=True
+    file: int
+    matches: List[CompoundMatch]
+    scan_index: int | None
 
 typeddict FindFeaturesOptions total=False
     eic?: CalculateEicOptions
@@ -158,6 +193,7 @@ typeddict PredictedRt total=True
 
 class Quantion(object)
     def __init__(self, abi: _ABI) -> None
+    def annotate_features(self, files, features, options=None)
     def calculate_baseline(self, y, options=None)
     def calculate_eic(self, file: SampleFile, mz: float, options=None)
     def deisotope_features(self, features, options=None)
@@ -171,7 +207,7 @@ class Quantion(object)
     def get_ion_image(self, file: SampleFile, mz: float, options=None)
     def get_peak(self, x, y, rt: float, options=None)
     def get_scan_metadata(self, file: SampleFile, index: int, options=None)
-    def get_scans(self, file: SampleFile, *, rt=None, mz=None, options=None)
+    def get_scans(self, file: SampleFile, rt=None, mz=None, options=None)
     def load_model(self, source) -> Model
     def load_warp(self, model: Model) -> WarpModel
     def match_features(self, directory, options=None)
@@ -262,6 +298,8 @@ typeddict WriteMzmlOptions total=False
     out?: str
     overwrite?: bool
 
+def annotate_features(files: Sequence[SampleFile], features: Sequence[Feature], options: AnnotateFeaturesOptions | None = None) -> List[FeatureAnnotation]
+
 def calculate_baseline(y: Sequence, options: CalculateBaselineOptions | None = None) -> np.ndarray
 
 def calculate_eic(file: SampleFile, mz: float, options: CalculateEicOptions | None = None) -> DataXY
@@ -288,7 +326,7 @@ def get_peak(x: Sequence, y: Sequence, rt: float, options: GetPeakOptions | None
 
 def get_scan_metadata(file: SampleFile, index: int, options: GetScanMetadataOptions | None = None) -> List[ScanParam]
 
-def get_scans(file: SampleFile, *, rt: float | FromTo | None = None, mz: float | FromTo | None = None, options: GetScansOptions | None = None) -> List[Scan]
+def get_scans(file: SampleFile, rt: float | FromTo | None = None, mz: float | FromTo | None = None, options: GetScansOptions | None = None) -> List[Scan]
 
 def load_model(source) -> Model
 

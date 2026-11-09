@@ -4,10 +4,10 @@ use std::{
     sync::OnceLock,
 };
 
-use crate::utilities::{find_noise_level::find_noise_level, structs::DataXY};
+use helpers::{Eic, approx_eq, jitter, load_chromatograms_from};
 
 use super::helpers;
-use helpers::{Eic, approx_eq, jitter, load_chromatograms_from};
+use crate::utilities::{find_noise_level::find_noise_level, structs::DataXY};
 
 struct Test {
     data: DataXY,

@@ -84,6 +84,11 @@ const EMPTY_IMAGE = emptyBridge(2, [
 const SAVED_LIB = process.env.QUANTION_LIB;
 process.env.QUANTION_LIB = SAVED_LIB ?? "/quantion/mocked/native/library";
 
+const WHOLE_RUN = {
+  rt: { kind: 1, from: 0, to: 10 },
+  mz: { kind: 0, from: NaN, to: NaN },
+};
+
 describe.each(modulePaths)(
   "remote handle lifetime (%s)",
   (_name, modulePath) => {
@@ -166,7 +171,7 @@ describe.each(modulePaths)(
     test("an open remote file prefetches on scans", async () => {
       const handle = await openRemote();
 
-      await backend.getScans(handle, 0, 0, 10, 1, 0);
+      await backend.getScans(handle, WHOLE_RUN, 1, 0);
 
       expect(native.planScans).toHaveBeenCalledTimes(1);
       expect(native.getScans).toHaveBeenCalledTimes(1);
@@ -184,7 +189,7 @@ describe.each(modulePaths)(
     test("a local file asks for no scan plan at all", async () => {
       const handle = { handle: "local file" };
 
-      await backend.getScans(handle, 0, 0, 10, 1, 0);
+      await backend.getScans(handle, WHOLE_RUN, 1, 0);
       await backend.getIonImage(handle, 100, 0.1, 1);
 
       expect(native.planScans).not.toHaveBeenCalled();

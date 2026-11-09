@@ -6,7 +6,10 @@ use std::{
 };
 
 use super::{
-    public::{fail, remember},Buf, ERR_ENCODE, ERR_INVALID_ARGS, ERR_PANIC, OK, clear_buf, write_buf};
+    Buf, ERR_ENCODE, ERR_INVALID_ARGS, ERR_PANIC, OK, clear_buf,
+    public::{fail, remember},
+    write_buf,
+};
 use crate::utilities::{
     bridge::{
         Column, QUANTION_PAYLOAD_MODEL_METADATA, QUANTION_SECTION_MODEL_METADATA_KEY_BYTES,
@@ -15,7 +18,6 @@ use crate::utilities::{
     },
     load_model::{Model, ModelInput, load_model},
 };
-
 
 pub struct ModelHandle {
     pub(super) model: Model,

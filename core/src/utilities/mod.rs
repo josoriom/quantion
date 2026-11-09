@@ -1,8 +1,12 @@
+pub(crate) mod annotate_features;
 pub mod calculate_eic;
-pub mod ion;
+pub(crate) mod clean_spectrum;
+pub(crate) mod get_cosine;
 pub(crate) mod get_scan_metadata;
+pub mod ion;
 pub mod ion_image;
 pub mod parse_ion;
+pub(crate) mod spectrum_model;
 
 pub mod parallel;
 
@@ -41,6 +45,8 @@ pub mod load_model;
 pub mod warp_model;
 
 pub mod scan_for_peaks;
+
+pub mod get_scans;
 
 pub mod structs;
 

@@ -6,7 +6,7 @@
       "min_supported": 1,
       "max_supported": 1
     },
-    "description": "feat: release v0.2.1"
+    "description": "feat: read scan metadata + custom arrays from .ion files"
   },
   {
     "package": "0.2.0",

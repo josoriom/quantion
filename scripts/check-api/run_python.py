@@ -214,6 +214,28 @@ def main():
         out.append(f"predict_rts.{target['id']}.rt = {number(prediction['rt'])}")
         out.append(f"predict_rts.{target['id']}.uncertainty = {number(prediction['uncertainty'])}")
 
+    folder = os.path.join(directory, "..", "annotate")
+    samples = [quantion.parse_ion(os.path.join(folder, f"{name}.ion")) for name in ("sample_peak_and_ms2", "sample_peak_only", "sample_no_peak")]
+    options = {"library": os.path.join(folder, "library.ion"), "model": os.path.join(folder, "model.onnx")}
+    found = quantion.annotate_features(samples, [{"mz": 195.0877, "rt": 2.0}], options)
+    out.append(f"annotate_features.count = {len(found)}")
+    for index, annotation in enumerate(found):
+        name = f"annotate_features[{index}]"
+        for key in ("label", "id", "database"):
+            out.append(f"{name}.{key} = {'NA' if annotation[key] is None else annotation[key]}")
+        out.append(f"{name}.frequency = {number(annotation['frequency'])}")
+        for key in ("score", "cosine"):
+            out.append(f"{name}.{key} = {'NA' if annotation[key] is None else number(annotation[key])}")
+        for file in annotation["files"]:
+            scan = "NA" if file["scan_index"] is None else file["scan_index"]
+            out.append(f"{name}.files[{file['file']}].scan_index = {scan}")
+            for rank, match in enumerate(file["matches"]):
+                prefix = f"{name}.files[{file['file']}].matches[{rank}]"
+                for key in ("label", "id", "database"):
+                    out.append(f"{prefix}.{key} = {match[key]}")
+                for key in ("score", "cosine"):
+                    out.append(f"{prefix}.{key} = {number(match[key])}")
+
     print("\n".join(out))
 
 

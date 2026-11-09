@@ -1,17 +1,19 @@
 use std::cmp::Ordering;
 
-use crate::options::{CalculateBaselineOptions, FindPeaksOptions};
-use crate::utilities::{
-    calculate_baseline::calculate_baseline,
-    cheminfo::sgg::{SggOptions, sgg},
-    closest_index,
-    find_noise_level::find_noise_level,
-    get_boundaries::{Boundaries, BoundariesOptions, SmoothedSignal, find_boundaries},
-    math::xy_integration,
-    resolve_apexes::resolve_apexes,
-    scan_for_peaks::scan_for_peaks,
-    shape_filter::{Candidate, ShapeFilter},
-    structs::{DataXY, Peak},
+use crate::{
+    traces::{CalculateBaselineOptions, FindPeaksOptions},
+    utilities::{
+        calculate_baseline::calculate_baseline,
+        cheminfo::sgg::{SggOptions, sgg},
+        closest_index,
+        find_noise_level::find_noise_level,
+        get_boundaries::{Boundaries, BoundariesOptions, SmoothedSignal, find_boundaries},
+        math::xy_integration,
+        resolve_apexes::resolve_apexes,
+        scan_for_peaks::scan_for_peaks,
+        shape_filter::{Candidate, ShapeFilter},
+        structs::{DataXY, Peak},
+    },
 };
 
 const PEAK_EDGE_SLOPE_LEVEL: u8 = 0;
@@ -81,7 +83,6 @@ pub(crate) fn find_separated_peaks(
     options: &FindPeaksOptions,
     separation: Separation,
 ) -> Vec<Peak> {
-
     let n = data.y.len();
     if n == 0 {
         return Vec::new();
@@ -121,7 +122,10 @@ pub(crate) fn find_separated_peaks(
 
     let bopt = BoundariesOptions::default();
 
-    let smoothed_signal = get_smoothed_signal(&normalized_data, (options.kernel_size > 0).then_some(options.kernel_size));
+    let smoothed_signal = get_smoothed_signal(
+        &normalized_data,
+        (options.kernel_size > 0).then_some(options.kernel_size),
+    );
     let boundary_input = smoothed_signal.as_ref().unwrap_or(&normalized_data);
 
     let smoothed = SmoothedSignal::new(boundary_input, &bopt);
@@ -178,7 +182,12 @@ pub(crate) fn find_separated_peaks(
         return Vec::new();
     }
 
-    ShapeFilter::new(options.min_r2, options.shape).retain(&mut candidates, &data.x, &data.y, &baseline);
+    ShapeFilter::new(options.min_r2, options.shape).retain(
+        &mut candidates,
+        &data.x,
+        &data.y,
+        &baseline,
+    );
 
     if candidates.is_empty() {
         return Vec::new();
@@ -302,7 +311,11 @@ fn filter_peak_candidates(peaks: Vec<PeakCandidate>, options: &FindPeaksOptions)
         .into_iter()
         .filter(|peak| peak.intensity >= options.min_intensity)
         .filter(|peak| peak.n_points >= options.min_peak_width_points)
-        .filter(|peak| options.min_integral.is_none_or(|min_integral| peak.integral >= min_integral))
+        .filter(|peak| {
+            options
+                .min_integral
+                .is_none_or(|min_integral| peak.integral >= min_integral)
+        })
         .map(Peak::from)
         .collect()
 }

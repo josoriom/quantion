@@ -1,11 +1,12 @@
-use super::helpers;
-
 use helpers::{Eic, load_chromatograms, param_f64};
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    
-    get_peak::get_peak,
-    structs::{DataXY, Roi},
+
+use super::helpers;
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        get_peak::get_peak,
+        structs::{DataXY, Roi},
+    },
 };
 
 const RT_TOLERANCE: f64 = 0.02;
@@ -36,7 +37,10 @@ fn small_peak_next_to_large_peak_is_found() {
         let reference_rt = param_f64(eic, "exp.rt");
         let peak = get_peak(
             &data,
-            &Roi { rt: param_f64(eic, "opt.target"), range: param_f64(eic, "opt.roi_half_width") },
+            &Roi {
+                rt: param_f64(eic, "opt.target"),
+                range: param_f64(eic, "opt.roi_half_width"),
+            },
             &pipeline_options(),
         );
         assert!(

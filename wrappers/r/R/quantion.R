@@ -470,17 +470,17 @@ write_mzml <- function(file, options = write_mzml_options()) {
   if (is.null(out)) bytes else invisible(NULL)
 }
 
-.QUERY_RT_RANGE <- 0L
-.QUERY_CLOSEST_RT <- 1L
-.QUERY_MZ_RANGE <- 2L
-.QUERY_CLOSEST_MZ <- 3L
+.POSITION_ANY <- 0
+.POSITION_RANGE <- 1
+.POSITION_CLOSEST <- 2
 
-.get_scan_query <- function(function_name, value, name, range_query, closest_query) {
+.get_position <- function(function_name, value, name) {
+  if (is.null(value)) return(c(.POSITION_ANY, NaN, NaN))
   if (!is.numeric(value) || !(length(value) %in% c(1, 2)) || anyNA(value))
     .invalid(function_name, name, "must be one number or c(from, to)")
   value <- as.numeric(value)
-  if (length(value) == 2) return(list(type = range_query, from = value[1], to = value[2]))
-  list(type = closest_query, from = value, to = NaN)
+  if (length(value) == 2) return(c(.POSITION_RANGE, value[1], value[2]))
+  c(.POSITION_CLOSEST, value, NaN)
 }
 
 .add_scan_arrays <- function(found, keys) {
@@ -505,30 +505,26 @@ get_scans <- function(file, rt = NULL, mz = NULL, options = get_scans_options())
   function_name <- "get_scans"
   file <- .check_sample(function_name, file)
   options <- .check_options(function_name, "options", options, "get_scans_options", "get_scans_options")
-  if (is.null(rt) == is.null(mz)) .invalid(function_name, "rt", "or mz must be given, not both")
-  query <- if (!is.null(rt)) {
-    .get_scan_query(function_name, rt, "rt", .QUERY_RT_RANGE, .QUERY_CLOSEST_RT)
-  } else {
-    .get_scan_query(function_name, mz, "mz", .QUERY_MZ_RANGE, .QUERY_CLOSEST_MZ)
-  }
+  if (is.null(rt) && is.null(mz)) .invalid(function_name, "rt", "or mz must be given")
+  query <- c(.get_position(function_name, rt, "rt"), .get_position(function_name, mz, "mz"))
   level <- as.integer(options$level)
   source <- .remote_source(file)
   if (!identical(options$arrays, .DEFAULT_SCAN_ARRAYS)) {
     keys <- vapply(options$arrays, function(array) array$key, character(1))
     accessions <- vapply(options$arrays, function(array) as.numeric(sub("MS:", "", array$accession)), numeric(1))
     if (!is.null(source)) {
-      .prefetch(source, .Call("C_plan_scans_with_arrays", file, query$type, query$from, query$to, level,
+      .prefetch(source, .Call("C_plan_scans_with_arrays", file, query, level,
                               options$time_unit, accessions, PACKAGE = "quantion"))
     }
-    found <- .Call("C_get_scans_with_arrays", file, query$type, query$from, query$to, level,
+    found <- .Call("C_get_scans_with_arrays", file, query, level,
                    options$time_unit, accessions, PACKAGE = "quantion")
     return(.add_scan_arrays(found, keys))
   }
   if (!is.null(source)) {
-    .prefetch(source, .Call("C_plan_scans", file, query$type, query$from, query$to, level,
+    .prefetch(source, .Call("C_plan_scans", file, query, level,
                             options$time_unit, PACKAGE = "quantion"))
   }
-  .Call("C_get_scans", file, query$type, query$from, query$to, level, options$time_unit,
+  .Call("C_get_scans", file, query, level, options$time_unit,
         PACKAGE = "quantion")
 }
 
@@ -937,3 +933,88 @@ calibrate <- function(warp, anchor_samples, target_lists) {
   attr(handle, "quantion_source") <- source
   handle
 }
+
+.DEFAULT_LIBRARY <- "https://github.com/josoriom/cipher/releases/latest/download/library_positive.ion"
+.DEFAULT_MODEL <- "https://github.com/josoriom/cipher/releases/latest/download/model.onnx"
+.ANNOTATION_FEATURE_NAMES <- c("mz", "rt", "from", "to", "intensity", "integral", "n_points", "frequency")
+
+annotate_features_options <- function(library = .DEFAULT_LIBRARY, model = .DEFAULT_MODEL, matches = 3L,
+                                      ppm_tolerance = 20, mz_tolerance = 0.005, rt_range = 0.3,
+                                      min_relative_intensity = 0.02) {
+  function_name <- "annotate_features_options"
+  .as_options("annotate_features_options", list(
+    library = .check_text(function_name, "library", library),
+    model = .check_text(function_name, "model", model),
+    matches = .check_number(function_name, "matches", matches),
+    ppm_tolerance = .check_number(function_name, "ppm_tolerance", ppm_tolerance),
+    mz_tolerance = .check_number(function_name, "mz_tolerance", mz_tolerance),
+    rt_range = .check_number(function_name, "rt_range", rt_range),
+    min_relative_intensity = .check_number(function_name, "min_relative_intensity", min_relative_intensity)
+  ))
+}
+
+.get_compound_matches <- function(rows) {
+  if (nrow(rows) == 0)
+    return(data.frame(label = character(), id = character(), database = character(), score = numeric(),
+                      cosine = numeric(), stringsAsFactors = FALSE))
+  matches <- rows[, c("label", "id", "database", "score", "cosine")]
+  matches$mz <- rows$mz
+  matches$intensity <- rows$intensity
+  matches$metadata <- lapply(seq_len(nrow(rows)), function(index) {
+    names <- rows$metadata_names[index]
+    if (!nzchar(names)) return(character())
+    stats::setNames(strsplit(rows$metadata_values[index], "\x1f", fixed = TRUE)[[1]],
+                    strsplit(names, "\x1f", fixed = TRUE)[[1]])
+  })
+  rownames(matches) <- NULL
+  matches
+}
+
+.get_annotations <- function(tables) {
+  features <- tables[[1]]
+  files <- tables[[2]]
+  matches <- tables[[3]]
+  features$score[is.nan(features$score)] <- NA
+  features$cosine[is.nan(features$cosine)] <- NA
+  features$files <- lapply(seq_len(nrow(features)) - 1, function(feature) {
+    rows <- files[files$feature == feature, c("file", "scan_index"), drop = FALSE]
+    rows$scan_index[is.nan(rows$scan_index)] <- NA
+    rows$matches <- lapply(rows$file, function(file) {
+      .get_compound_matches(matches[matches$feature == feature & matches$file == file, , drop = FALSE])
+    })
+    rownames(rows) <- NULL
+    rows
+  })
+  features
+}
+
+annotate_features <- function(files, features, options = annotate_features_options()) {
+  function_name <- "annotate_features"
+  options <- .check_options(function_name, "options", options, "annotate_features_options", "annotate_features_options")
+  if (!is.list(files) || inherits(files, "quantion_sample"))
+    .invalid(function_name, "files", "must be a list of samples")
+  for (index in seq_along(files)) .check_sample(function_name, files[[index]])
+  features <- .check_table(function_name, features, .ANNOTATION_FEATURE_NAMES, "features")
+  mzs <- as.numeric(.get_column(function_name, features, "mz", TRUE, NA, "features"))
+  rts <- as.numeric(.get_column(function_name, features, "rt", TRUE, NA, "features"))
+  settings <- as.numeric(c(options$matches, options$ppm_tolerance, options$mz_tolerance, options$rt_range,
+                           options$min_relative_intensity))
+  if (length(mzs) == 0)
+    return(.get_annotations(.Call("C_annotate_features", NULL, NULL, files, mzs, rts, settings, PACKAGE = "quantion")))
+  library <- parse_ion(options$library)
+  model <- load_model(options$model)
+  on.exit({
+    dispose(library)
+    dispose(model)
+  }, add = TRUE)
+  for (file in files) {
+    source <- .remote_source(file)
+    if (!is.null(source))
+      .prefetch(source, .Call("C_plan_annotate_samples", file, mzs, rts, settings, PACKAGE = "quantion"))
+  }
+  source <- .remote_source(library)
+  if (!is.null(source))
+    .prefetch(source, .Call("C_plan_annotate_library", library, model, files, mzs, rts, settings, PACKAGE = "quantion"))
+  .get_annotations(.Call("C_annotate_features", library, model, files, mzs, rts, settings, PACKAGE = "quantion"))
+}
+

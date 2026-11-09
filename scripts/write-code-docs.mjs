@@ -200,7 +200,7 @@ function getTypeExample(entry, language) {
 
 function getRustBlock(entry) {
   const lines = [`**${entry.name}** · ${entry.group}`, "", entry.summary];
-  const warning = entry.languages.rust?.warning ?? entry.warning;
+  const warning = getWarning(entry, "rust");
   if (warning) lines.push("", `**Warning:** ${escapeRustText(warning)}`);
   const argumentsList = getArguments(entry, "rust");
   if (argumentsList.length) {
@@ -243,9 +243,14 @@ function writeRust(entry, relativePaths, pattern) {
   return false;
 }
 
+function getWarning(entry, language) {
+  return entry.languages[language]?.warning ?? entry.warning;
+}
+
 function getPythonBlock(entry) {
   const lines = [`${entry.name} · ${entry.group}`, "", entry.summary];
-  if (entry.warning) lines.push("", "Warning:", `    ${entry.warning}`);
+  const warning = getWarning(entry, "python");
+  if (warning) lines.push("", "Warning:", `    ${warning}`);
   const argumentsList = getArguments(entry, "python");
   if (argumentsList.length) {
     lines.push("", "Args:");
@@ -315,7 +320,8 @@ function writePythonAssignedDoc(entry, relativePath, name) {
 
 function getJsBlock(entry, indent) {
   const lines = [`${getDisplayName(entry, "js")} · ${entry.group}`, "", entry.summary];
-  if (entry.warning) lines.push("", `**Warning:** ${entry.warning}`);
+  const warning = getWarning(entry, "js");
+  if (warning) lines.push("", `**Warning:** ${warning}`);
   const argumentsList = getArguments(entry, "js");
   if (argumentsList.length) {
     lines.push("");
@@ -515,7 +521,8 @@ function writeR(entry, relativePath) {
   if (entry.kind === "function") text = writeRFunctionPage(entry, text);
   if (entry.group === "Options") text = writeROptionsPage(entry, text);
   let section = `\\section{Documentation}{\n\\url{${getLink(entry, "r")}}\n}\n`;
-  if (entry.warning) section = `\\section{Warning}{\n${escapeRd(entry.warning)}\n}\n${section}`;
+  const warning = getWarning(entry, "r");
+  if (warning) section = `\\section{Warning}{\n${escapeRd(warning)}\n}\n${section}`;
   text = text.replace(/\\section\{Warning\}\{\n[^\n]*\n\}\n/, "");
   text = text.replace(/\\section\{Documentation\}\{\n[^\n]*\n\}\n/, "");
   text = text.includes("\\examples{") ? text.replace("\\examples{", `${section}\\examples{`) : `${text.trimEnd()}\n${section}`;
@@ -523,19 +530,29 @@ function writeR(entry, relativePath) {
   return true;
 }
 
-const rustFunctionFiles = ["core/src/files.rs", "core/src/traces.rs", "core/src/targets.rs", "core/src/features.rs", "core/src/models.rs"];
+const rustFunctionFiles = ["core/src/files.rs", "core/src/traces.rs", "core/src/targets.rs", "core/src/features.rs", "core/src/annotations.rs", "core/src/models.rs"];
 const rustTypeFiles = [
-  "core/src/options.rs",
+  "core/src/traces.rs",
+  "core/src/targets.rs",
+  "core/src/features.rs",
+  "core/src/annotations.rs",
   "core/src/error.rs",
   "core/src/sample_file.rs",
   "core/src/files.rs",
-  "core/src/utilities/structs.rs",
+  "core/src/utilities/structs/data_xy.rs",
+  "core/src/utilities/structs/from_to.rs",
+  "core/src/utilities/structs/peak.rs",
+  "core/src/utilities/structs/scan_query.rs",
+  "core/src/utilities/structs/target.rs",
+  "core/src/utilities/structs/transition.rs",
   "core/src/utilities/find_features.rs",
   "core/src/utilities/find_noise_level.rs",
   "core/src/utilities/fit_peak.rs",
   "core/src/utilities/ion_image.rs",
   "core/src/utilities/warp_model.rs",
   "core/src/utilities/calculate_eic.rs",
+  "core/src/utilities/get_scans.rs",
+  "core/src/utilities/annotate_features.rs",
 ];
 const pythonMethodFiles = { predict_rts: ["wrappers/python/quantion/warp_model.py"], calibrate: ["wrappers/python/quantion/warp_model.py"], dispose: ["wrappers/python/quantion/file.py", "wrappers/python/quantion/model.py", "wrappers/python/quantion/warp_model.py"] };
 const jsMethodFiles = { predict_rts: ["wrappers/js/src/utilities/warpModel.ts"], calibrate: ["wrappers/js/src/utilities/warpModel.ts"], dispose: ["wrappers/js/src/utilities/sampleFile.ts", "wrappers/js/src/utilities/model.ts", "wrappers/js/src/utilities/warpModel.ts"] };

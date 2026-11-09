@@ -1,10 +1,17 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use ionic::{IonReader, mzml::structs::MzML};
 
 use crate::{
     error::{ErrorKind, QuantionError},
-    utilities::{calculate_eic::EicReader, parse_ion::is_url},
+    utilities::{
+        calculate_eic::EicReader,
+        ion::{ScanSource, ScanSummary},
+        parse_ion::{PrefetchRanges, is_url},
+    },
 };
 
 pub(crate) enum FileSource {
@@ -20,11 +27,30 @@ pub(crate) enum FileSource {
 /// [Documentation](https://phenological.github.io/quantion/?language=rust#SampleFile)
 pub struct SampleFile {
     pub(crate) source: FileSource,
+    remote: Option<Arc<dyn PrefetchRanges>>,
 }
 
 impl SampleFile {
     pub(crate) fn new(source: FileSource) -> Self {
-        Self { source }
+        Self {
+            source,
+            remote: None,
+        }
+    }
+
+    pub(crate) fn with_remote(source: FileSource, remote: Option<Arc<dyn PrefetchRanges>>) -> Self {
+        Self { source, remote }
+    }
+
+    pub(crate) fn prefetch(&self, ranges: Vec<ionic::source::ByteRange>) -> ionic::IonResult<()> {
+        match &self.remote {
+            Some(remote) => remote.prefetch(ranges),
+            None => Ok(()),
+        }
+    }
+
+    pub(crate) fn is_remote(&self) -> bool {
+        self.remote.is_some()
     }
 
     pub(crate) fn reader(&mut self) -> EicReader<'_> {
@@ -48,7 +74,11 @@ impl SampleFile {
             FileSource::Full(mzml) => work(mzml.as_ref()),
             FileSource::Lazy(ion) => {
                 let mzml = ion.to_mzml().map_err(|error| {
-                    QuantionError::new(ErrorKind::ParseFailed, function, format!("the file could not be read: {error}"))
+                    QuantionError::new(
+                        ErrorKind::ParseFailed,
+                        function,
+                        format!("the file could not be read: {error}"),
+                    )
                 })?;
                 work(&mzml)
             }
@@ -101,4 +131,36 @@ impl From<&[u8]> for MzmlInput {
 
 pub(crate) fn is_url_path(path: &Path) -> bool {
     path.to_str().is_some_and(is_url)
+}
+
+impl ScanSource for SampleFile {
+    fn for_each_summary(&mut self, callback: &mut dyn FnMut(usize, ScanSummary)) {
+        match &mut self.source {
+            FileSource::Full(mzml) => mzml.for_each_summary(callback),
+            FileSource::Lazy(ion) | FileSource::Remote(ion) => ion.for_each_summary(callback),
+        }
+    }
+
+    fn load_scan(&mut self, index: usize, mz: &mut Vec<f64>, intensity: &mut Vec<f64>) -> bool {
+        match &mut self.source {
+            FileSource::Full(mzml) => mzml.load_scan(index, mz, intensity),
+            FileSource::Lazy(ion) | FileSource::Remote(ion) => ion.load_scan(index, mz, intensity),
+        }
+    }
+
+    fn load_array(&mut self, index: usize, accession: u32, values: &mut Vec<f64>) -> bool {
+        match &mut self.source {
+            FileSource::Full(mzml) => mzml.load_array(index, accession, values),
+            FileSource::Lazy(ion) | FileSource::Remote(ion) => {
+                ion.load_array(index, accession, values)
+            }
+        }
+    }
+
+    fn load_metadata(&mut self, index: usize) -> ionic::IonResult<Vec<crate::files::ScanParam>> {
+        match &mut self.source {
+            FileSource::Full(mzml) => mzml.load_metadata(index),
+            FileSource::Lazy(ion) | FileSource::Remote(ion) => ion.load_metadata(index),
+        }
+    }
 }

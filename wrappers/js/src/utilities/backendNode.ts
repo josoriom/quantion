@@ -2,7 +2,10 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { getAnnotationValues } from "./backend";
 import type {
+  AnnotationSettings,
+  AnnotationTables,
   Backend,
   EicSettings,
   FileHandle,
@@ -11,10 +14,12 @@ import type {
   ModelHandle,
   PeakColumns,
   PeakSettings,
+  ScanQuerySettings,
   TargetColumns,
   TransitionColumns,
   WarpModelHandle,
 } from "./backend";
+import { getScanQueryValues } from "./backend";
 import type {
   DataXY,
   Feature,
@@ -381,28 +386,24 @@ export class NodeBackend implements Backend {
 
   async getScans(
     handle: FileHandle,
-    queryType: number,
-    from: number,
-    to: number,
+    query: ScanQuerySettings,
     level: number,
     timeUnit: number,
   ): Promise<Scan[]> {
-    const values = [queryType, from, to, level, timeUnit];
+    const values = [...getScanQueryValues(query), level, timeUnit];
     await this.prefetch(handle, () => this.native.planScans(handle, ...values));
     return readScans(this.native.getScans(handle, ...values));
   }
 
   async getScansWithArrays(
     handle: FileHandle,
-    queryType: number,
-    from: number,
-    to: number,
+    query: ScanQuerySettings,
     level: number,
     timeUnit: number,
     accessions: Uint32Array,
     keys: string[],
   ): Promise<Scan[]> {
-    const values = [queryType, from, to, level, timeUnit, accessions];
+    const values = [...getScanQueryValues(query), level, timeUnit, accessions];
     await this.prefetch(handle, () =>
       this.native.planScansWithArrays(handle, ...values),
     );
@@ -504,6 +505,40 @@ export class NodeBackend implements Backend {
     return readRecords(
       this.native.deisotopeFeatures(values, count, rtTolerance, mzTolerance),
     ) as unknown as Feature[];
+  }
+
+  async annotateFeatures(
+    library: FileHandle | null,
+    model: ModelHandle | null,
+    files: FileHandle[],
+    mzs: Float64Array,
+    rts: Float64Array,
+    settings: AnnotationSettings,
+  ): Promise<AnnotationTables> {
+    const values = getAnnotationValues(settings);
+    if (library !== null && model !== null) {
+      for (const file of files) {
+        await this.prefetch(file, () =>
+          this.native.planAnnotateSamples(file, mzs, rts, ...values),
+        );
+      }
+      await this.prefetch(library, () =>
+        this.native.planAnnotateLibrary(library, model, files, mzs, rts, ...values),
+      );
+    }
+    const [features, fileRows, matches] = this.native.annotateFeatures(
+      library,
+      model,
+      files,
+      mzs,
+      rts,
+      ...values,
+    );
+    return {
+      features: readRecords(features),
+      files: readRecords(fileRows),
+      matches: readRecords(matches),
+    };
   }
 
   async findTargets(

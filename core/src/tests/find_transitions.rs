@@ -1,9 +1,6 @@
 use ionic::{IonReader, ReadOptions, mzml::structs::MzML};
-use crate::{
-    Transition,
-    FindTransitionsOptions,
-    utilities::find_transitions::find_transitions,
-};
+
+use crate::{FindTransitionsOptions, Transition, utilities::find_transitions::find_transitions};
 
 fn read_transitions() -> MzML {
     let bytes = std::fs::read("tests/fixtures/srm.ion").expect("read srm.ion");

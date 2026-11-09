@@ -24,7 +24,7 @@ Every feature found, without frequency. Type: \code{data.frame of Feature}. Colu
 if (curl::has_internet()) {
   library(quantion)
 
-  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/p21_LTR_20_b1_w20.ion"
+  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion"
   options <- find_features_options(
     eic     = calculate_eic_options(from = 2.3, to = 2.45),
     grid    = grid_options(start = 255, end = 265),

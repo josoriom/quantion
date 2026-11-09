@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Callable, List, TypedDict, Union
+from typing import Callable, Dict, List, Optional, TypedDict, Union
 
 import numpy as np
 
@@ -423,6 +423,31 @@ class GetScansOptions(TypedDict, total=False):
     arrays: List[ScanArray]
 
 
+class AnnotateFeaturesOptions(TypedDict, total=False):
+    """AnnotateFeaturesOptions · Options
+
+    Settings for annotate_features.
+
+    Fields:
+        library: Spectral library: an Ionic (.ion) file path or URL. Each spectrum has a precursor m/z, a vector array and the params named by the model. Default "https://github.com/josoriom/cipher/releases/latest/download/library_positive.ion".
+        model: Spectrum model: an ONNX file path or URL. Default "https://github.com/josoriom/cipher/releases/latest/download/model.onnx".
+        matches: How many matches to keep per file, best first. Default 3.
+        ppm_tolerance: Precursor tolerance in ppm. The larger of the two tolerances is used. Default 20.
+        mz_tolerance: Precursor tolerance in Da. Default 0.005.
+        rt_range: Largest distance in minutes from the peak apex to the MS2 scan. Default 0.3.
+        min_relative_intensity: MS2 peaks below this share of the base peak are dropped (0–1). Default 0.02.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#AnnotateFeaturesOptions
+    """
+    library: str
+    model: str
+    matches: int
+    ppm_tolerance: float
+    mz_tolerance: float
+    rt_range: float
+    min_relative_intensity: float
+
+
 class ParseIonOptions(TypedDict, total=False):
     """ParseIonOptions · Options
 
@@ -660,6 +685,79 @@ class ScanParam(TypedDict):
     value: Optional[str]
     unit: Optional[str]
     unit_accession: Optional[str]
+
+
+class CompoundMatch(TypedDict):
+    """CompoundMatch · Results
+
+    One library spectrum that matches a feature in one file.
+
+    Fields:
+        label: Name of the compound, from the library param the model names as label.
+        id: Id of the spectrum in its database.
+        database: Database the id comes from.
+        score: Average of the model vector similarity and the cosine (0–1).
+        cosine: Cosine similarity of the cleaned spectra (0–1).
+        mz: m/z values of the library spectrum.
+        intensity: Intensities of the library spectrum.
+        metadata: The other params of the library spectrum, by name.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#CompoundMatch
+    """
+    label: str
+    id: str
+    database: str
+    score: float
+    cosine: float
+    mz: np.ndarray
+    intensity: np.ndarray
+    metadata: Dict[str, str]
+
+
+class FileAnnotation(TypedDict):
+    """FileAnnotation · Results
+
+    What one file says about a feature.
+
+    Fields:
+        file: Position of the file in files, from 0.
+        scan_index: The MS2 scan used, or none when the file has no peak or no MS2 scan close to it.
+        matches: Best matches in this file, best first, at most matches.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#FileAnnotation
+    """
+    file: int
+    scan_index: Optional[int]
+    matches: List[CompoundMatch]
+
+
+class FeatureAnnotation(TypedDict):
+    """FeatureAnnotation · Results
+
+    The name of one feature. The label is the compound that is the best match in the most files; ties go to the higher score.
+
+    Fields:
+        mz: m/z of the feature.
+        rt: Retention time of the feature (minutes).
+        label: Name of the compound, or none when no file has a match.
+        id: Id in the database, from the agreeing file with the highest score.
+        database: Database the id comes from.
+        frequency: Share of the files whose best match is this compound (0–1).
+        score: Median score over the agreeing files.
+        cosine: Median cosine over the agreeing files.
+        files: One FileAnnotation per file, in the order of files.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#FeatureAnnotation
+    """
+    mz: float
+    rt: float
+    label: Optional[str]
+    id: Optional[str]
+    database: Optional[str]
+    frequency: float
+    score: Optional[float]
+    cosine: Optional[float]
+    files: List[FileAnnotation]
 
 
 class Scan(TypedDict):

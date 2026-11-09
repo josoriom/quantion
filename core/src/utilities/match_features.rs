@@ -1,4 +1,3 @@
-use crate::options::FindPeaksOptions;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -13,19 +12,22 @@ use rayon::prelude::*;
 
 #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
 use crate::utilities::parallel::run_with_threads;
-use crate::options::CalculateEicOptions;
-use crate::utilities::{
-    calculate_eic::{
-        CentroidScan, EicReader, MS1_LEVEL, SpectrumKind, get_scan_times,
-        get_spectrum_kind, lower_bound, mz_tolerance_for, read_mz_window,
-        summed_intensity_in_window, upper_bound,
+use crate::{
+    files::CalculateEicOptions,
+    traces::FindPeaksOptions,
+    utilities::{
+        calculate_eic::{
+            EicReader, MS1_LEVEL, SpectrumKind, get_scan_times, get_spectrum_kind, lower_bound,
+            mz_tolerance_for, read_mz_window, summed_intensity_in_window, upper_bound,
+        },
+        find_features::{Feature, FeatureError, FeatureSettings, MzTolerance, find_features},
+        find_masses::find_masses,
+        get_peak::get_peak,
+        get_scans::CentroidScan,
+        math::median,
+        mz_estimator::{MzEstimator, MzEstimatorKind, SampleMz, make_estimator, same_mass_gap},
+        structs::{DataXY, FromTo, Peak, Roi},
     },
-    find_features::{Feature, FeatureError, FeatureSettings, MzTolerance, find_features},
-    find_masses::find_masses,
-    get_peak::get_peak,
-    math::median,
-    mz_estimator::{MzEstimator, MzEstimatorKind, SampleMz, make_estimator, same_mass_gap},
-    structs::{DataXY, FromTo, Peak, Roi},
 };
 
 #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
@@ -439,31 +441,6 @@ pub fn match_features(
     let datasets = detect_features_per_sample(datasets, window, &features)?;
     align_samples(datasets, options)
 }
-
-#[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
-pub fn match_detected_features(
-    directory: &str,
-    mut detected: Vec<(String, Vec<Feature>)>,
-    options: MatchSettings,
-) -> Result<Vec<Feature>, AlignmentError> {
-    let sources = load_sample_files(directory)?;
-    let mut datasets = Vec::with_capacity(sources.len());
-    for (name, source) in sources {
-        let position = match detected.iter().position(|(given, _)| *given == name) {
-            Some(position) => position,
-            None => {
-                return Err(AlignmentError::Parse {
-                    path: name,
-                    source: "no detected features were given for this sample".to_string(),
-                });
-            }
-        };
-        let (_, features) = detected.swap_remove(position);
-        datasets.push((name, source, features));
-    }
-    align_samples(datasets, options)
-}
-
 fn get_min_samples(min_samples: usize, min_frequency: f64, total_samples: usize) -> usize {
     let from_frequency = (min_frequency.clamp(0.0, 1.0) * total_samples as f64).ceil() as usize;
     min_samples.max(from_frequency).max(1)

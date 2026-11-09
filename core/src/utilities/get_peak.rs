@@ -1,7 +1,9 @@
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    find_peaks::{Separation, find_separated_peaks},
-    structs::{DataXY, Peak, Roi},
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        find_peaks::{Separation, find_separated_peaks},
+        structs::{DataXY, Peak, Roi},
+    },
 };
 
 const LOCAL_WINDOW_MINUTES: f64 = 2.0;
@@ -86,11 +88,12 @@ fn crop_around(data: &DataXY, center: f64, range: f64) -> DataXY {
 
 #[cfg(test)]
 mod tests {
-    use crate::options::FindPeaksOptions;
-    use crate::utilities::{
-        
-        get_peak::get_peak,
-        structs::{DataXY, Roi},
+    use crate::{
+        traces::FindPeaksOptions,
+        utilities::{
+            get_peak::get_peak,
+            structs::{DataXY, Roi},
+        },
     };
 
     fn bell(rt: f64, center: f64, width: f64, height: f64) -> f64 {

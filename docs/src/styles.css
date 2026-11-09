@@ -162,6 +162,93 @@ header.top {
   color: var(--panel);
 }
 
+.search {
+  position: relative;
+  flex: 1 1 140px;
+  max-width: 360px;
+}
+
+.search-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--background);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.search-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+}
+
+.search-list button {
+  all: unset;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.search-list li[aria-selected="true"] button {
+  background: var(--accent-soft);
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.search-title {
+  font-family: var(--font-code);
+  font-size: 13px;
+  color: var(--accent-strong);
+}
+
+.search-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.search-text {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-empty {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .github-links {
   display: flex;
   flex-direction: column;
@@ -325,7 +412,7 @@ a:focus-visible {
 .entry-heading {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 10px 14px;
 }
 
@@ -342,6 +429,7 @@ a:focus-visible {
   border: 1px solid var(--accent);
   border-radius: 999px;
   padding: 1px 9px;
+  line-height: 18px;
   background: none;
   font-family: inherit;
   cursor: pointer;
@@ -360,6 +448,7 @@ a:focus-visible {
   border: 1px solid currentColor;
   border-radius: 999px;
   padding: 1px 9px;
+  line-height: 18px;
 }
 
 .experimental-icon {
@@ -375,6 +464,10 @@ a:focus-visible {
   vertical-align: -2px;
   margin-left: 6px;
   color: var(--warning);
+}
+
+.page-button[aria-current="true"] .experimental-mark {
+  color: inherit;
 }
 
 .note {
@@ -587,7 +680,7 @@ table.details td {
 
 .name { color: var(--token-function); white-space: nowrap; }
 .type { color: var(--token-type); }
-.default { color: var(--token-number); white-space: pre; }
+.default { color: var(--token-number); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 28ch; }
 
 .returns {
   display: flex;

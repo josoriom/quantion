@@ -14,16 +14,12 @@
 
 use std::collections::HashMap;
 
+use crate::FromTo;
+
 #[derive(Clone, Debug)]
 pub struct DataXY {
     pub x: Vec<f64>,
     pub y: Vec<f64>,
-}
-
-#[derive(Clone, Debug)]
-pub struct FromTo {
-    pub from: usize,
-    pub to: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -233,19 +229,15 @@ pub fn noise_san_plot(array: &[f64], options: NoiseSanPlotOptions) -> NoiseSanPl
     from_to.insert(
         "positive".to_string(),
         FromTo {
-            from: 0,
-            to: if last_positive_index >= 0 {
-                last_positive_index as usize
-            } else {
-                0
-            },
+            from: 0.0,
+            to: last_positive_index.max(0) as f64,
         },
     );
     from_to.insert(
         "negative".to_string(),
         FromTo {
-            from: first_negative_index,
-            to: input.len(),
+            from: first_negative_index as f64,
+            to: input.len() as f64,
         },
     );
     let scaled = generate_san_plot(&input, Some(from_to), log_base_y);
@@ -342,8 +334,10 @@ fn generate_san_plot(
     let mut out = HashMap::new();
     if let Some(ranges) = from_to {
         for (key, rng) in ranges {
-            let segment = if rng.from != rng.to {
-                scale_slice(&array[rng.from..rng.to], log_base_y)
+            let first = rng.from as usize;
+            let last = rng.to as usize;
+            let segment = if first != last {
+                scale_slice(&array[first..last], log_base_y)
             } else {
                 DataXY {
                     x: Vec::new(),

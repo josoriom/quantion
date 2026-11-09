@@ -17,3 +17,6 @@ pub(crate) mod bridge;
 
 #[cfg(test)]
 pub(crate) mod warp_model;
+
+#[cfg(test)]
+pub(crate) mod annotate_features;

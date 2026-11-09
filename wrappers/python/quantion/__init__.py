@@ -3,6 +3,7 @@ from __future__ import annotations
 from quantion._bridge import _ABI, load_library
 from quantion import api as _api
 from quantion.api import (
+    annotate_features,
     parse_ion,
     parse_mzml,
     write_ion,
@@ -30,6 +31,10 @@ from quantion.model import Model
 from quantion.warp_model import WarpModel
 from quantion._errors import QuantionError
 from quantion._types import (
+    AnnotateFeaturesOptions,
+    CompoundMatch,
+    FeatureAnnotation,
+    FileAnnotation,
     TimeUnit,
     ScanParamKind,
     PeakShape,
@@ -80,6 +85,7 @@ __all__ = [
     "parse_mzml",
     "write_ion",
     "write_mzml",
+    "annotate_features",
     "get_scans",
     "get_scan_metadata",
     "calculate_eic",
@@ -118,6 +124,10 @@ __all__ = [
     "DeisotopeFeaturesOptions",
     "MatchFeaturesOptions",
     "GetScanMetadataOptions",
+    "AnnotateFeaturesOptions",
+    "CompoundMatch",
+    "FeatureAnnotation",
+    "FileAnnotation",
     "GetScansOptions",
     "ScanArray",
     "ParseIonOptions",
@@ -153,7 +163,10 @@ class Quantion:
     def write_mzml(self, file: SampleFile, options=None):
         return write_mzml(file, options)
 
-    def get_scans(self, file: SampleFile, *, rt=None, mz=None, options=None):
+    def annotate_features(self, files, features, options=None):
+        return annotate_features(files, features, options)
+
+    def get_scans(self, file: SampleFile, rt=None, mz=None, options=None):
         return get_scans(file, rt=rt, mz=mz, options=options)
 
     def get_scan_metadata(self, file: SampleFile, index: int, options=None):

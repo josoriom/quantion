@@ -1,17 +1,18 @@
-use super::helpers;
-
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
 use helpers::{Eic, load_chromatograms_from, param_f64};
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    
-    get_peak::get_peak,
-    shape_filter::PeakShape,
-    structs::{DataXY, Roi},
+
+use super::helpers;
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        get_peak::get_peak,
+        shape_filter::PeakShape,
+        structs::{DataXY, Roi},
+    },
 };
 
 const RT_WINDOW: f64 = 0.3;
@@ -50,7 +51,14 @@ fn detects_peak(eic: &Eic) -> bool {
     };
     let rt = param_f64(eic, "rt");
     let span = eic.time[eic.time.len() - 1] - eic.time[0];
-    let peak = get_peak(&data, &Roi { rt: rt, range: span }, &peak_options());
+    let peak = get_peak(
+        &data,
+        &Roi {
+            rt: rt,
+            range: span,
+        },
+        &peak_options(),
+    );
     peak.intensity > 0.0 && (peak.rt - rt).abs() <= RT_WINDOW
 }
 

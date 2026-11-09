@@ -1,8 +1,9 @@
-use crate::options::FindPeaksOptions;
-use crate::utilities::{
-    
-    get_peak::get_peak,
-    structs::{DataXY, Roi},
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        get_peak::get_peak,
+        structs::{DataXY, Roi},
+    },
 };
 
 const TIME: [f64; 93] = [
@@ -47,7 +48,14 @@ fn dip_on_the_top_does_not_cut_the_peak() {
         x: TIME.to_vec(),
         y: INTENSITY.to_vec(),
     };
-    let peak = get_peak(&eic, &Roi { rt: TARGET_RT, range: WINDOW }, &options());
+    let peak = get_peak(
+        &eic,
+        &Roi {
+            rt: TARGET_RT,
+            range: WINDOW,
+        },
+        &options(),
+    );
     let scan = TIME[1] - TIME[0];
 
     assert!(

@@ -1,8 +1,11 @@
 import type {
+  AnnotationTables,
   Backend,
   EicSettings,
   FileHandle,
   PeakColumns,
+  PositionSettings,
+  ScanQuerySettings,
   TargetColumns,
   TransitionColumns,
 } from "./backend";
@@ -36,6 +39,7 @@ import {
   getAccessionNumbers,
   hasDefaultScanArrays,
   readGetScanMetadataOptions,
+  readAnnotateFeaturesOptions,
   readGetScansOptions,
   readIonImageOptions,
   readMatchFeaturesOptions,
@@ -47,6 +51,10 @@ import {
   type Complete,
 } from "./options";
 import type {
+  AnnotateFeaturesOptions,
+  CompoundMatch,
+  FeatureAnnotation,
+  FileAnnotation,
   CalculateBaselineOptions,
   BinaryInput,
   DataXY,
@@ -423,29 +431,16 @@ export function loadWarp(model: Model): WarpModel {
   );
 }
 
-const QUERY_RT_RANGE = 0;
-const QUERY_CLOSEST_RT = 1;
-const QUERY_MZ_RANGE = 2;
-const QUERY_CLOSEST_MZ = 3;
+const POSITION_ANY = 0;
+const POSITION_RANGE = 1;
+const POSITION_CLOSEST = 2;
+const SCAN_QUERY_KEYS = ["rt", "mz"];
 
-function getScanQuery(query: ScanQuery): [number, number, number] {
-  const given = query as unknown as Record<string, unknown>;
-  if (given === null || typeof given !== "object") {
-    throw invalidArgument("getScans", "query", "must be { rt } or { mz }");
+function getPosition(value: unknown, key: string): PositionSettings {
+  if (value === undefined) return { kind: POSITION_ANY, from: NaN, to: NaN };
+  if (typeof value === "number") {
+    return { kind: POSITION_CLOSEST, from: value, to: NaN };
   }
-  const keys = Object.keys(given);
-  if (keys.length !== 1 || (keys[0] !== "rt" && keys[0] !== "mz")) {
-    throw invalidArgument(
-      "getScans",
-      "query",
-      "must have exactly one of rt or mz",
-    );
-  }
-  const key = keys[0];
-  const value = given[key];
-  const closest = key === "rt" ? QUERY_CLOSEST_RT : QUERY_CLOSEST_MZ;
-  const range = key === "rt" ? QUERY_RT_RANGE : QUERY_MZ_RANGE;
-  if (typeof value === "number") return [closest, value, NaN];
   const fromTo = value as FromTo;
   if (fromTo === null || typeof fromTo !== "object") {
     throw invalidArgument("getScans", key, "must be a number or { from, to }");
@@ -456,22 +451,34 @@ function getScanQuery(query: ScanQuery): [number, number, number] {
     "getScans",
     `${key}.`,
   );
-  return [
-    range,
-    getRequiredNumber(fromTo.from, "getScans", `${key}.from`),
-    getRequiredNumber(fromTo.to, "getScans", `${key}.to`),
-  ];
+  return {
+    kind: POSITION_RANGE,
+    from: getRequiredNumber(fromTo.from, "getScans", `${key}.from`),
+    to: getRequiredNumber(fromTo.to, "getScans", `${key}.to`),
+  };
+}
+
+function getScanQuery(query: ScanQuery): ScanQuerySettings {
+  const given = query as unknown as Record<string, unknown>;
+  if (given === null || typeof given !== "object") {
+    throw invalidArgument("getScans", "query", "must be { rt }, { mz } or { rt, mz }");
+  }
+  checkKeys(given, SCAN_QUERY_KEYS, "getScans", "");
+  if (given.rt === undefined && given.mz === undefined) {
+    throw invalidArgument("getScans", "rt", "or mz must be given");
+  }
+  return { rt: getPosition(given.rt, "rt"), mz: getPosition(given.mz, "mz") };
 }
 
 /**
  * getScans · Files
  *
- * Read scans by retention time or precursor m/z. A range returns every scan in it; one number returns the closest scan, as a list of one.
+ * Read scans by retention time, by precursor m/z, or by both. Ranges return every scan inside them; when rt or mz is one value, you get the closest scan, as a list of one.
  *
  * @param file - The sample to read, from parse_ion or parse_mzml.
- * @param query.rt - Which scans, by retention time: a range or one value. Each FromTo has `from`, `to`. See {@link https://phenological.github.io/quantion/?language=js#FromTo | FromTo}.
+ * @param query.rt - Which scans by retention time: a range or one value. Optional when mz is given. Each FromTo has `from`, `to`. See {@link https://phenological.github.io/quantion/?language=js#FromTo | FromTo}.
  *   Example: `const window: FromTo = { from: 1.0, to: 2.5 };`
- * @param query.mz - Or by precursor m/z: a range or one value. Give rt or mz, not both. Each FromTo has `from`, `to`. See {@link https://phenological.github.io/quantion/?language=js#FromTo | FromTo}.
+ * @param query.mz - Which scans by precursor m/z: a range or one value. Give rt, mz or both. Each FromTo has `from`, `to`. See {@link https://phenological.github.io/quantion/?language=js#FromTo | FromTo}.
  *   Example: `const window: FromTo = { from: 1.0, to: 2.5 };`
  * @param options - Optional settings: `level` = 1, `timeUnit` = "MINUTES", `arrays` = { key: "mz", accession: "MS:1000514" }, { key: "intensity", accession: "MS:1000515" }. See {@link https://phenological.github.io/quantion/?language=js#GetScansOptions | GetScansOptions}.
  * @returns The scans found, in rt order.
@@ -484,13 +491,11 @@ export async function getScans(
 ): Promise<Scan[]> {
   const handle = getHandle(file, "getScans");
   const settings = readGetScansOptions(options, "getScans");
-  const [queryType, from, to] = getScanQuery(query);
+  const scanQuery = getScanQuery(query);
   if (!hasDefaultScanArrays(settings.arrays)) {
     return file._backend.getScansWithArrays(
       handle,
-      queryType,
-      from,
-      to,
+      scanQuery,
       settings.level,
       getTimeUnitCode(settings.timeUnit),
       getAccessionNumbers(settings.arrays),
@@ -499,9 +504,7 @@ export async function getScans(
   }
   return file._backend.getScans(
     handle,
-    queryType,
-    from,
-    to,
+    scanQuery,
     settings.level,
     getTimeUnitCode(settings.timeUnit),
   );
@@ -947,3 +950,123 @@ export function deisotopeFeatures(
     settings.mzTolerance,
   );
 }
+
+const ANNOTATION_FEATURE_KEYS = [
+  "mz",
+  "rt",
+  "from",
+  "to",
+  "intensity",
+  "integral",
+  "nPoints",
+  "frequency",
+];
+
+function getNumberOrNull(value: unknown): number | null {
+  return typeof value === "number" && !Number.isNaN(value) ? value : null;
+}
+
+function getCompoundMatch(row: Record<string, unknown>): CompoundMatch {
+  const names = row.metadataNames ? String(row.metadataNames).split("\x1f") : [];
+  const values = row.metadataNames ? String(row.metadataValues).split("\x1f") : [];
+  return {
+    label: row.label as string,
+    id: row.id as string,
+    database: row.database as string,
+    score: row.score as number,
+    cosine: row.cosine as number,
+    mz: row.mz as Float64Array,
+    intensity: row.intensity as Float64Array,
+    metadata: Object.fromEntries(names.map((name, index) => [name, values[index]])),
+  };
+}
+
+function getAnnotations(tables: AnnotationTables): FeatureAnnotation[] {
+  const matches = new Map<string, CompoundMatch[]>();
+  for (const row of tables.matches) {
+    const key = `${row.feature}:${row.file}`;
+    const list = matches.get(key) ?? [];
+    list.push(getCompoundMatch(row));
+    matches.set(key, list);
+  }
+  const files = new Map<number, FileAnnotation[]>();
+  for (const row of tables.files) {
+    const feature = row.feature as number;
+    const list = files.get(feature) ?? [];
+    list.push({
+      file: row.file as number,
+      scanIndex: getNumberOrNull(row.scanIndex),
+      matches: matches.get(`${feature}:${row.file}`) ?? [],
+    });
+    files.set(feature, list);
+  }
+  return tables.features.map((row, position) => ({
+    mz: row.mz as number,
+    rt: row.rt as number,
+    label: row.label as string | null,
+    id: row.id as string | null,
+    database: row.database as string | null,
+    frequency: row.frequency as number,
+    score: getNumberOrNull(row.score),
+    cosine: getNumberOrNull(row.cosine),
+    files: files.get(position) ?? [],
+  }));
+}
+
+/**
+ * annotateFeatures · Untargeted
+ *
+ * Annotate features by matching their MS2 spectra against a spectral library. For each feature and sample, the positive MS2 scan closest to the peak apex is used: its precursor must match the feature m/z within the tolerance, and its RT must be within rt_range. A spectrum encoder turns the scan into a vector, which is scored against the library spectra with the same precursor m/z. The library (an Ionic .ion file) and the encoder (an ONNX model) are read from a path or a URL; by default both come from the josoriom/cipher releases.
+ *
+ * **Warning:** This is an experimental feature.
+ *
+ * @param files - The samples, from parse_ion or parse_mzml. Must not be empty.
+ * @param features - The features to name: mz and rt each. find_features and match_features output works as is. Empty gives an empty result.
+ * @param options - Optional settings: `library` = "https://github.com/josoriom/cipher/releases/latest/download/library_positive.ion", `model` = "https://github.com/josoriom/cipher/releases/latest/download/model.onnx", `matches` = 3, `ppmTolerance` = 20, `mzTolerance` = 0.005, `rtRange` = 0.3, `minRelativeIntensity` = 0.02. See {@link https://phenological.github.io/quantion/?language=js#AnnotateFeaturesOptions | AnnotateFeaturesOptions}.
+ * @returns One FeatureAnnotation per feature, in the same order.
+ * @see {@link https://phenological.github.io/quantion/?language=js#annotate_features | Documentation}
+ */
+export async function annotateFeatures(
+  files: SampleFile[],
+  features: Array<{ mz: number; rt: number }>,
+  options?: AnnotateFeaturesOptions,
+): Promise<FeatureAnnotation[]> {
+  const functionName = "annotateFeatures";
+  const settings = readAnnotateFeaturesOptions(options, functionName);
+  if (!Array.isArray(files)) {
+    throw invalidArgument(functionName, "files", "must be an array of samples");
+  }
+  if (!Array.isArray(features)) {
+    throw invalidArgument(functionName, "features", "must be an array of features");
+  }
+  checkItems(features, ANNOTATION_FEATURE_KEYS, functionName, "features");
+  const handles = files.map((file) => getHandle(file, functionName));
+  const mzs = Float64Array.from(features, (feature, index) =>
+    getRequiredNumber(feature.mz, functionName, `features[${index}].mz`),
+  );
+  const rts = Float64Array.from(features, (feature, index) =>
+    getRequiredNumber(feature.rt, functionName, `features[${index}].rt`),
+  );
+  const backend = files[0]?._backend ?? (await getBackendAsync());
+  if (features.length === 0) {
+    await backend.annotateFeatures(null, null, handles, mzs, rts, settings);
+    return [];
+  }
+  const library = await parseIon(settings.library);
+  const model = await loadModel(settings.model);
+  try {
+    const tables = await backend.annotateFeatures(
+      library._handle,
+      model._handle,
+      handles,
+      mzs,
+      rts,
+      settings,
+    );
+    return getAnnotations(tables);
+  } finally {
+    library.dispose();
+    model.dispose();
+  }
+}
+

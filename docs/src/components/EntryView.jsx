@@ -9,6 +9,7 @@ import { RegistryLink } from "./RegistryLink";
 import { ReturnsLine } from "./ReturnsLine";
 import { VersionsView } from "./VersionsView";
 import { IonicText } from "./IonicText";
+import { ExperimentalBadge } from "./ExperimentalBadge";
 
 function getWarning(entry, code) {
   if (code?.warning) return code.warning;
@@ -76,7 +77,9 @@ function Entry({ entry, language }) {
   const isType = entry.kind === "type";
   return (
     <>
-      <EntryHeading title={getDisplayName(entry, language)} group={entry.group} summary={entry.summary} />
+      <EntryHeading title={getDisplayName(entry, language)} group={entry.group} summary={entry.summary}>
+        {entry.experimental && <ExperimentalBadge />}
+      </EntryHeading>
       {getWarning(entry, code) && (
         <p className="warning" role="note">
           <strong>Warning: </strong>

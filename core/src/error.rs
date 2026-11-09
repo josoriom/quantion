@@ -82,7 +82,11 @@ impl QuantionError {
         }
     }
 
-    pub(crate) fn invalid(function: &'static str, argument: impl Into<String>, message: impl Into<String>) -> Self {
+    pub(crate) fn invalid(
+        function: &'static str,
+        argument: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         let argument = argument.into();
         let message = format!("{argument} {}", message.into());
         Self {
@@ -116,7 +120,10 @@ impl QuantionError {
         Self::new(
             ErrorKind::Internal,
             function,
-            format!("{} (this is a bug in quantion, please report it)", message.into()),
+            format!(
+                "{} (this is a bug in quantion, please report it)",
+                message.into()
+            ),
         )
     }
 }
@@ -129,26 +136,89 @@ impl fmt::Display for QuantionError {
 
 impl std::error::Error for QuantionError {}
 
-pub(crate) fn check_finite(function: &'static str, argument: &str, value: f64) -> Result<(), QuantionError> {
+pub(crate) fn check_finite(
+    function: &'static str,
+    argument: &str,
+    value: f64,
+) -> Result<(), QuantionError> {
     if value.is_finite() {
         Ok(())
     } else {
-        Err(QuantionError::invalid(function, argument, format!("must be a finite number, got {value}")))
+        Err(QuantionError::invalid(
+            function,
+            argument,
+            format!("must be a finite number, got {value}"),
+        ))
     }
 }
 
-pub(crate) fn check_positive(function: &'static str, argument: &str, value: f64) -> Result<(), QuantionError> {
+pub(crate) fn check_positive(
+    function: &'static str,
+    argument: &str,
+    value: f64,
+) -> Result<(), QuantionError> {
     if value.is_finite() && value > 0.0 {
         Ok(())
     } else {
-        Err(QuantionError::invalid(function, argument, format!("must be greater than 0, got {value}")))
+        Err(QuantionError::invalid(
+            function,
+            argument,
+            format!("must be greater than 0, got {value}"),
+        ))
     }
 }
 
-pub(crate) fn check_not_negative(function: &'static str, argument: &str, value: f64) -> Result<(), QuantionError> {
+pub(crate) fn check_not_negative(
+    function: &'static str,
+    argument: &str,
+    value: f64,
+) -> Result<(), QuantionError> {
     if value.is_finite() && value >= 0.0 {
         Ok(())
     } else {
-        Err(QuantionError::invalid(function, argument, format!("must be 0 or more, got {value}")))
+        Err(QuantionError::invalid(
+            function,
+            argument,
+            format!("must be 0 or more, got {value}"),
+        ))
     }
+}
+
+pub(crate) fn check_mz_and_rt(
+    function: &'static str,
+    item: &str,
+    mz: f64,
+    rt: f64,
+) -> Result<(), QuantionError> {
+    check_positive(function, &format!("{item}.mz"), mz)?;
+    check_finite(function, &format!("{item}.rt"), rt)
+}
+
+pub(crate) fn check_tolerances(
+    function: &'static str,
+    prefix: &str,
+    ppm_tolerance: f64,
+    mz_tolerance: f64,
+) -> Result<(), QuantionError> {
+    check_not_negative(function, &format!("{prefix}ppm_tolerance"), ppm_tolerance)?;
+    check_not_negative(function, &format!("{prefix}mz_tolerance"), mz_tolerance)?;
+    if ppm_tolerance == 0.0 && mz_tolerance == 0.0 {
+        return Err(QuantionError::invalid(
+            function,
+            format!("{prefix}ppm_tolerance"),
+            "and mz_tolerance cannot both be 0",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn check_threads(function: &'static str, threads: usize) -> Result<(), QuantionError> {
+    if threads == 0 {
+        return Err(QuantionError::invalid(
+            function,
+            "threads",
+            "must be 1 or more, got 0",
+        ));
+    }
+    Ok(())
 }

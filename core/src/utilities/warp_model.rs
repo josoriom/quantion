@@ -3,15 +3,17 @@ use std::{collections::HashMap, fmt};
 use ionic::{IonReader, source::ByteRange};
 use runnet::Tensor;
 
-use crate::options::CalculateEicOptions;
-use crate::utilities::{
-    calculate_eic::{
-        EicReader, FastError, MS1_LEVEL, ScanTime, get_scan_times, mz_tolerance_for,
-        plan_window_ranges,
+use crate::{
+    files::CalculateEicOptions,
+    utilities::{
+        calculate_eic::{
+            EicReader, FastError, MS1_LEVEL, ScanTime, get_scan_times, mz_tolerance_for,
+            plan_window_ranges,
+        },
+        find_targets::{MzWindow, read_eics_one_pass},
+        load_model::Model,
+        structs::{FromTo, Target},
     },
-    find_targets::{MzWindow, read_eics_one_pass},
-    load_model::Model,
-    structs::{FromTo, Target},
 };
 
 const INPUT_NAMES: [&str; 2] = ["eics", "targets"];

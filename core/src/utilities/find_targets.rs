@@ -1,15 +1,17 @@
-use crate::options::FindPeaksOptions;
 use ionic::{IonReader, source::ByteRange};
 
-use crate::options::CalculateEicOptions;
-use crate::options::FindTargetsOptions;
-use crate::utilities::{
-    calculate_eic::{
-        EicReader, FastError, MS1_LEVEL, get_scan_times, lower_bound, mz_tolerance_for,
-        plan_window_ranges, read_mz_window, upper_bound,
+use crate::{
+    files::CalculateEicOptions,
+    targets::FindTargetsOptions,
+    traces::FindPeaksOptions,
+    utilities::{
+        calculate_eic::{
+            EicReader, FastError, MS1_LEVEL, get_scan_times, lower_bound, mz_tolerance_for,
+            plan_window_ranges, read_mz_window, upper_bound,
+        },
+        get_peak::get_peak,
+        structs::{DataXY, FromTo, Peak, Roi, Target},
     },
-    get_peak::get_peak,
-    structs::{DataXY, FromTo, Peak, Roi, Target},
 };
 
 pub fn plan_targets_ranges(

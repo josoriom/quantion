@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use crate::options::CalculateEicOptions;
-    use crate::utilities::{
-        calculate_eic::{lower_bound, mz_tolerance_for},
-        find_features::{
-            Feature, FeaturePoint, FeatureSettings, MzTolerance, GridScan, build_mz_grid,
-            dedup_points, deduplicate_masses, group_by_mz, keep_masses_with_signal,
-            max_eic_per_mass, pick_best_per_rt_cluster, sort_features,
+    use crate::{
+        files::CalculateEicOptions,
+        utilities::{
+            calculate_eic::{lower_bound, mz_tolerance_for},
+            find_features::{
+                Feature, FeaturePoint, FeatureSettings, GridScan, MzTolerance, build_mz_grid,
+                dedup_points, deduplicate_masses, group_by_mz, keep_masses_with_signal,
+                max_eic_per_mass, pick_best_per_rt_cluster, sort_features,
+            },
         },
     };
 
@@ -398,7 +400,11 @@ mod tests {
         GridScan { mz, intensity }
     }
 
-    fn reference_max_eic(scans: &[GridScan], masses: &[f64], options: CalculateEicOptions) -> Vec<f64> {
+    fn reference_max_eic(
+        scans: &[GridScan],
+        masses: &[f64],
+        options: CalculateEicOptions,
+    ) -> Vec<f64> {
         let lo: Vec<f64> = masses
             .iter()
             .map(|&m| m - mz_tolerance_for(m, options))
