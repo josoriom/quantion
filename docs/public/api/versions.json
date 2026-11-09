@@ -1,11 +1,18 @@
 {
-  "latest": "0.2.1",
+  "latest": "0.2.2",
   "versions": [
+    {
+      "version": "0.2.2",
+      "api": "0.2.1",
+      "date": "2026-11-09",
+      "message": "feat: release v0.2.2"
+    },
     {
       "version": "0.2.1",
       "api": "0.2.1",
       "date": "2026-11-04",
-      "message": "feat: read scan metadata + custom arrays from .ion files"
+      "message": "feat: release v0.2.1",
+      "commit": "5b11a044e7788e582449fddf44841edc4ac04e55"
     },
     {
       "version": "0.2.0",

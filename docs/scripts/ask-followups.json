@@ -1,0 +1,21 @@
+[
+  {"previous": "how to use parse_ion from bytes", "question": "or path in local laptop", "route": "usage", "function": "parse_ion", "variant": "path", "split": "dev"},
+  {"previous": "How do I open an .ion file from a URL?", "question": "and from bytes?", "route": "usage", "function": "parse_ion", "variant": "bytes", "split": "dev"},
+  {"previous": "How do I open an .ion file?", "question": "From bytes", "route": "usage", "function": "parse_ion", "variant": "bytes", "split": "dev"},
+  {"previous": "How do I open an .ion file?", "question": "From a local path", "route": "usage", "function": "parse_ion", "variant": "path", "split": "test"},
+  {"previous": "How do I read an mzML file?", "question": "what about a URL?", "route": "usage", "function": "parse_mzml", "variant": "url", "split": "test"},
+  {"previous": "How do I find peaks above intensity 1000?", "question": "and without baseline subtraction?", "route": "usage", "function": "find_peaks", "values": {"auto_baseline": false}, "split": "dev"},
+  {"previous": "How do I run find_targets on 4 threads?", "question": "can it use 8 threads instead?", "route": "usage", "function": "find_targets", "values": {"threads": 8}, "split": "dev"},
+  {"previous": "How do I extract a chromatogram for m/z 445.12?", "question": "only between 2 and 3 minutes", "route": "usage", "function": "calculate_eic", "values": {"from": 2, "to": 3}, "split": "test"},
+  {"previous": "How do I fit an EMG curve to a peak?", "question": "or a gaussian", "route": "usage", "function": "fit_peak", "values": {"shape": "GAUSSIAN"}, "split": "dev"},
+  {"previous": "How do I quantify my compounds?", "question": "what is a target?", "route": "definition", "split": "dev"},
+  {"previous": "How do I open an .ion file?", "question": "How do I bake sourdough bread?", "route": "refused", "split": "dev"},
+  {"previous": "How do I open an .ion file?", "question": "Which tool do I need?", "route": "guide", "split": "test"},
+  {"previous": "I know my compounds", "question": "Many compounds", "route": "usage", "function": "find_targets", "split": "dev"},
+  {"previous": "How do I match features across all files in a folder?", "question": "with an rt tolerance of 0.05", "route": "usage", "function": "match_features", "values": {"rt_tolerance": 0.05}, "split": "test"},
+  {"previous": "what's threads", "question": "how can I iuse it", "route": "list", "split": "dev"},
+  {"previous": "what is min_snr?", "question": "where can I use it?", "route": "list", "split": "test"},
+  {"previous": "what's parseIon", "question": "how to use it from path", "route": "usage", "function": "parse_ion", "variant": "path", "split": "dev"},
+  {"previous": "what is find_peaks?", "question": "how do I use it", "route": "usage", "function": "find_peaks", "split": "test"},
+  {"previous": "what is parse_mzml", "question": "and from bytes?", "route": "usage", "function": "parse_mzml", "variant": "bytes", "split": "test"}
+]

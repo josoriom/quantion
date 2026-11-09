@@ -1,7 +1,13 @@
 {
   "name": "quantion",
   "version": "0.2.1",
-  "description": "quantion: Rust core with WASM bindings",
+  "description": "Read Ionic (.ion) and mzML files and turn chromatograms into numbers: noise, baseline, peaks, targets and features.",
+  "homepage": "https://phenological.github.io/quantion/?language=js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phenological/quantion.git",
+    "directory": "wrappers/js"
+  },
   "license": "MIT",
   "type": "module",
   "main": "./lib/index-node.js",

@@ -1,0 +1,23 @@
+[
+  {"question": "/help", "expect": "help", "split": "dev"},
+  {"question": "/", "expect": "help", "split": "test"},
+  {"question": "/guide", "expect": "guide", "split": "dev"},
+  {"question": "/docs", "expect": "docs:overview", "split": "dev"},
+  {"question": "/docs find_peaks", "expect": "docs:find_peaks", "split": "dev"},
+  {"question": "/docs findPeaks", "expect": "docs:find_peaks", "split": "dev"},
+  {"question": "/docs find peak", "expect": "docs:find_peaks", "split": "test"},
+  {"question": "/docs Targt", "expect": "docs:Target", "split": "dev"},
+  {"question": "/docs untargeted", "expect": "docs:Untargeted", "split": "test"},
+  {"question": "/docs nothinghere", "expect": "docs:none", "split": "dev"},
+  {"question": "/example find_peaks min_intensity=1000", "expect": "example:find_peaks:min_intensity=1000", "split": "dev"},
+  {"question": "/example findPeaks minIntensity=1000", "expect": "example:find_peaks:failure", "split": "dev"},
+  {"question": "/example calculate_eic mz=260.1 ppm_tolerance=10", "expect": "example:calculate_eic:mz=260.1,ppm_tolerance=10", "split": "test"},
+  {"question": "/example find_peaks min_intensty=1000", "expect": "example:find_peaks:failure", "split": "dev"},
+  {"question": "/example find_peaks min_intensity=high", "expect": "example:find_peaks:failure", "split": "test"},
+  {"question": "/example", "expect": "example:failure", "split": "dev"},
+  {"question": "/example fit_peak shape=emg", "expect": "example:fit_peak:shape=EMG", "split": "test"},
+  {"question": "/fix const peaks = findPeak(eic.x, eic.y, { minIntensity: 1000 });", "expect": "fix:findPeak=findPeaks", "split": "dev"},
+  {"question": "/fix peaks = find_peaks(eic[\"x\"], eic[\"y\"], {\"minIntensity\": 1000})", "expect": "fix:minIntensity=min_intensity", "split": "test"},
+  {"question": "/fix", "expect": "fix:failure", "split": "dev"},
+  {"question": "/nope", "expect": "unknown", "split": "dev"}
+]

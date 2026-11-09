@@ -1,3 +1,4 @@
+import { AskChat, AskProvider } from "./components/AskBox";
 import { EntryView } from "./components/EntryView";
 import { Header } from "./components/Header";
 import { LanguageTabs } from "./components/LanguageTabs";
@@ -22,8 +23,11 @@ function Layout() {
 export function App() {
   return (
     <DocumentationProvider>
-      <Header />
-      <Layout />
+      <AskProvider>
+        <Header />
+        <Layout />
+        <AskChat />
+      </AskProvider>
     </DocumentationProvider>
   );
 }

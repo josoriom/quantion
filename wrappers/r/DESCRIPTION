@@ -21,4 +21,6 @@ Imports: curl, utils
 Suggests: parallel, testthat, callr
 SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88)
 License: MIT + file LICENSE
+URL: https://phenological.github.io/quantion/, https://github.com/phenological/quantion
+BugReports: https://github.com/phenological/quantion/issues
 Encoding: UTF-8

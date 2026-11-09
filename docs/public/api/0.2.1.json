@@ -24,7 +24,7 @@
       "rust": "cargo add quantion",
       "python": "pip install quantion",
       "js": "npm install quantion",
-      "r": "install.packages(\"quantion\")"
+      "r": "remotes::install_github(\"phenological/quantion\", subdir = \"wrappers/r\")"
     },
     "projects": [
       {

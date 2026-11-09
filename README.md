@@ -1,6 +1,6 @@
 # Quant·ion
 
-<img src="assets/icon.svg" align="right" width="200" alt="Quantion icon">
+<img src="https://raw.githubusercontent.com/phenological/quantion/main/assets/icon.svg" align="right" width="200" alt="Quantion icon">
 
 [![test](https://github.com/phenological/quantion/actions/workflows/test.yml/badge.svg)](https://github.com/phenological/quantion/actions/workflows/test.yml)
 [![crates.io](https://img.shields.io/crates/v/quantion)](https://crates.io/crates/quantion)
@@ -35,9 +35,9 @@ println!("rt {} intensity {}", peak.rt, peak.intensity);
 
 ## Other languages
 
-- [R](wrappers/r/README.md)
-- [Python](wrappers/python/README.md)
-- [JavaScript](wrappers/js/README.md)
+- [R](https://github.com/phenological/quantion/tree/main/wrappers/r)
+- [Python](https://github.com/phenological/quantion/tree/main/wrappers/python)
+- [JavaScript](https://github.com/phenological/quantion/tree/main/wrappers/js)
 
 ## Documentation
 

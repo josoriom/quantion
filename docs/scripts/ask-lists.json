@@ -1,0 +1,10 @@
+[
+  {"question": "which functions can set threads", "expect": "threads:find_targets,find_transitions,find_features,match_features", "split": "dev"},
+  {"question": "What functions take min_intensity?", "expect": "min_intensity:find_peaks,get_peak,find_targets,find_transitions,find_features,match_features", "split": "dev"},
+  {"question": "Which functions support a minimum intensity?", "expect": "min_intensity:find_peaks,get_peak,find_targets,find_transitions,find_features,match_features", "split": "dev"},
+  {"question": "which tools can use more cores", "expect": "threads:find_targets,find_transitions,find_features,match_features", "split": "test"},
+  {"question": "functions that have min_snr", "expect": "min_snr:find_peaks,get_peak,find_targets,find_transitions,find_features,match_features", "split": "test"},
+  {"question": "Which functions take a noise level?", "expect": "noise:find_peaks,get_peak,find_targets,find_transitions,find_features,match_features", "split": "test"},
+  {"question": "how can I use threads in quantion", "expect": "threads:find_targets,find_transitions,find_features,match_features", "split": "dev"},
+  {"question": "How do I set threads?", "expect": "threads:find_targets,find_transitions,find_features,match_features", "split": "test"}
+]
