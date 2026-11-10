@@ -1080,6 +1080,19 @@ table.details td {
   margin: 0 0 8px;
 }
 
+.ask-hint .ask-notice {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--warning);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .ask-chips {
   display: flex;
   flex-wrap: nowrap;

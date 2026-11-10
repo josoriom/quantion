@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 
-import { createAsker, createEmbedder, findOptionsType, getStarters, listUnderstood, writeAnswer, writePlacement } from "../ask/ask";
+import { createAsker, createClassifier, createEmbedder, findOptionsType, getStarters, listUnderstood, writeAnswer, writePlacement } from "../ask/ask";
 import { commandList } from "../ask/commands";
 import { writeExplanation } from "../ask/meaning";
 import { limits, models, refusal } from "../ask/models";
+import phrases from "../ask/phrases.json";
 import { languageLabels } from "../ask/review";
 import { runtimeFiles } from "../ask/runtime";
 import { buildTemplateSnippet } from "../ask/snippet";
@@ -13,7 +14,7 @@ import { useDocumentation } from "../state/DocumentationContext";
 import { CodeBlock } from "./CodeBlock";
 
 let embedderPromise = null;
-const indexPromises = new Map();
+let classifierPromise = null;
 const loaded = new Map();
 const modelFailure = "The search model could not load, so I can only run commands, definitions and code checks for now.";
 
@@ -52,16 +53,21 @@ function loadEmbedder(onProgress) {
   return embedderPromise;
 }
 
-function loadIndex(apiFile) {
-  if (!indexPromises.has(apiFile)) {
-    const promise = fetch(`./ask/${apiFile}.json`).then((response) => {
-      if (!response.ok) throw new Error(`No Ask index for API ${apiFile}`);
-      return response.json();
+async function readClassifier() {
+  const folder = `${import.meta.env.BASE_URL}${models.folder}${models.embedder.name}/`;
+  const [labels, weights] = await Promise.all([fetch(`${folder}${models.answers.labels}`), fetch(`${folder}${models.answers.weights}`)]);
+  if (!labels.ok || !weights.ok) throw new Error("No Ask answer list");
+  return createClassifier(await labels.json(), await weights.arrayBuffer());
+}
+
+function loadClassifier() {
+  if (!classifierPromise) {
+    classifierPromise = readClassifier();
+    classifierPromise.catch(() => {
+      classifierPromise = null;
     });
-    promise.catch(() => indexPromises.delete(apiFile));
-    indexPromises.set(apiFile, promise);
   }
-  return indexPromises.get(apiFile);
+  return classifierPromise;
 }
 
 function hasItem(entry, name) {
@@ -88,7 +94,14 @@ function findLinkTarget(name, document, owners) {
 
 function AnswerText({ text, owners = [] }) {
   const { state, dispatch } = useDocumentation();
-  return text.split(/(`[^`]+`)/).map((part, position) => {
+  return text.split(/(`[^`]+`|https?:\/\/[^\s`]+[^\s`.,)])/).map((part, position) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a key={position} className="text-link" href={part} target="_blank" rel="noreferrer">
+          {part}
+        </a>
+      );
+    }
     if (!part.startsWith("`")) return part;
     const name = part.slice(1, -1);
     const target = findLinkTarget(name, state.document, owners.filter(Boolean));
@@ -182,6 +195,21 @@ function ReviewResult({ review, link }) {
   );
 }
 
+function pickPhrase(list, text) {
+  return list[[...text].reduce((sum, character) => sum + character.charCodeAt(0), 0) % list.length];
+}
+
+function Unsure({ message, result }) {
+  const { state } = useDocumentation();
+  const alternatives = (result.entries ?? []).map((entry) => ({ label: getDisplayName(entry, state.language), question: `How do I use ${entry.name}?` }));
+  return (
+    <div className="ask-reply">
+      <p className="ask-answer">{pickPhrase(phrases.unsure, message.question)}</p>
+      <QuestionChips items={alternatives} />
+    </div>
+  );
+}
+
 function Refusal({ result }) {
   const { state } = useDocumentation();
   const alternatives = (result.entries ?? []).map((entry) => ({ label: getDisplayName(entry, state.language), question: `How do I use ${entry.name}?` }));
@@ -259,6 +287,17 @@ function GuideResult({ result }) {
       )}
       <Source link={result.link} />
       <QuestionChips items={result.followUps} />
+    </div>
+  );
+}
+
+function FaqResult({ result }) {
+  return (
+    <div className="ask-reply">
+      <p className="ask-answer">
+        <AnswerText text={result.faq.note} owners={[result.faq.target.split("@").pop()]} />
+      </p>
+      <Source link={result.link} />
     </div>
   );
 }
@@ -423,7 +462,7 @@ function UsageResult({ message }) {
   const { result } = message;
   const { language } = state;
   const { confidence } = result.reason;
-  if (confidence === "low") return <Refusal result={result} />;
+  if (confidence === "low") return result.entries?.length ? <Unsure message={message} result={result} /> : <Refusal result={result} />;
   const languageLabel = findLanguage(state.document, language)?.label ?? language;
   const entry = result.entries[0];
   const snippet = buildTemplateSnippet(result.values, result.templateValues, state.document, language);
@@ -442,7 +481,8 @@ function UsageResult({ message }) {
   return (
     <div className="ask-reply">
       <p className="ask-answer">
-        <AnswerText text={writeAnswer(result, state.document, language)} owners={result.entries.map((item) => item.name)} />
+        {pickPhrase(phrases.sure, message.question)}{" "}
+        <AnswerText text={result.faq ? result.faq.note : writeAnswer(result, state.document, language)} owners={result.entries.map((item) => item.name)} />
       </p>
       {confidence === "medium" && (
         <Chips items={result.alternatives} label="Did you mean:" onPick={(item) => chooseFunction(message.id, item.entryName)} />
@@ -463,6 +503,7 @@ function AskResult({ message }) {
   if (route === "refused") return <Refusal result={result} />;
   if (route === "command") return <CommandResult result={result} />;
   if (route === "list") return <ListResult result={result} />;
+  if (route === "faq" || route === "unsupported") return <FaqResult result={result} />;
   if (route === "review") return <ReviewResult review={result.review} link={result.link} />;
   if (route === "definition") return <ExplanationResult explanation={result.explanation} />;
   if (route === "guide") return <GuideResult result={result} />;
@@ -528,16 +569,17 @@ export function AskProvider({ children }) {
 
   async function getAsker() {
     let embed = null;
-    let index = null;
+    let classify = null;
     try {
-      [embed, index] = await Promise.all([loadEmbedder(setProgress), loadIndex(apiFile)]);
+      [embed, classify] = await Promise.all([loadEmbedder(setProgress), loadClassifier()]);
       setModelFailed(false);
-    } catch {
+    } catch (error) {
+      console.error("Ask helper could not load its model", error);
       setModelFailed(true);
     }
     const key = `${apiFile}:${embed ? "model" : "none"}`;
     const current = askerRef.current;
-    if (current.key !== key || current.document !== state.document) askerRef.current = { key, document: state.document, asker: createAsker({ embed, index, document: state.document }) };
+    if (current.key !== key || current.document !== state.document) askerRef.current = { key, document: state.document, asker: createAsker({ embed, classify, document: state.document }) };
     return askerRef.current.asker;
   }
 
@@ -548,7 +590,7 @@ export function AskProvider({ children }) {
     setMessages((current) => [...current, { id, question: asked, status: "busy" }]);
     try {
       const asker = await getAsker();
-      updateMessage(id, { status: "done", result: await asker(asked, state.language, getPrevious(messages), state.entryName) });
+      updateMessage(id, { status: "done", result: await asker(asked, state.language, getPrevious(messages)) });
     } catch (error) {
       updateMessage(id, { status: "done", failure: error.message });
     }
@@ -793,7 +835,10 @@ export function AskChat() {
       <ul className="ask-messages">
         {messages.length === 0 && (
           <li className="ask-hint">
-            <p>I answer how to use the Quant·ion toolkit. Ask, or pick one:</p>
+            <p className="ask-notice" role="note">
+              This helper only answers about how to use the Quant·ion toolkit.
+            </p>
+            <p>Ask, or pick one:</p>
             <QuestionChips items={getStarters()} />
             <p className="ask-tip">Questions with enough context get better answers.</p>
           </li>

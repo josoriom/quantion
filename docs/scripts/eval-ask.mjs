@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createAsker, createEmbedder, writeAnswer } from "../src/ask/ask.js";
+import { createAsker, createClassifier, createEmbedder, writeAnswer } from "../src/ask/ask.js";
 import { models } from "../src/ask/models.js";
 import { buildTemplateSnippet } from "../src/ask/snippet.js";
 
@@ -18,7 +18,7 @@ const syntaxCheckers = {
   js: (file) => ["node", ["--check", file]],
   r: (file) => ["Rscript", ["-e", `invisible(parse(file = "${file}"))`]],
 };
-const routes = ["usage", "definition", "placement", "review", "guide", "list", "command", "refused"];
+const routes = ["usage", "definition", "placement", "review", "guide", "list", "unsupported", "command", "refused"];
 const confidences = ["high", "medium", "low"];
 const splits = ["dev", "test", "all"];
 
@@ -26,8 +26,10 @@ function readJson(file) {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
+const tests = readJson(path.join(folder, "test.json"));
+
 function readSet(name) {
-  return readJson(path.join(folder, name));
+  return tests[name];
 }
 
 function findApi(list) {
@@ -80,8 +82,10 @@ function printTable(title, rows) {
 
 const api = findApi(readJson(path.join(publicFolder, "api", "versions.json")));
 const document = readJson(path.join(publicFolder, "api", `${api}.json`));
-const index = readJson(path.join(publicFolder, "ask", `${api}.json`));
-const ask = createAsker({ embed: await createEmbedder({ modelFolder: `${path.join(publicFolder, models.folder)}/` }), index, document });
+const modelFolder = path.join(publicFolder, models.folder, models.embedder.name);
+const weights = readFileSync(path.join(modelFolder, models.answers.weights));
+const classify = createClassifier(readJson(path.join(modelFolder, models.answers.labels)), weights.buffer.slice(weights.byteOffset, weights.byteOffset + weights.byteLength));
+const ask = createAsker({ embed: await createEmbedder({ modelFolder: `${path.join(publicFolder, models.folder)}/` }), classify, document });
 
 const records = [];
 
@@ -104,7 +108,7 @@ async function makePrevious(question) {
 }
 
 const usageRows = [];
-for (const item of readSet("ask-questions.json")) {
+for (const item of readSet("questions")) {
   const result = await ask(item.question, "python");
   const isGuide = result.reason.route === "guide";
   const names = result.entries.map((entry) => entry.name);
@@ -141,32 +145,32 @@ function getExplained(explanation) {
   return `${explanation.term}@${explanation.groups[0].matches[0].entry.name}`;
 }
 
-for (const item of readSet("ask-off-topic.json")) {
+for (const item of readSet("offTopic")) {
   const result = await ask(item.question, "python");
   record("offTopic", item, "refused", result, Boolean(result.unknown), `${item.question} -> ${describeRoute(result)}`);
 }
-for (const item of readSet("ask-definitions.json")) {
+for (const item of readSet("definitions")) {
   const result = await ask(item.question, "python", null, item.page);
   const got = result.explanation ? getExplained(result.explanation) : describeRoute(result);
   record("define", item, "definition", result, got === item.expect, `${item.question} -> ${got}`);
 }
-for (const item of readSet("ask-reviews.json")) {
+for (const item of readSet("reviews")) {
   const result = await ask(item.code, "js");
   const fixes = Object.fromEntries((result.review?.fixes ?? []).map((fix) => [fix.from, fix.to]));
   const right = Boolean(result.review) && JSON.stringify(fixes) === JSON.stringify(item.fixes) && (result.review.notes.length > 0) === Boolean(item.notes);
   record("review", item, "review", result, right, `${item.code} -> ${JSON.stringify(fixes)} notes:${result.review?.notes.length ?? "none"}`);
 }
-for (const item of readSet("ask-placements.json")) {
+for (const item of readSet("placements")) {
   const result = await ask(item.question, "python", await makePrevious(item.previous));
   const got = result.placement ? `${result.placement.item.languages.python.name}@${result.placement.owner.name}` : describeRoute(result);
   record("place", item, "placement", result, got === item.expect, `${item.question} -> ${got}`);
 }
-for (const item of readSet("ask-lists.json")) {
+for (const item of readSet("lists")) {
   const result = await ask(item.question, "python");
   const got = result.list ? `${result.list.option}:${result.list.entries.map((entry) => entry.name).join(",")}` : describeRoute(result);
   record("list", item, "list", result, got === item.expect, `${item.question} -> ${got}`);
 }
-for (const item of readSet("ask-guide.json")) {
+for (const item of readSet("guide")) {
   const result = await ask(item.question, "python");
   const got = result.guide ? result.guide.id : describeRoute(result);
   record("guide", item, "guide", result, got === item.expect, `${item.question} -> ${got}`);
@@ -188,13 +192,13 @@ function describeCommand(result) {
   return command.command;
 }
 
-for (const item of readSet("ask-commands.json")) {
+for (const item of readSet("commands")) {
   const result = await ask(item.question, "js");
   const got = describeCommand(result);
   record("command", item, "command", result, got === item.expect, `${item.question} -> ${got}`);
 }
 
-for (const item of readSet("ask-followups.json")) {
+for (const item of readSet("followups")) {
   const result = await ask(item.question, "python", await makePrevious(item.previous));
   let right = result.reason.route === item.route && (item.route !== "usage" || result.reason.confidence !== "low");
   if (right && item.function) right = result.entries[0]?.name === item.function;

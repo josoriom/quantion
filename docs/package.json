@@ -7,7 +7,6 @@
     "build": "vite build",
     "preview": "vite preview",
     "add-version": "node scripts/add-version.mjs",
-    "ask-index": "node scripts/build-ask-index.mjs",
     "ask-eval": "node scripts/eval-ask.mjs"
   },
   "dependencies": {

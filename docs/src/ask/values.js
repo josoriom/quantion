@@ -1,6 +1,5 @@
 import { limits } from "./models.js";
 import { listValueKeys } from "./snippet.js";
-import { applySynonyms } from "./words.js";
 
 const numberPattern = /(?<![\w.])-?\d+(?:\.\d+)?(?!\w|\.\d|-[A-Za-z])/g;
 const percentPattern = /^\s*(%|percent|per cent)/i;
@@ -16,12 +15,15 @@ const stopWords = new Set(["to", "of", "the", "a", "an", "and", "in"]);
 const limitWords = new Set(["above", "below", "over", "under", "least", "most", "minimum", "maximum", "min", "max", "more", "less", "fewer", "higher", "lower", "bigger", "smaller", "larger", "limit", "threshold", "cutoff", "small", "tiny", "big", "large", "drop", "ignore", "remove", "only"]);
 const fillerWords = new Set(["with", "that", "this", "these", "those", "from", "into", "when", "have", "does", "what", "which", "where", "there", "their", "your", "about", "using", "want", "need", "should", "could", "would", "make", "each", "only", "than", "then", "some", "will"]);
 const ignoredTokens = new Set(["min", "max", "auto", "use", "of", "the", "peak", "peaks", "to", "from"]);
-const rangePattern = /\b(?:between|from)\s+(?:m\/z\s+)?(-?\d+(?:\.\d+)?)\s*(?:and|to|-)\s*(-?\d+(?:\.\d+)?)/gi;
+const rangeUnit = String.raw`(?:m\/z|mz|minutes?|mins?|seconds?|secs?|rt)`;
+const rangePattern = new RegExp(String.raw`\b(?:between|from)\s+(?:${rangeUnit}\s+)?(-?\d+(?:\.\d+)?)\s*(?:${rangeUnit}\s*)?(?:and|to|until|till|up to|-)\s*(?:${rangeUnit}\s+)?(-?\d+(?:\.\d+)?)`, "gi");
 const rangePairs = [
   ["from", "to"],
   ["start", "end"],
 ];
 const numberUnitPattern = /\d\s*(minutes?|mins?|seconds?|secs?)\b/gi;
+const plainWordKeys = new Set(["from", "to", "start", "end", "level", "range", "out", "shape", "points", "noise", "file", "files", "matches", "model", "library"]);
+const countWords = new Set(["targets", "target", "files", "file", "samples", "sample", "features", "feature", "peaks", "peak", "scans", "injections", "runs", "batches", "transitions", "spectra", "folders"]);
 const nearWords = new Set(["near", "around", "at", "closest"]);
 const unitHints = [
   { words: ["min", "mins", "minute", "minutes", "sec", "secs", "second", "seconds", "s"], tokens: ["rt", "from", "to", "range"], meaning: /time|minute/i },
@@ -30,6 +32,36 @@ const unitHints = [
   { words: ["da"], tokens: ["mz"], meaning: /\bDa\b/ },
   { words: ["percent"], tokens: ["relative", "frequency"], meaning: /percent|relative|fraction/i },
 ];
+
+const synonyms = [
+  { words: ["monoisotopic mass", "exact mass", "accurate mass", "masses", "mass", "m/z"], to: "mz" },
+  { words: ["retention times", "retention time", "elution time"], to: "rt" },
+  { words: ["areas", "area"], to: "integral" },
+  { words: ["heights", "height", "abundance"], to: "intensity" },
+  { words: ["spectra", "spectrum"], to: "scans" },
+  { words: ["chromatograms", "chromatogram", "xic"], to: "eic" },
+  { words: ["compounds", "compound", "analytes", "analyte", "metabolites", "metabolite", "peptides", "peptide", "lipids", "lipid"], to: "targets" },
+  { words: ["background", "drift"], to: "baseline" },
+  { words: ["cores", "cpus"], to: "threads" },
+  { words: ["read", "open", "load", "import"], to: "parse" },
+  { words: ["save", "export", "convert"], to: "write" },
+  { words: ["fetch"], to: "get" },
+  { words: ["picking", "pick", "detect", "locate"], to: "find" },
+  { words: ["close", "free", "release", "clean up"], to: "dispose" },
+  { words: ["cvparams", "userparams", "attributes", "attribute"], to: "metadata" },
+  { words: ["simulate", "synthetic", "generate"], to: "draw" },
+  { words: ["srm", "mrm"], to: "transitions" },
+];
+
+const patterns = synonyms.flatMap(({ words, to }) =>
+  words.map((word) => ({ pattern: new RegExp(`(?<![\\w/])${word.replace("/", "\\/")}(?![\\w/])`, "gi"), to })),
+);
+
+function applySynonyms(text) {
+  let clean = text;
+  for (const { pattern, to } of patterns) clean = clean.replace(pattern, to);
+  return clean;
+}
 
 function getDotProduct(left, right) {
   let score = 0;
@@ -106,6 +138,14 @@ function getContext(question, start, end) {
 function fitsNumber(kind, value) {
   if (kind.kind === "integer") return Number.isInteger(value) && value >= 0;
   return kind.kind === "number";
+}
+
+function isImpossible(key, value) {
+  const name = key.item.languages.python.name;
+  if (timeKeys.has(name) && value > largestMinutes * 60) return true;
+  if (name === "ppm_tolerance" && value > largestPpm * 10) return true;
+  if (/tolerance$|^step_size$/.test(name) && name !== "ppm_tolerance" && value > largestTolerance * 10) return true;
+  return false;
 }
 
 function getRangePenalty(key, value) {
@@ -201,9 +241,11 @@ export function createValueReader(embed) {
     for (const match of question.matchAll(numberPattern)) {
       if (placedNumbers.has(match.index)) continue;
       const value = Number(match[0]);
-      const numberKeys = keys.filter((key) => fitsNumber(key.kind, value) && !used.has(keyId(key)));
+      const numberKeys = keys.filter((key) => fitsNumber(key.kind, value) && !isImpossible(key, value) && !used.has(keyId(key)));
       const context = getContext(question, match.index, match.index + match[0].length);
       const after = question.slice(match.index + match[0].length);
+      const counted = context.afterWords[0];
+      if (counted && countWords.has(counted) && !numberKeys.some((key) => key.item.languages.python.name.split("_").includes(counted))) continue;
       for (const item of await scoreKeys(context.text, numberKeys, context.afterWords, context.beforeWords)) {
         candidates.push({ ...item, score: item.score + (item.key.isMain ? limits.mainKeyBonus : 0) + getRangePenalty(item.key, value), value, match: match.index, after });
       }
@@ -230,7 +272,7 @@ export function createValueReader(embed) {
     }
 
     const optionKeys = keys.filter((key) => key.isMain && key.isOption && !used.has(keyId(key)));
-    const helperMention = keys.find((key) => !key.isMain && !used.has(keyId(key)) && words.includes(key.item.languages.python.name));
+    const helperMention = keys.find((key) => !key.isMain && !used.has(keyId(key)) && !plainWordKeys.has(key.item.languages.python.name) && words.includes(key.item.languages.python.name));
     const named = helperMention ? { owner: helperMention.owner, item: helperMention.item } : null;
     const subjectWords = entry.name.split("_");
     const ranked = (await scoreKeys(question, optionKeys, [], [], subjectWords)).sort((left, right) => right.score - left.score);

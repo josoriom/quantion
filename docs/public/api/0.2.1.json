@@ -97,10 +97,10 @@
       "name": "parse_ion",
       "group": "Files",
       "kind": "function",
-      "summary": "Open an Ionic file (.ion) from a path, a URL or bytes. Paths and URLs are read lazily: only the bytes a query needs are fetched.",
+      "summary": "Open an Ionic file (.ion) from a path, a URL or bytes. Paths and URLs are read lazily. Only the parts a query needs are read, so large or remote files open fast.",
       "arguments": [
         {
-          "meaning": "Where the file is: a path, an http(s) URL, or raw bytes.",
+          "meaning": "Where the file is. It can be a local path, an http(s) URL, or the file's bytes.",
           "languages": {
             "rust": {
               "name": "input",
@@ -151,7 +151,7 @@
         }
       ],
       "returns": {
-        "meaning": "The opened sample.",
+        "meaning": "The opened sample (one file, i.e. one injection). Pass it to calculate_eic, get_scans and the other functions.",
         "languages": {
           "rust": "Result<SampleFile, QuantionError>",
           "python": "SampleFile",
@@ -184,10 +184,10 @@
       "name": "parse_mzml",
       "group": "Files",
       "kind": "function",
-      "summary": "Open an mzML file from a path or bytes. It is always loaded fully into memory. URLs are refused.",
+      "summary": "Open an mzML file from a path or bytes. The whole file is loaded into memory. URLs are not allowed, so download the file first, or convert it to .ion with write_ion.",
       "arguments": [
         {
-          "meaning": "Where the file is: a path or raw bytes.",
+          "meaning": "Where the file is. It can be a local path or the file's bytes.",
           "languages": {
             "rust": {
               "name": "input",
@@ -213,7 +213,7 @@
         }
       ],
       "returns": {
-        "meaning": "The loaded sample.",
+        "meaning": "The opened sample (one file, i.e. one injection).",
         "languages": {
           "rust": "Result<SampleFile, QuantionError>",
           "python": "SampleFile",
@@ -246,10 +246,10 @@
       "name": "write_ion",
       "group": "Files",
       "kind": "function",
-      "summary": "Write a sample as an Ionic file (.ion). With no out, it returns the bytes. A path writes a file; a URL uploads it in one PUT request.",
+      "summary": "Save a sample as an Ionic file (.ion), for example to convert mzML to .ion. With out, it writes a file to a path or uploads it to a URL with one PUT request. Without out, it returns the bytes.",
       "arguments": [
         {
-          "meaning": "The sample to write.",
+          "meaning": "The sample to save, from parse_ion or parse_mzml.",
           "languages": {
             "rust": {
               "name": "file",
@@ -300,7 +300,7 @@
         }
       ],
       "returns": {
-        "meaning": "The bytes when out is left out; nothing when it is written or uploaded.",
+        "meaning": "The file's bytes when out is not given, or nothing when the file is written or uploaded.",
         "languages": {
           "rust": "Result<Option<Vec<u8>>, QuantionError>",
           "python": "bytes | None",
@@ -331,10 +331,10 @@
       "name": "write_mzml",
       "group": "Files",
       "kind": "function",
-      "summary": "Write a sample as mzML. With no out, it returns the bytes. Only a path is allowed, no URL.",
+      "summary": "Save a sample as mzML. With out, it writes a file to a path (URLs are not allowed). Without out, it returns the bytes.",
       "arguments": [
         {
-          "meaning": "The sample to write.",
+          "meaning": "The sample to save, from parse_ion or parse_mzml.",
           "languages": {
             "rust": {
               "name": "file",
@@ -385,7 +385,7 @@
         }
       ],
       "returns": {
-        "meaning": "The bytes when out is left out; nothing when it is written.",
+        "meaning": "The file's bytes when out is not given, or nothing when the file is written.",
         "languages": {
           "rust": "Result<Option<Vec<u8>>, QuantionError>",
           "python": "bytes | None",
@@ -416,7 +416,7 @@
       "name": "get_scans",
       "group": "Files",
       "kind": "function",
-      "summary": "Read scans by retention time, by precursor m/z, or by both. Ranges return every scan inside them; when rt or mz is one value, you get the closest scan, as a list of one.",
+      "summary": "Read scans (spectra) by retention time, by precursor m/z, or by both. A range returns every scan inside it. One value returns the closest scan, as a list of one.",
       "arguments": [
         {
           "meaning": "The sample to read, from parse_ion or parse_mzml.",
@@ -444,7 +444,7 @@
           }
         },
         {
-          "meaning": "Which scans by retention time: a range or one value. Optional when mz is given.",
+          "meaning": "Retention time of the scans, as a range {from, to} or as one value for the closest scan. Optional when mz is given.",
           "languages": {
             "rust": {
               "name": "query.rt",
@@ -469,7 +469,7 @@
           }
         },
         {
-          "meaning": "Which scans by precursor m/z: a range or one value. Give rt, mz or both.",
+          "meaning": "Precursor m/z of the scans, as a range {from, to} or as one value for the closest scan. Give rt, mz or both. Only MS2 scans have a precursor m/z, so set level to 2 (or 0 for every level) when you give mz.",
           "languages": {
             "rust": {
               "name": "query.mz",
@@ -520,7 +520,7 @@
         }
       ],
       "returns": {
-        "meaning": "The scans found, in rt order.",
+        "meaning": "The scans found, in rt order. An empty list means no scan matched, so check rt, mz and level.",
         "languages": {
           "rust": "Result<Vec<Scan>, QuantionError>",
           "python": "list[Scan]",
@@ -553,7 +553,7 @@
       "name": "get_scan_metadata",
       "group": "Metadata",
       "kind": "function",
-      "summary": "Read the attributes, cvParams and userParams of one scan, one row each, parents before children. Find the scan with get_scans, then pass its index.",
+      "summary": "Read the details stored for one scan (attributes, cvParams and userParams), one row each, parents before children. Find the scan with get_scans, then pass its index.",
       "arguments": [
         {
           "meaning": "The sample to read, from parse_ion or parse_mzml.",
@@ -581,7 +581,7 @@
           }
         },
         {
-          "meaning": "Position of the scan in the spectrum list, from 0: the index of a scan from get_scans.",
+          "meaning": "Position of the scan in the file, from 0. Use the index of a scan from get_scans.",
           "languages": {
             "rust": {
               "name": "index",
@@ -632,7 +632,7 @@
         }
       ],
       "returns": {
-        "meaning": "One row per attribute or param, in the order of the mzML tree. Values are text. A field the file does not give is missing: None in Rust and Python, null in JS, NA in R.",
+        "meaning": "One row per attribute or param, in the order of the mzML tree. Values are text. A field the file does not give is missing (None in Rust and Python, null in JavaScript, NA in R).",
         "languages": {
           "rust": "Result<Vec<ScanParam>, QuantionError>",
           "python": "list[ScanParam]",
@@ -663,7 +663,7 @@
       "name": "calculate_eic",
       "group": "Files",
       "kind": "function",
-      "summary": "Extract the ion chromatogram of one m/z.",
+      "summary": "Calculate the extracted ion chromatogram (EIC, also called XIC) of one m/z. For each MS1 scan, the intensities within the m/z window are summed. Use it to get the chromatogram before find_peaks or get_peak.",
       "arguments": [
         {
           "meaning": "The sample to read, from parse_ion or parse_mzml.",
@@ -691,7 +691,7 @@
           }
         },
         {
-          "meaning": "The m/z to extract (Da).",
+          "meaning": "The m/z of the ion to extract (Da), not the neutral mass of the compound. For example, for the protonated molecule [M+H]+ in positive mode, use M + 1.00728, and for the deprotonated molecule [M−H]− in negative mode, use M − 1.00728, where M is the monoisotopic mass.",
           "languages": {
             "rust": {
               "name": "mz",
@@ -742,7 +742,7 @@
         }
       ],
       "returns": {
-        "meaning": "The chromatogram: x = retention times, y = summed intensities.",
+        "meaning": "The chromatogram, with x as the retention times in minutes and y as the summed intensities.",
         "languages": {
           "rust": "Result<DataXY, QuantionError>",
           "python": "DataXY",
@@ -773,11 +773,11 @@
       "name": "get_ion_image",
       "group": "Files",
       "kind": "function",
-      "summary": "Build an imaging map of one m/z: summed intensity at each x, y position.",
+      "summary": "Build an imaging map of one m/z for mass spectrometry imaging, with the summed intensity at each x, y position.",
       "warning": "Only Ionic files (.ion). The sample must come from parse_ion; a sample from parse_mzml gives an invalid_argument error.",
       "arguments": [
         {
-          "meaning": "The sample to read. Must come from parse_ion.",
+          "meaning": "The sample to read. It must come from parse_ion.",
           "languages": {
             "rust": {
               "name": "file",
@@ -802,7 +802,7 @@
           }
         },
         {
-          "meaning": "The m/z to map (Da).",
+          "meaning": "The m/z of the ion to map (Da), not the neutral mass of the compound. For example, for the protonated molecule [M+H]+ in positive mode, use M + 1.00728, and for the deprotonated molecule [M−H]− in negative mode, use M − 1.00728, where M is the monoisotopic mass.",
           "languages": {
             "rust": {
               "name": "mz",
@@ -853,7 +853,7 @@
         }
       ],
       "returns": {
-        "meaning": "The image.",
+        "meaning": "The image, with one value per pixel, plus its size and position.",
         "languages": {
           "rust": "Result<IonImage, QuantionError>",
           "python": "IonImage",
@@ -884,10 +884,10 @@
       "name": "find_peaks",
       "group": "Traces",
       "kind": "function",
-      "summary": "Find every peak in one trace.",
+      "summary": "Find every peak (peak picking) in one trace or signal, such as a chromatogram (TIC, BPC or EIC). For one known peak at an rt, use get_peak. To calculate EIC use calculate_eic.",
       "arguments": [
         {
-          "meaning": "Retention times, ascending. At least 3 points.",
+          "meaning": "Retention times in minutes, ascending, at least 3 points. For a chromatogram, its x.",
           "languages": {
             "rust": {
               "name": "data.x",
@@ -912,7 +912,7 @@
           }
         },
         {
-          "meaning": "Intensities, same length as x.",
+          "meaning": "Intensities, same length as x. For a chromatogram, its y.",
           "languages": {
             "rust": {
               "name": "data.y",
@@ -963,7 +963,7 @@
         }
       ],
       "returns": {
-        "meaning": "Every peak that passes the filters.",
+        "meaning": "Every peak that passes the filters specified in the function options: the peak table, one row per peak.",
         "languages": {
           "rust": "Result<Vec<Peak>, QuantionError>",
           "python": "list[Peak]",
@@ -994,7 +994,7 @@
       "name": "get_peak",
       "group": "Traces",
       "kind": "function",
-      "summary": "Find the one peak near rt. With a range, only rt ± range is searched; without one, the whole trace is searched and the peak is chosen by its size and its distance to rt.",
+      "summary": "Find the peak closest to rt. If range is given, only peaks within rt ± range are searched. If it is not, the whole trace is searched, and the peak is chosen by its size and its distance from rt.",
       "arguments": [
         {
           "meaning": "Retention times, ascending. At least 3 points.",
@@ -1047,7 +1047,7 @@
           }
         },
         {
-          "meaning": "Expected retention time of the peak.",
+          "meaning": "Expected retention time of the target peak, in minutes.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -1098,7 +1098,7 @@
         }
       ],
       "returns": {
-        "meaning": "The best peak near rt. No peak gives a Peak with every field 0.",
+        "meaning": "The chosen peak, or an empty peak (every field is 0) when no peak is found.",
         "languages": {
           "rust": "Result<Peak, QuantionError>",
           "python": "Peak",
@@ -1129,7 +1129,7 @@
       "name": "fit_peak",
       "group": "Traces",
       "kind": "function",
-      "summary": "Fit a Gaussian or EMG curve to the peak near rt. rt says which peak; its apex intensity is the starting point unless you force one.",
+      "summary": "Fit a Gaussian or EMG curve to the target peak at rt. The function finds the peak within rt ± 0.05 min, then fits the points between its start and end to get its width (fwhm) and tailing (tail). The peak needs at least 5 points.",
       "arguments": [
         {
           "meaning": "Retention times, ascending. At least 3 points.",
@@ -1182,7 +1182,7 @@
           }
         },
         {
-          "meaning": "Expected retention time of the peak.",
+          "meaning": "Retention time of the peak to fit, in minutes. The peak must be within ± 0.05 min of it.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -1233,7 +1233,7 @@
         }
       ],
       "returns": {
-        "meaning": "The fitted curve, or none when no peak is found or the fit fails.",
+        "meaning": "The fitted parameters (height, center, fwhm, tail, r2) for the target peak, or none if no peak is found near rt or the fit fails.",
         "languages": {
           "rust": "Result<Option<PeakParameters>, QuantionError>",
           "python": "PeakParameters | None",
@@ -1264,7 +1264,7 @@
       "name": "draw_peaks",
       "group": "Traces",
       "kind": "function",
-      "summary": "Simulate a chromatogram from one or more peak shapes. Every peak is drawn into the same chromatogram; where they overlap, intensities add up. No real data is needed.",
+      "summary": "Simulate a chromatogram (a synthetic trace) from peak curves (height, center, fwhm, tail). Overlapping peaks add up. Useful for tests, no data needed.",
       "arguments": [
         {
           "meaning": "The peaks to draw, one PeakParameters per peak.",
@@ -1318,7 +1318,7 @@
         }
       ],
       "returns": {
-        "meaning": "The simulated chromatogram: x = retention times, y = summed intensities.",
+        "meaning": "The simulated chromatogram: x = retention times in minutes, y = summed intensities.",
         "languages": {
           "rust": "Result<DataXY, QuantionError>",
           "python": "DataXY",
@@ -1349,10 +1349,10 @@
       "name": "find_noise_level",
       "group": "Traces",
       "kind": "function",
-      "summary": "Estimate the noise level of a signal.",
+      "summary": "Estimate the noise level of a chromatogram or any signal: how noisy it is. Small, narrow peaks are grouped together, and their maximum intensity and width (in number of points) are reported as the noise.",
       "arguments": [
         {
-          "meaning": "Intensities.",
+          "meaning": "Intensities, for example the y of a chromatogram.",
           "languages": {
             "rust": {
               "name": "y",
@@ -1378,7 +1378,7 @@
         }
       ],
       "returns": {
-        "meaning": "The noise intensity and the window width it came from.",
+        "meaning": "The noise intensity and the width (in points) of the noise regions it was estimated from.",
         "languages": {
           "rust": "NoiseLevel",
           "python": "NoiseLevel",
@@ -1409,10 +1409,10 @@
       "name": "calculate_baseline",
       "group": "Traces",
       "kind": "function",
-      "summary": "Estimate a signal's baseline with airPLS.",
+      "summary": "Estimate the baseline (slow background drift) of the input chromatogram or signal using airPLS (Zhang et al., 2010).",
       "arguments": [
         {
-          "meaning": "Intensities.",
+          "meaning": "Intensities, for example the y of a chromatogram.",
           "languages": {
             "rust": {
               "name": "y",
@@ -1463,7 +1463,7 @@
         }
       ],
       "returns": {
-        "meaning": "The baseline, same length as y.",
+        "meaning": "The baseline: one value per point of y.",
         "languages": {
           "rust": "Result<Vec<f64>, QuantionError>",
           "python": "ndarray",
@@ -1494,7 +1494,7 @@
       "name": "find_targets",
       "group": "Targeted",
       "kind": "function",
-      "summary": "For each target, build its EIC at mz and find its peak near rt ± range.",
+      "summary": "Quantify a list of known compounds (targets) in one file. For each target, it builds the EIC at its mz and finds its peak near rt ± range. Use it for a targeted panel.",
       "arguments": [
         {
           "meaning": "The sample to read, from parse_ion or parse_mzml.",
@@ -1522,7 +1522,7 @@
           }
         },
         {
-          "meaning": "What to look for. A target without range searches its whole EIC.",
+          "meaning": "The compounds to look for, each with id, mz, rt and an optional range. A target without range searches its whole EIC.",
           "languages": {
             "rust": {
               "name": "targets",
@@ -1573,7 +1573,7 @@
         }
       ],
       "returns": {
-        "meaning": "One Peak per target, in the same order. A target with no peak gets a Peak with every field 0.",
+        "meaning": "One peak per target, in the same order as targets. A target with no peak gets an empty peak (every field is 0).",
         "languages": {
           "rust": "Result<Vec<Peak>, QuantionError>",
           "python": "list[Peak]",
@@ -1609,7 +1609,7 @@
       "name": "find_transitions",
       "group": "Targeted",
       "kind": "function",
-      "summary": "For each SRM transition, take the stored chromatogram whose precursor (Q1) and product (Q3) are both within 0.005 m/z, and find its peak near rt ± range.",
+      "summary": "Quantify SRM or MRM transitions in one file. For each transition, it takes the stored chromatogram whose precursor (Q1) and product (Q3) are both within 0.005 m/z, and finds its peak near rt ± range.",
       "warning": "Needs the whole file. A sample opened from a URL gives a remote_file error; open it from a path or bytes.",
       "arguments": [
         {
@@ -1638,7 +1638,7 @@
           }
         },
         {
-          "meaning": "The transitions.",
+          "meaning": "The transitions to look for, each with id, precursor, product, rt and range.",
           "languages": {
             "rust": {
               "name": "targets",
@@ -1689,7 +1689,7 @@
         }
       ],
       "returns": {
-        "meaning": "One Peak per transition, in the same order. No match gives a Peak with every field 0.",
+        "meaning": "One peak per transition, in the same order. A transition with no matching chromatogram gets an empty peak (every field is 0).",
         "languages": {
           "rust": "Result<Vec<Peak>, QuantionError>",
           "python": "list[Peak]",
@@ -1720,7 +1720,7 @@
       "name": "find_features",
       "group": "Untargeted",
       "kind": "function",
-      "summary": "Untargeted: find every feature in one file by scanning an m/z grid.",
+      "summary": "Find every feature in one file without a target list (untargeted). It scans an m/z grid, builds the EIC of each grid m/z and finds its peaks.",
       "arguments": [
         {
           "meaning": "The sample to read, from parse_ion or parse_mzml.",
@@ -1774,7 +1774,7 @@
         }
       ],
       "returns": {
-        "meaning": "Every feature found, without frequency.",
+        "meaning": "Every feature found (the feature table), without frequency.",
         "languages": {
           "rust": "Result<Vec<Feature>, QuantionError>",
           "python": "list[Feature]",
@@ -1810,10 +1810,10 @@
       "name": "match_features",
       "group": "Untargeted",
       "kind": "function",
-      "summary": "Untargeted across samples: find features in every file of a folder and match them. Values are medians over the samples where a feature was found.",
+      "summary": "Find the features in every file of a folder and match them across samples (untargeted). The values of each feature are medians over the samples where it was found. Instead of aligning retention times, it groups features with close m/z and rt. Small rt differences between runs are covered by rt_tolerance.",
       "arguments": [
         {
-          "meaning": "Folder with the Ionic (.ion) or mzML files.",
+          "meaning": "Folder with the Ionic (.ion) or mzML files, one file per sample.",
           "languages": {
             "rust": {
               "name": "directory",
@@ -1864,7 +1864,7 @@
         }
       ],
       "returns": {
-        "meaning": "One Feature per matched feature; frequency is the fraction of samples (0–1).",
+        "meaning": "One feature per matched feature (the feature table). frequency is the fraction of samples where it was found, from 0 to 1.",
         "languages": {
           "rust": "Result<Vec<Feature>, QuantionError>",
           "python": "list[Feature]",
@@ -1896,7 +1896,7 @@
       "name": "deisotope_features",
       "group": "Untargeted",
       "kind": "function",
-      "summary": "Remove 13C isotope peaks from a feature list, keeping the monoisotopic peak (M) of each compound. A feature is an isotope when it sits 1.00335/charge above the previous peak (charge = 1 or 2), has the same rt as M, and its intensity is not too high: M+1 at most M × mz × charge / 12 × 0.0108157.",
+      "summary": "Remove the 13C isotope peaks from a feature list and keep the monoisotopic peak (M) of each compound. A feature is an isotope when it is 1.00335/charge above the previous peak (charge 1 or 2), has the same rt as M, and is not too intense (M+1 at most M × mz × charge / 12 × 0.0108157). Run it after find_features or match_features, and before annotate_features.",
       "arguments": [
         {
           "meaning": "The features to clean, from find_features or match_features.",
@@ -1982,11 +1982,11 @@
       "group": "Untargeted",
       "experimental": true,
       "kind": "function",
-      "summary": "Annotate features by matching their MS2 spectra against a spectral library. For each feature and sample, the positive MS2 scan closest to the peak apex is used: its precursor must match the feature m/z within the tolerance, and its RT must be within rt_range. A spectrum encoder turns the scan into a vector, which is scored against the library spectra with the same precursor m/z. The library (an Ionic .ion file) and the encoder (an ONNX model) are read from a path or a URL; by default both come from the josoriom/cipher releases.",
+      "summary": "Name features (annotation) by matching their MS2 spectra against a spectral library. For each feature and sample, it takes the positive MS2 scan closest to the peak apex, whose precursor matches the feature m/z and whose rt is within rt_range. A model turns the scan into a vector, which is scored against the library spectra with the same precursor m/z. By default, the library and the model come from the josoriom/cipher releases.",
       "warning": "This is an experimental feature.",
       "arguments": [
         {
-          "meaning": "The samples, from parse_ion or parse_mzml. Must not be empty.",
+          "meaning": "The samples, from parse_ion or parse_mzml. It must not be empty.",
           "languages": {
             "rust": {
               "name": "files",
@@ -2011,7 +2011,7 @@
           }
         },
         {
-          "meaning": "The features to name: mz and rt each. find_features and match_features output works as is. Empty gives an empty result.",
+          "meaning": "The features to name, each with mz and rt. The output of find_features and match_features works as is. An empty list gives an empty result.",
           "languages": {
             "rust": {
               "name": "features",
@@ -2062,7 +2062,7 @@
         }
       ],
       "returns": {
-        "meaning": "One FeatureAnnotation per feature, in the same order.",
+        "meaning": "One annotation per feature, in the same order as features.",
         "languages": {
           "rust": "Result<Vec<FeatureAnnotation>, QuantionError>",
           "python": "list[FeatureAnnotation]",
@@ -2100,7 +2100,7 @@
       "summary": "Load an ONNX model from a path, a URL or bytes, and read the keys and values stored in it.",
       "arguments": [
         {
-          "meaning": "Where the model is: a path, an http(s) URL, or raw bytes.",
+          "meaning": "Where the model is. It can be a local path, an http(s) URL, or the file's bytes.",
           "languages": {
             "rust": {
               "name": "input",
@@ -2126,7 +2126,7 @@
         }
       ],
       "returns": {
-        "meaning": "The model, with get_keys(), get_values() and get_value(key).",
+        "meaning": "The model, with get_keys(), get_values() and get_value(key) to read what is stored in it.",
         "languages": {
           "rust": "Result<Model, QuantionError>",
           "python": "Model",
@@ -2157,7 +2157,7 @@
       "name": "load_warp",
       "group": "Models",
       "kind": "function",
-      "summary": "Make a retention-time warp model from a loaded model.",
+      "summary": "Make a retention-time warp model from a loaded model. Use it with calibrate and predict_rts to correct rt shifts between runs.",
       "arguments": [
         {
           "meaning": "A model from load_model that holds a warp.",
@@ -2217,10 +2217,10 @@
       "name": "predict_rts",
       "group": "Models",
       "kind": "function",
-      "summary": "Predict where each target elutes in one sample.",
+      "summary": "Predict where each target elutes in one sample, to correct retention-time shifts (rt drift) between runs or batches.",
       "arguments": [
         {
-          "meaning": "The warp model.",
+          "meaning": "The warp model, from load_warp.",
           "languages": {
             "rust": {
               "name": "self",
@@ -2245,7 +2245,7 @@
           }
         },
         {
-          "meaning": "The sample to read, from parse_ion or parse_mzml.",
+          "meaning": "The sample to predict for, from parse_ion or parse_mzml.",
           "languages": {
             "rust": {
               "name": "file",
@@ -2296,7 +2296,7 @@
         }
       ],
       "returns": {
-        "meaning": "One PredictedRt per target, in the same order.",
+        "meaning": "One predicted retention time per target, in the same order.",
         "languages": {
           "rust": "Result<Vec<PredictedRt>, QuantionError>",
           "python": "list[PredictedRt]",
@@ -2327,10 +2327,10 @@
       "name": "calibrate",
       "group": "Models",
       "kind": "function",
-      "summary": "Turn the retention times seen in anchor samples (LTRs, QCs) into targets for predict_rts. Each id gets the median rt over the anchors.",
+      "summary": "Turn the retention times seen in anchor samples (LTRs or QCs) into reference targets for predict_rts. Each id gets the median rt over the anchor samples.",
       "arguments": [
         {
-          "meaning": "The warp model.",
+          "meaning": "The warp model, from load_warp.",
           "languages": {
             "rust": {
               "name": "self",
@@ -2355,7 +2355,7 @@
           }
         },
         {
-          "meaning": "Anchor samples.",
+          "meaning": "The anchor samples (LTRs or QCs), from parse_ion or parse_mzml.",
           "languages": {
             "rust": {
               "name": "anchor_samples",
@@ -2406,7 +2406,7 @@
         }
       ],
       "returns": {
-        "meaning": "One Target per id with the median rt.",
+        "meaning": "One target per id, with the median rt.",
         "languages": {
           "rust": "Result<Vec<Target>, QuantionError>",
           "python": "list[Target]",
@@ -2437,7 +2437,7 @@
       "name": "dispose",
       "group": "Models",
       "kind": "function",
-      "summary": "Free the memory held by a sample, model or warp model.",
+      "summary": "Free the memory held by a sample, a model or a warp model when you are done with it.",
       "arguments": [
         {
           "meaning": "What to free.",
@@ -2491,7 +2491,7 @@
       "name": "SampleFile",
       "group": "Inputs",
       "kind": "type",
-      "summary": "An opened sample from parse_ion or parse_mzml. Free it with dispose when you are done.",
+      "summary": "An opened sample (one file, i.e. one injection) from parse_ion or parse_mzml. Free it with dispose when you are done.",
       "fields": [],
       "languages": {
         "rust": {
@@ -2512,7 +2512,7 @@
       "name": "FromTo",
       "group": "Inputs",
       "kind": "type",
-      "summary": "A range: retention-time windows and m/z ranges.",
+      "summary": "A range with a start and an end, used for retention-time windows and m/z ranges.",
       "fields": [
         {
           "meaning": "Start of the range.",
@@ -2580,10 +2580,10 @@
       "name": "Target",
       "group": "Inputs",
       "kind": "type",
-      "summary": "One compound. range limits the search in find_targets; missing or 0 searches the whole EIC. predict_rts and calibrate do not use range.",
+      "summary": "One compound to look for, with its m/z and expected retention time. range limits the search in find_targets, and a missing or 0 range searches the whole EIC. predict_rts and calibrate do not use range.",
       "fields": [
         {
-          "meaning": "Your name for it. Not used in the search.",
+          "meaning": "Your name for the compound. It is not used in the search.",
           "languages": {
             "rust": {
               "name": "id",
@@ -2604,7 +2604,7 @@
           }
         },
         {
-          "meaning": "m/z (Da).",
+          "meaning": "The m/z of the ion to look for (Da), not the neutral mass of the compound. For example, for the protonated molecule [M+H]+ in positive mode, use M + 1.00728, and for the deprotonated molecule [M−H]− in negative mode, use M − 1.00728, where M is the monoisotopic mass.",
           "languages": {
             "rust": {
               "name": "mz",
@@ -2625,7 +2625,7 @@
           }
         },
         {
-          "meaning": "Expected retention time.",
+          "meaning": "Expected retention time, in minutes by default (or in the time unit set in the EIC options).",
           "languages": {
             "rust": {
               "name": "rt",
@@ -2646,7 +2646,7 @@
           }
         },
         {
-          "meaning": "Half-width of the search window around rt. Missing or 0 = search the whole EIC.",
+          "meaning": "Half-width of the search window around rt, in the same unit as rt. Missing or 0 searches the whole EIC.",
           "languages": {
             "rust": {
               "name": "range",
@@ -2690,10 +2690,10 @@
       "name": "Transition",
       "group": "Inputs",
       "kind": "type",
-      "summary": "One SRM transition.",
+      "summary": "One SRM or MRM transition, with its precursor (Q1) and product (Q3) m/z.",
       "fields": [
         {
-          "meaning": "Your name for it.",
+          "meaning": "Your name for the transition.",
           "languages": {
             "rust": {
               "name": "id",
@@ -2756,7 +2756,7 @@
           }
         },
         {
-          "meaning": "Expected retention time.",
+          "meaning": "Expected retention time, in minutes.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -2777,7 +2777,7 @@
           }
         },
         {
-          "meaning": "Half-width of the search window around rt.",
+          "meaning": "Half-width of the search window around rt, in minutes.",
           "languages": {
             "rust": {
               "name": "range",
@@ -2821,7 +2821,7 @@
       "name": "Header",
       "group": "Inputs",
       "kind": "type",
-      "summary": "One HTTP header sent with an upload in write_ion. Values are never printed. A line break, or Host, Content-Length or Transfer-Encoding, gives an invalid_argument error.",
+      "summary": "One HTTP header sent with an upload in write_ion, for example a token. Values are never printed. A line break, or the names Host, Content-Length or Transfer-Encoding, give an invalid_argument error.",
       "fields": [
         {
           "meaning": "Name of the header, such as Authorization.",
@@ -2889,10 +2889,10 @@
       "name": "ScanQuery",
       "group": "Inputs",
       "kind": "type",
-      "summary": "Which scans get_scans returns: by retention time, by precursor m/z, or by both. Two ranges give every scan inside both; when rt or mz is one value, you get the one scan closest to it.",
+      "summary": "Which scans get_scans returns, by retention time, by precursor m/z, or by both. Ranges give every scan inside them, and one value gives the closest scan.",
       "fields": [
         {
-          "meaning": "Retention time: a range, one value for the closest scan, or nothing. Default Any.",
+          "meaning": "Retention time, as a range, as one value for the closest scan, or nothing.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -2913,7 +2913,7 @@
           }
         },
         {
-          "meaning": "Precursor m/z: a range, one value for the closest scan, or nothing. Default Any.",
+          "meaning": "Precursor m/z, as a range, as one value for the closest scan, or nothing.",
           "languages": {
             "rust": {
               "name": "mz",
@@ -2955,10 +2955,10 @@
       "name": "Position",
       "group": "Inputs",
       "kind": "type",
-      "summary": "One part of a ScanQuery in Rust: where rt or m/z must be. Python, JS and R give a number, a {from, to} range, or nothing instead.",
+      "summary": "In Rust, where rt or m/z must be in a ScanQuery. Python, JavaScript and R use a number, a {from, to} range, or nothing instead.",
       "fields": [
         {
-          "meaning": "No filter (default).",
+          "meaning": "No filter.",
           "languages": {
             "rust": {
               "name": "Any",
@@ -2979,7 +2979,7 @@
           }
         },
         {
-          "meaning": "Every scan with the value in the range.",
+          "meaning": "Every scan whose value is in the range.",
           "languages": {
             "rust": {
               "name": "Range(FromTo)",
@@ -3000,7 +3000,7 @@
           }
         },
         {
-          "meaning": "Only the scan with the value closest to this one.",
+          "meaning": "Only the scan whose value is closest to this one.",
           "languages": {
             "rust": {
               "name": "Closest(f64)",
@@ -3044,7 +3044,7 @@
       "summary": "Unit of the retention times you give to a function. Results are always in minutes.",
       "fields": [
         {
-          "meaning": "Minutes (default).",
+          "meaning": "Minutes.",
           "languages": {
             "rust": {
               "name": "MINUTES",
@@ -3105,10 +3105,10 @@
       "name": "PeakShape",
       "group": "Enums",
       "kind": "type",
-      "summary": "Curve used to fit a peak.",
+      "summary": "Curve used to fit or check a peak.",
       "fields": [
         {
-          "meaning": "Symmetric Gaussian.",
+          "meaning": "Symmetric bell curve.",
           "languages": {
             "rust": {
               "name": "GAUSSIAN",
@@ -3129,7 +3129,7 @@
           }
         },
         {
-          "meaning": "Exponentially modified Gaussian: a Gaussian with a tail on the right (default).",
+          "meaning": "Exponentially modified Gaussian: a bell curve with a tail on the right.",
           "languages": {
             "rust": {
               "name": "EMG",
@@ -3193,7 +3193,7 @@
           }
         },
         {
-          "meaning": "A cvParam: a param from the controlled vocabulary, with an accession.",
+          "meaning": "A cvParam, a param from the controlled vocabulary, with an accession.",
           "languages": {
             "rust": {
               "name": "CV",
@@ -3214,7 +3214,7 @@
           }
         },
         {
-          "meaning": "A userParam: a param the software that wrote the file named itself.",
+          "meaning": "A userParam, a param named by the software that wrote the file.",
           "languages": {
             "rust": {
               "name": "USER",
@@ -3254,10 +3254,10 @@
       "name": "FindPeaksOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Peak-picking settings. Every field is optional.",
+      "summary": "Options for find_peaks. Every field is optional.",
       "fields": [
         {
-          "meaning": "Drop peaks with a smaller area. Off when not given.",
+          "meaning": "Drop peaks whose area (integral) is below this value. Off when not given.",
           "languages": {
             "rust": {
               "name": "min_integral",
@@ -3282,7 +3282,7 @@
           }
         },
         {
-          "meaning": "Drop peaks with a lower apex.",
+          "meaning": "Drop peaks whose apex intensity is below this value. Raise it to ignore small peaks.",
           "languages": {
             "rust": {
               "name": "min_intensity",
@@ -3307,7 +3307,7 @@
           }
         },
         {
-          "meaning": "Drop peaks with fewer points.",
+          "meaning": "Drop peaks with fewer data points than this.",
           "languages": {
             "rust": {
               "name": "min_peak_width_points",
@@ -3332,7 +3332,7 @@
           }
         },
         {
-          "meaning": "Fixed noise level, used when auto_noise is false.",
+          "meaning": "Fixed noise level (intensity), used only when auto_noise is false.",
           "languages": {
             "rust": {
               "name": "noise",
@@ -3357,7 +3357,7 @@
           }
         },
         {
-          "meaning": "Estimate the noise from the trace.",
+          "meaning": "Estimate the noise from the chromatogram. Turn off and set noise to use a fixed value.",
           "languages": {
             "rust": {
               "name": "auto_noise",
@@ -3382,7 +3382,7 @@
           }
         },
         {
-          "meaning": "Subtract an airPLS baseline first.",
+          "meaning": "Subtract an airPLS baseline before finding peaks. Turn off for windows shorter than 1 minute: they do not have enough points to estimate the baseline and can give misleading results.",
           "languages": {
             "rust": {
               "name": "auto_baseline",
@@ -3407,7 +3407,7 @@
           }
         },
         {
-          "meaning": "airPLS smoothness.",
+          "meaning": "Smoothness of the airPLS baseline. A larger value gives a smoother baseline that follows only slow drift.",
           "languages": {
             "rust": {
               "name": "lambda",
@@ -3432,7 +3432,7 @@
           }
         },
         {
-          "meaning": "Maximum airPLS iterations.",
+          "meaning": "Maximum number of airPLS iterations used to estimate the baseline.",
           "languages": {
             "rust": {
               "name": "max_iterations",
@@ -3457,7 +3457,7 @@
           }
         },
         {
-          "meaning": "Let neighbouring peaks share points.",
+          "meaning": "Let neighbouring peaks share points at their border. When off, overlapping peaks are split at the valley between them.",
           "languages": {
             "rust": {
               "name": "allow_overlap",
@@ -3482,7 +3482,7 @@
           }
         },
         {
-          "meaning": "Minimum signal-to-noise ratio.",
+          "meaning": "Minimum signal-to-noise ratio. A peak’s apex must be above min_snr × noise.",
           "languages": {
             "rust": {
               "name": "min_snr",
@@ -3507,7 +3507,7 @@
           }
         },
         {
-          "meaning": "Minimum fit quality of the peak shape (0–1). 0 keeps every peak.",
+          "meaning": "Minimum fit quality (0–1) of the peak shape. Peaks that fit the shape worse are dropped. 0 keeps every peak.",
           "languages": {
             "rust": {
               "name": "min_r2",
@@ -3532,7 +3532,7 @@
           }
         },
         {
-          "meaning": "Curve used for the fit.",
+          "meaning": "Curve used to check the peak shape for min_r2: EMG or GAUSSIAN.",
           "languages": {
             "rust": {
               "name": "shape",
@@ -3557,7 +3557,7 @@
           }
         },
         {
-          "meaning": "Smoothing window in points. 0 = no smoothing.",
+          "meaning": "Savitzky–Golay smoothing window, in points, to smooth noisy chromatograms. 0 = no smoothing. A larger value gives a smoother chromatogram.",
           "languages": {
             "rust": {
               "name": "kernel_size",
@@ -3601,10 +3601,10 @@
       "name": "FitPeakOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for fit_peak.",
+      "summary": "Options for fit_peak function.",
       "fields": [
         {
-          "meaning": "Curve to fit.",
+          "meaning": "Curve to fit: EMG (with a right tail) or GAUSSIAN (symmetric).",
           "languages": {
             "rust": {
               "name": "shape",
@@ -3629,7 +3629,7 @@
           }
         },
         {
-          "meaning": "Apex intensity to start the fit from. 0 = take it from the peak at rt.",
+          "meaning": "Apex intensity to start the fit from. 0 = use the apex of the peak found at rt.",
           "languages": {
             "rust": {
               "name": "intensity",
@@ -3673,10 +3673,10 @@
       "name": "GetPeakOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for get_peak.",
+      "summary": "Options for get_peak, including the search window and the peak-finding settings.",
       "fields": [
         {
-          "meaning": "Half-width of the search window around rt. 0 searches the whole trace.",
+          "meaning": "Half-width of the search window, in minutes. Only peaks within rt ± range are considered. 0 searches the whole trace.",
           "languages": {
             "rust": {
               "name": "range",
@@ -3701,7 +3701,7 @@
           }
         },
         {
-          "meaning": "Settings for peak picking.",
+          "meaning": "Options for find_peaks function.",
           "languages": {
             "rust": {
               "name": "find_peaks",
@@ -3745,10 +3745,10 @@
       "name": "CalculateEicOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Which scans are read and how wide the m/z window is. Used by calculate_eic, and as the eic group of find_targets, find_features and match_features. The wider of the ppm and absolute m/z windows is used.",
+      "summary": "Options for calculate_eic, including the retention-time range to read and the m/z window. The same options are used by find_targets, find_features and match_features. The wider of the ppm and Da windows is used.",
       "fields": [
         {
-          "meaning": "Start of the retention-time range read.",
+          "meaning": "Start of the retention-time range to read.",
           "languages": {
             "rust": {
               "name": "from",
@@ -3773,7 +3773,7 @@
           }
         },
         {
-          "meaning": "End of the retention-time range read. The default reads to the end of the run.",
+          "meaning": "End of the retention-time range to read. By default, the run is read to the end.",
           "languages": {
             "rust": {
               "name": "to",
@@ -3798,7 +3798,7 @@
           }
         },
         {
-          "meaning": "Tolerance in ppm.",
+          "meaning": "Half-width of the m/z window, in ppm of the m/z.",
           "languages": {
             "rust": {
               "name": "ppm_tolerance",
@@ -3823,7 +3823,7 @@
           }
         },
         {
-          "meaning": "Absolute tolerance in Da.",
+          "meaning": "Half-width of the m/z window, in Da.",
           "languages": {
             "rust": {
               "name": "mz_tolerance",
@@ -3848,7 +3848,7 @@
           }
         },
         {
-          "meaning": "Unit of from, to and rt values given.",
+          "meaning": "Unit of from and to, minutes or seconds.",
           "languages": {
             "rust": {
               "name": "time_unit",
@@ -3892,10 +3892,10 @@
       "name": "GridOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "The m/z grid that find_features and match_features search.",
+      "summary": "The m/z grid that find_features and match_features scan, from start to end in steps of step_size.",
       "fields": [
         {
-          "meaning": "Lowest m/z.",
+          "meaning": "Lowest m/z of the grid.",
           "languages": {
             "rust": {
               "name": "start",
@@ -3920,7 +3920,7 @@
           }
         },
         {
-          "meaning": "Highest m/z.",
+          "meaning": "Highest m/z of the grid.",
           "languages": {
             "rust": {
               "name": "end",
@@ -3945,7 +3945,7 @@
           }
         },
         {
-          "meaning": "Step between grid m/z values (Da).",
+          "meaning": "Distance between two grid m/z values, in Da. A smaller step is finer but slower.",
           "languages": {
             "rust": {
               "name": "step_size",
@@ -3989,10 +3989,10 @@
       "name": "GroupingOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "How match_features matches features across samples.",
+      "summary": "How match_features decides that features from different samples are the same feature.",
       "fields": [
         {
-          "meaning": "Same feature when m/z is within this ppm…",
+          "meaning": "Features are the same when their m/z is within this many ppm, or within mz_tolerance.",
           "languages": {
             "rust": {
               "name": "ppm_tolerance",
@@ -4017,7 +4017,7 @@
           }
         },
         {
-          "meaning": "…or within this absolute m/z (Da).",
+          "meaning": "Features are the same when their m/z is within this many Da, or within ppm_tolerance.",
           "languages": {
             "rust": {
               "name": "mz_tolerance",
@@ -4042,7 +4042,7 @@
           }
         },
         {
-          "meaning": "…and rt is within this many minutes.",
+          "meaning": "Features are the same only when their rt is also within this many minutes.",
           "languages": {
             "rust": {
               "name": "rt_tolerance",
@@ -4067,7 +4067,7 @@
           }
         },
         {
-          "meaning": "Keep a feature only if found in at least this fraction of samples (0–1).",
+          "meaning": "Keep a feature only if it is found in at least this fraction of samples, from 0 to 1. For example, 0.8 keeps features seen in 80% of the samples.",
           "languages": {
             "rust": {
               "name": "min_frequency",
@@ -4111,10 +4111,10 @@
       "name": "FindTargetsOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for find_targets.",
+      "summary": "Options for find_targets, including the EIC window, the peak-finding settings and the threads.",
       "fields": [
         {
-          "meaning": "EIC retention-time range (from, to), tolerances and time unit.",
+          "meaning": "Options for the EICs, with the retention-time range (from, to), the m/z tolerances and the time unit.",
           "languages": {
             "rust": {
               "name": "eic",
@@ -4139,7 +4139,7 @@
           }
         },
         {
-          "meaning": "Settings for peak picking.",
+          "meaning": "Options for find_peaks, used for every target.",
           "languages": {
             "rust": {
               "name": "find_peaks",
@@ -4164,7 +4164,7 @@
           }
         },
         {
-          "meaning": "Number of threads.",
+          "meaning": "Number of threads (CPU cores) used to process the targets in parallel.",
           "languages": {
             "rust": {
               "name": "threads",
@@ -4208,10 +4208,10 @@
       "name": "FindTransitionsOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for find_transitions.",
+      "summary": "Options for find_transitions, including the peak-finding settings and the threads.",
       "fields": [
         {
-          "meaning": "Settings for peak picking.",
+          "meaning": "Options for find_peaks, used for every transition.",
           "languages": {
             "rust": {
               "name": "find_peaks",
@@ -4236,7 +4236,7 @@
           }
         },
         {
-          "meaning": "Number of threads.",
+          "meaning": "Number of threads (CPU cores) used to process the transitions in parallel.",
           "languages": {
             "rust": {
               "name": "threads",
@@ -4280,10 +4280,10 @@
       "name": "FindFeaturesOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for find_features.",
+      "summary": "Options for find_features, including the EIC window, the m/z grid, the peak-finding settings and the threads.",
       "fields": [
         {
-          "meaning": "EIC retention-time range (from, to), tolerances and time unit.",
+          "meaning": "Options for the EICs, with the retention-time range (from, to), the m/z tolerances and the time unit.",
           "languages": {
             "rust": {
               "name": "eic",
@@ -4308,7 +4308,7 @@
           }
         },
         {
-          "meaning": "The m/z grid.",
+          "meaning": "The m/z grid to scan.",
           "languages": {
             "rust": {
               "name": "grid",
@@ -4333,7 +4333,7 @@
           }
         },
         {
-          "meaning": "Settings for peak picking.",
+          "meaning": "Options for find_peaks, used for every grid m/z.",
           "languages": {
             "rust": {
               "name": "find_peaks",
@@ -4358,7 +4358,7 @@
           }
         },
         {
-          "meaning": "Number of threads.",
+          "meaning": "Number of threads (CPU cores) used to scan the grid in parallel.",
           "languages": {
             "rust": {
               "name": "threads",
@@ -4402,10 +4402,10 @@
       "name": "MatchFeaturesOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for match_features: the find_features settings plus grouping.",
+      "summary": "Options for match_features. They are the find_features options plus the grouping across samples.",
       "fields": [
         {
-          "meaning": "EIC retention-time range (from, to), tolerances and time unit.",
+          "meaning": "Options for the EICs, with the retention-time range (from, to), the m/z tolerances and the time unit.",
           "languages": {
             "rust": {
               "name": "eic",
@@ -4430,7 +4430,7 @@
           }
         },
         {
-          "meaning": "The m/z grid.",
+          "meaning": "The m/z grid to scan.",
           "languages": {
             "rust": {
               "name": "grid",
@@ -4480,7 +4480,7 @@
           }
         },
         {
-          "meaning": "Settings for peak picking.",
+          "meaning": "Options for find_peaks, used for every grid m/z.",
           "languages": {
             "rust": {
               "name": "find_peaks",
@@ -4505,7 +4505,7 @@
           }
         },
         {
-          "meaning": "Number of threads.",
+          "meaning": "Number of threads (CPU cores) used to process the files in parallel.",
           "languages": {
             "rust": {
               "name": "threads",
@@ -4549,10 +4549,10 @@
       "name": "DeisotopeFeaturesOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "How deisotope_features links isotope peaks.",
+      "summary": "Options for deisotope_features, which say how close an isotope peak must be.",
       "fields": [
         {
-          "meaning": "Same compound when rt is within this many minutes of M.",
+          "meaning": "An isotope belongs to M only when its rt is within this many minutes of M.",
           "languages": {
             "rust": {
               "name": "rt_tolerance",
@@ -4577,7 +4577,7 @@
           }
         },
         {
-          "meaning": "Isotope peak when m/z is within this many Da of the expected position.",
+          "meaning": "A feature is an isotope only when its m/z is within this many Da of the expected isotope position.",
           "languages": {
             "rust": {
               "name": "mz_tolerance",
@@ -4621,10 +4621,10 @@
       "name": "AnnotateFeaturesOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for annotate_features.",
+      "summary": "Options for annotate_features, including the library, the model, the tolerances and how many matches to keep.",
       "fields": [
         {
-          "meaning": "Spectral library: an Ionic (.ion) file path or URL. Each spectrum has a precursor m/z, a vector array and the params named by the model.",
+          "meaning": "Spectral library, as a path or URL to an Ionic (.ion) file. Each spectrum has a precursor m/z, a vector array and the params the model names. Only Ionic (.ion) libraries work.",
           "languages": {
             "rust": {
               "name": "library",
@@ -4649,7 +4649,7 @@
           }
         },
         {
-          "meaning": "Spectrum model: an ONNX file path or URL.",
+          "meaning": "Spectrum model, as a path or URL to an ONNX file.",
           "languages": {
             "rust": {
               "name": "model",
@@ -4699,7 +4699,7 @@
           }
         },
         {
-          "meaning": "Precursor tolerance in ppm. The larger of the two tolerances is used.",
+          "meaning": "Precursor m/z tolerance in ppm. The larger of the ppm and Da tolerances is used.",
           "languages": {
             "rust": {
               "name": "ppm_tolerance",
@@ -4724,7 +4724,7 @@
           }
         },
         {
-          "meaning": "Precursor tolerance in Da.",
+          "meaning": "Precursor m/z tolerance in Da. The larger of the ppm and Da tolerances is used.",
           "languages": {
             "rust": {
               "name": "mz_tolerance",
@@ -4749,7 +4749,7 @@
           }
         },
         {
-          "meaning": "Largest distance in minutes from the peak apex to the MS2 scan.",
+          "meaning": "Largest distance, in minutes, from the peak apex to the MS2 scan.",
           "languages": {
             "rust": {
               "name": "rt_range",
@@ -4774,7 +4774,7 @@
           }
         },
         {
-          "meaning": "MS2 peaks below this share of the base peak are dropped (0–1).",
+          "meaning": "MS2 peaks below this share of the base peak are removed before matching, from 0 to 1.",
           "languages": {
             "rust": {
               "name": "min_relative_intensity",
@@ -4818,10 +4818,10 @@
       "name": "DrawPeaksOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for draw_peaks.",
+      "summary": "Options for draw_peaks, including the time range and the number of points.",
       "fields": [
         {
-          "meaning": "Start of the chromatogram. With to, 0 and 0 = fit the range around all the peaks.",
+          "meaning": "Start of the simulated chromatogram, in minutes. Leave from and to at 0 to cover all the peaks automatically.",
           "languages": {
             "rust": {
               "name": "from",
@@ -4846,7 +4846,7 @@
           }
         },
         {
-          "meaning": "End of the chromatogram.",
+          "meaning": "End of the simulated chromatogram, in minutes.",
           "languages": {
             "rust": {
               "name": "to",
@@ -4871,7 +4871,7 @@
           }
         },
         {
-          "meaning": "Number of points drawn between from and to.",
+          "meaning": "Number of points drawn from from to to.",
           "languages": {
             "rust": {
               "name": "points",
@@ -4915,10 +4915,10 @@
       "name": "CalculateBaselineOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "airPLS baseline settings for calculate_baseline.",
+      "summary": "Options for calculate_baseline, which estimates the baseline with airPLS.",
       "fields": [
         {
-          "meaning": "Smoothness. Larger = smoother.",
+          "meaning": "Smoothness of the baseline. A larger value gives a smoother baseline that follows only slow drift.",
           "languages": {
             "rust": {
               "name": "lambda",
@@ -4943,7 +4943,7 @@
           }
         },
         {
-          "meaning": "Maximum iterations.",
+          "meaning": "Maximum number of iterations used to estimate the baseline.",
           "languages": {
             "rust": {
               "name": "max_iterations",
@@ -4987,10 +4987,10 @@
       "name": "GetScanMetadataOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for get_scan_metadata.",
+      "summary": "Options for get_scan_metadata.",
       "fields": [
         {
-          "meaning": "Which tags to keep, by name. A row is kept when the last tag of its path matches, so scan keeps spectrum/scanList/scan[0] but not its scanWindow. Empty keeps every tag. The names are: spectrum, referenceableParamGroupRef, spectrumDescription, scanList, scan, scanWindowList, scanWindow, precursorList, precursor, isolationWindow, selectedIonList, selectedIon, activation, productList, product, binaryDataArrayList, binaryDataArray.",
+          "meaning": "Which tags to keep, by name. A row is kept when the last tag of its path matches, so scan keeps spectrum/scanList/scan[0] but not its scanWindow. An empty list keeps every tag. The names are spectrum, referenceableParamGroupRef, spectrumDescription, scanList, scan, scanWindowList, scanWindow, precursorList, precursor, isolationWindow, selectedIonList, selectedIon, activation, productList, product, binaryDataArrayList and binaryDataArray.",
           "languages": {
             "rust": {
               "name": "tags",
@@ -5034,10 +5034,10 @@
       "name": "GetScansOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for get_scans.",
+      "summary": "Options for get_scans, including the MS level and which arrays to read.",
       "fields": [
         {
-          "meaning": "MS level. 0 = every level.",
+          "meaning": "MS level of the scans, 1 for MS1 and 2 for MS2. 0 reads every level.",
           "languages": {
             "rust": {
               "name": "level",
@@ -5062,7 +5062,7 @@
           }
         },
         {
-          "meaning": "Unit of rt in the query.",
+          "meaning": "Unit of the rt you give, minutes or seconds.",
           "languages": {
             "rust": {
               "name": "time_unit",
@@ -5087,7 +5087,7 @@
           }
         },
         {
-          "meaning": "Which arrays to read from each scan, as keys with accessions. Every other field of Scan always comes back.",
+          "meaning": "Which data arrays to read from each scan, such as m/z and intensity, given as keys with accessions. The other fields of Scan always come back.",
           "languages": {
             "rust": {
               "name": "arrays",
@@ -5131,7 +5131,7 @@
       "name": "ScanArray",
       "group": "Options",
       "kind": "type",
-      "summary": "One array to read from each scan in get_scans.",
+      "summary": "One data array to read from each scan in get_scans, for example an extra array stored in the file.",
       "fields": [
         {
           "meaning": "Name of the array in the result, as a field of the scan.",
@@ -5199,10 +5199,10 @@
       "name": "ParseIonOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for parse_ion.",
+      "summary": "Options for parse_ion.",
       "fields": [
         {
-          "meaning": "Cache size in bytes. 0 = no limit.",
+          "meaning": "Maximum memory, in bytes, kept for the parts of the file already read. 0 = no limit. Set it to limit memory on large or remote files.",
           "languages": {
             "rust": {
               "name": "max_cache_size",
@@ -5246,10 +5246,10 @@
       "name": "WriteIonOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for write_ion.",
+      "summary": "Options for write_ion, including where to write and how to compress.",
       "fields": [
         {
-          "meaning": "Path or URL to write to. Not given = return the bytes.",
+          "meaning": "Path or URL to write to. If it is not given, the bytes are returned.",
           "languages": {
             "rust": {
               "name": "out",
@@ -5274,7 +5274,7 @@
           }
         },
         {
-          "meaning": "Replace an existing file.",
+          "meaning": "Replace the file if it already exists.",
           "languages": {
             "rust": {
               "name": "overwrite",
@@ -5299,7 +5299,7 @@
           }
         },
         {
-          "meaning": "Compression level, 0 to 22.",
+          "meaning": "Compression level, 0 to 22. A higher level gives a smaller file but takes longer to write.",
           "languages": {
             "rust": {
               "name": "level",
@@ -5324,7 +5324,7 @@
           }
         },
         {
-          "meaning": "Store intensities as 32-bit floats.",
+          "meaning": "Store intensities as 32-bit floats, for a smaller file with slightly less precision.",
           "languages": {
             "rust": {
               "name": "f32_compress",
@@ -5374,7 +5374,7 @@
           }
         },
         {
-          "meaning": "Width of the m/z windows the spectra are split into, in Da, so a query reads only the windows it needs. A whole number, 0 or more; 0 keeps each spectrum whole.",
+          "meaning": "Width of the m/z windows the spectra are split into, in Da, so a query reads only the windows it needs. 0 keeps each spectrum whole. It only changes how the file is stored. It is not the EIC window.",
           "languages": {
             "rust": {
               "name": "mz_window",
@@ -5399,7 +5399,7 @@
           }
         },
         {
-          "meaning": "Extra HTTP headers. Only with a URL.",
+          "meaning": "Extra HTTP headers for the upload, such as a token. Only used with a URL.",
           "languages": {
             "rust": {
               "name": "headers",
@@ -5443,10 +5443,10 @@
       "name": "WriteMzmlOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for write_mzml.",
+      "summary": "Options for write_mzml.",
       "fields": [
         {
-          "meaning": "Path to write to. Not given = return the bytes.",
+          "meaning": "Path to write to. If it is not given, the bytes are returned.",
           "languages": {
             "rust": {
               "name": "out",
@@ -5471,7 +5471,7 @@
           }
         },
         {
-          "meaning": "Replace an existing file.",
+          "meaning": "Replace the file if it already exists.",
           "languages": {
             "rust": {
               "name": "overwrite",
@@ -5515,10 +5515,10 @@
       "name": "GetIonImageOptions",
       "group": "Options",
       "kind": "type",
-      "summary": "Settings for get_ion_image.",
+      "summary": "Options for get_ion_image, including the m/z window and the MS level.",
       "fields": [
         {
-          "meaning": "Absolute m/z tolerance (Da).",
+          "meaning": "Half-width of the m/z window, in Da. There is no ppm option here.",
           "languages": {
             "rust": {
               "name": "tolerance",
@@ -5543,7 +5543,7 @@
           }
         },
         {
-          "meaning": "MS level.",
+          "meaning": "MS level of the scans used.",
           "languages": {
             "rust": {
               "name": "level",
@@ -5568,7 +5568,7 @@
           }
         },
         {
-          "meaning": "Progress callback: fetched bytes, total bytes, bytes held.",
+          "meaning": "Function called while reading, with the bytes fetched, the total bytes and the bytes held in memory. Useful for a progress bar on remote files.",
           "languages": {
             "rust": {
               "name": "on_progress",
@@ -5612,10 +5612,10 @@
       "name": "Peak",
       "group": "Results",
       "kind": "type",
-      "summary": "One chromatographic peak. No peak gives every field 0.",
+      "summary": "One chromatographic peak, or an empty peak (every field is 0) when no peak is found.",
       "fields": [
         {
-          "meaning": "Apex retention time (minutes).",
+          "meaning": "Apex retention time, in minutes.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -5636,7 +5636,7 @@
           }
         },
         {
-          "meaning": "Start of the peak.",
+          "meaning": "Start of the peak, in minutes.",
           "languages": {
             "rust": {
               "name": "from",
@@ -5657,7 +5657,7 @@
           }
         },
         {
-          "meaning": "End of the peak.",
+          "meaning": "End of the peak, in minutes.",
           "languages": {
             "rust": {
               "name": "to",
@@ -5678,7 +5678,7 @@
           }
         },
         {
-          "meaning": "Apex intensity.",
+          "meaning": "Apex intensity: the peak height.",
           "languages": {
             "rust": {
               "name": "intensity",
@@ -5699,7 +5699,7 @@
           }
         },
         {
-          "meaning": "Area of the peak.",
+          "meaning": "Area (integral) of the peak, calculated with the trapezoid rule on the chromatogram trace between from and to.",
           "languages": {
             "rust": {
               "name": "integral",
@@ -5720,7 +5720,7 @@
           }
         },
         {
-          "meaning": "Points across the peak.",
+          "meaning": "Number of data points in the peak, from its start to its end.",
           "languages": {
             "rust": {
               "name": "n_points",
@@ -5760,10 +5760,10 @@
       "name": "Feature",
       "group": "Results",
       "kind": "type",
-      "summary": "A peak at an m/z. match_features adds frequency.",
+      "summary": "A peak at one m/z, found without a target list. match_features also adds its frequency across samples.",
       "fields": [
         {
-          "meaning": "m/z (Da).",
+          "meaning": "m/z of the feature (Da).",
           "languages": {
             "rust": {
               "name": "mz",
@@ -5784,7 +5784,7 @@
           }
         },
         {
-          "meaning": "Apex retention time (minutes).",
+          "meaning": "Apex retention time, in minutes.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -5805,7 +5805,7 @@
           }
         },
         {
-          "meaning": "Start of the peak.",
+          "meaning": "Start of the peak, in minutes.",
           "languages": {
             "rust": {
               "name": "from",
@@ -5826,7 +5826,7 @@
           }
         },
         {
-          "meaning": "End of the peak.",
+          "meaning": "End of the peak, in minutes.",
           "languages": {
             "rust": {
               "name": "to",
@@ -5847,7 +5847,7 @@
           }
         },
         {
-          "meaning": "Apex intensity.",
+          "meaning": "Apex intensity (the peak height).",
           "languages": {
             "rust": {
               "name": "intensity",
@@ -5868,7 +5868,7 @@
           }
         },
         {
-          "meaning": "Area of the peak.",
+          "meaning": "Area (integral) of the peak.",
           "languages": {
             "rust": {
               "name": "integral",
@@ -5889,7 +5889,7 @@
           }
         },
         {
-          "meaning": "Points across the peak.",
+          "meaning": "Number of data points in the peak, from its start to its end.",
           "languages": {
             "rust": {
               "name": "n_points",
@@ -5910,7 +5910,7 @@
           }
         },
         {
-          "meaning": "match_features only: fraction of samples where it was found (0–1).",
+          "meaning": "Fraction of samples where the feature was found, from 0 to 1. Only match_features sets it.",
           "languages": {
             "rust": {
               "name": "frequency",
@@ -5950,7 +5950,7 @@
       "name": "FeatureAnnotation",
       "group": "Results",
       "kind": "type",
-      "summary": "The name of one feature. The label is the compound that is the best match in the most files; ties go to the higher score.",
+      "summary": "The name found for one feature. The label is the compound that is the best match in the most files, and ties go to the higher score.",
       "fields": [
         {
           "meaning": "m/z of the feature.",
@@ -5974,7 +5974,7 @@
           }
         },
         {
-          "meaning": "Retention time of the feature (minutes).",
+          "meaning": "Retention time of the feature, in minutes.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -6016,7 +6016,7 @@
           }
         },
         {
-          "meaning": "Id in the database, from the agreeing file with the highest score.",
+          "meaning": "Id of the compound in its database, from the agreeing file with the highest score.",
           "languages": {
             "rust": {
               "name": "id",
@@ -6058,7 +6058,7 @@
           }
         },
         {
-          "meaning": "Share of the files whose best match is this compound (0–1).",
+          "meaning": "Share of the files whose best match is this compound, from 0 to 1.",
           "languages": {
             "rust": {
               "name": "frequency",
@@ -6079,7 +6079,7 @@
           }
         },
         {
-          "meaning": "Median score over the agreeing files.",
+          "meaning": "Median score over the files that agree on the label.",
           "languages": {
             "rust": {
               "name": "score",
@@ -6100,7 +6100,7 @@
           }
         },
         {
-          "meaning": "Median cosine over the agreeing files.",
+          "meaning": "Median cosine similarity over the files that agree on the label.",
           "languages": {
             "rust": {
               "name": "cosine",
@@ -6121,7 +6121,7 @@
           }
         },
         {
-          "meaning": "One FileAnnotation per file, in the order of files.",
+          "meaning": "What each file says about the feature, in the same order as files.",
           "languages": {
             "rust": {
               "name": "files",
@@ -6161,7 +6161,7 @@
       "name": "FileAnnotation",
       "group": "Results",
       "kind": "type",
-      "summary": "What one file says about a feature.",
+      "summary": "What one file says about a feature in annotate_features.",
       "fields": [
         {
           "meaning": "Position of the file in files, from 0.",
@@ -6185,7 +6185,7 @@
           }
         },
         {
-          "meaning": "The MS2 scan used, or none when the file has no peak or no MS2 scan close to it.",
+          "meaning": "Index of the MS2 scan used, or none when the file has no peak or no MS2 scan close to it.",
           "languages": {
             "rust": {
               "name": "scan_index",
@@ -6206,7 +6206,7 @@
           }
         },
         {
-          "meaning": "Best matches in this file, best first, at most matches.",
+          "meaning": "The best matches in this file, best first, at most matches of them.",
           "languages": {
             "rust": {
               "name": "matches",
@@ -6312,7 +6312,7 @@
           }
         },
         {
-          "meaning": "Average of the model vector similarity and the cosine (0–1).",
+          "meaning": "Average of the model vector similarity and the cosine, from 0 to 1.",
           "languages": {
             "rust": {
               "name": "score",
@@ -6333,7 +6333,7 @@
           }
         },
         {
-          "meaning": "Cosine similarity of the cleaned spectra (0–1).",
+          "meaning": "Cosine similarity of the cleaned spectra, from 0 to 1.",
           "languages": {
             "rust": {
               "name": "cosine",
@@ -6436,10 +6436,10 @@
       "name": "DataXY",
       "group": "Results",
       "kind": "type",
-      "summary": "A trace: x = retention times, y = intensities. Returned by calculate_eic, taken by find_peaks.",
+      "summary": "A chromatogram (trace), with x as the retention times and y as the intensities. calculate_eic returns it, and find_peaks and get_peak take it.",
       "fields": [
         {
-          "meaning": "Retention times (minutes).",
+          "meaning": "Retention times, in minutes.",
           "languages": {
             "rust": {
               "name": "x",
@@ -6460,7 +6460,7 @@
           }
         },
         {
-          "meaning": "Intensities.",
+          "meaning": "Intensities, one per retention time.",
           "languages": {
             "rust": {
               "name": "y",
@@ -6503,7 +6503,7 @@
       "summary": "Result of find_noise_level.",
       "fields": [
         {
-          "meaning": "Window width (points) the estimate came from.",
+          "meaning": "Max width, in points, of the noise spikes the estimate came from.",
           "languages": {
             "rust": {
               "name": "width",
@@ -6524,7 +6524,7 @@
           }
         },
         {
-          "meaning": "Noise intensity.",
+          "meaning": "Max intensity of the noise spikes, taken as the noise level.",
           "languages": {
             "rust": {
               "name": "intensity",
@@ -6564,10 +6564,10 @@
       "name": "PeakParameters",
       "group": "Results",
       "kind": "type",
-      "summary": "One peak curve: returned by fit_peak, or written by hand to simulate. draw_peaks takes a list of them. tail = 0 is a Gaussian, tail above 0 an EMG.",
+      "summary": "The parameters that describe the shape of one peak. fit_peak returns them, and you can also write them by hand to simulate a peak with draw_peaks. With tail = 0 the peak is a Gaussian, and with tail above 0 it is an EMG.",
       "fields": [
         {
-          "meaning": "Height of the curve at its apex.",
+          "meaning": "Height of the curve at its apex (intensity).",
           "languages": {
             "rust": {
               "name": "height",
@@ -6588,7 +6588,7 @@
           }
         },
         {
-          "meaning": "Retention time of the apex (minutes).",
+          "meaning": "Apex retention time, in minutes.",
           "languages": {
             "rust": {
               "name": "center",
@@ -6609,7 +6609,7 @@
           }
         },
         {
-          "meaning": "Full width at half maximum of the Gaussian part (minutes). With a tail, the drawn peak is a little wider.",
+          "meaning": "Full width at half maximum of the Gaussian part, in minutes. With a tail, the drawn peak is a little wider.",
           "languages": {
             "rust": {
               "name": "fwhm",
@@ -6630,7 +6630,7 @@
           }
         },
         {
-          "meaning": "Length of the right-hand tail. 0 = Gaussian, above 0 = EMG.",
+          "meaning": "Tailing to the right, in minutes. 0 = Gaussian, above 0 = EMG.",
           "languages": {
             "rust": {
               "name": "tail",
@@ -6695,10 +6695,10 @@
       "name": "PredictedRt",
       "group": "Results",
       "kind": "type",
-      "summary": "One predicted retention time from predict_rts.",
+      "summary": "One predicted retention time, from predict_rts.",
       "fields": [
         {
-          "meaning": "Predicted retention time (minutes).",
+          "meaning": "Predicted retention time, in minutes.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -6719,7 +6719,7 @@
           }
         },
         {
-          "meaning": "How unsure the prediction is (minutes).",
+          "meaning": "How unsure the prediction is, in minutes.",
           "languages": {
             "rust": {
               "name": "uncertainty",
@@ -6759,10 +6759,10 @@
       "name": "Scan",
       "group": "Results",
       "kind": "type",
-      "summary": "One scan from get_scans: its retention time, centroided m/z and intensity values, and its details.",
+      "summary": "One scan (spectrum) from get_scans, with its retention time, its m/z and intensity values, and its details.",
       "fields": [
         {
-          "meaning": "Position of the scan in the spectrum list, from 0. Use it with get_scan_metadata.",
+          "meaning": "Position of the scan in the file, from 0. Use it with get_scan_metadata.",
           "languages": {
             "rust": {
               "name": "index",
@@ -6783,7 +6783,7 @@
           }
         },
         {
-          "meaning": "Retention time (minutes).",
+          "meaning": "Retention time, in minutes.",
           "languages": {
             "rust": {
               "name": "rt",
@@ -6804,7 +6804,7 @@
           }
         },
         {
-          "meaning": "m/z values.",
+          "meaning": "m/z values of the spectrum.",
           "languages": {
             "rust": {
               "name": "mz",
@@ -6825,7 +6825,7 @@
           }
         },
         {
-          "meaning": "Intensities, same length as mz.",
+          "meaning": "Intensities, one per m/z value.",
           "languages": {
             "rust": {
               "name": "intensity",
@@ -6846,7 +6846,7 @@
           }
         },
         {
-          "meaning": "MS level.",
+          "meaning": "MS level, 1 for MS1 and 2 for MS2.",
           "languages": {
             "rust": {
               "name": "level",
@@ -6867,7 +6867,7 @@
           }
         },
         {
-          "meaning": "Precursor m/z (MS2 and higher).",
+          "meaning": "m/z of the precursor ion that was fragmented (MS2 and higher).",
           "languages": {
             "rust": {
               "name": "precursor_mz",
@@ -6888,7 +6888,7 @@
           }
         },
         {
-          "meaning": "Base peak m/z.",
+          "meaning": "m/z of the most intense peak in the scan (base peak).",
           "languages": {
             "rust": {
               "name": "base_peak_mz",
@@ -6909,7 +6909,7 @@
           }
         },
         {
-          "meaning": "Base peak intensity.",
+          "meaning": "Intensity of the base peak.",
           "languages": {
             "rust": {
               "name": "base_peak_intensity",
@@ -6930,7 +6930,7 @@
           }
         },
         {
-          "meaning": "Total ion current.",
+          "meaning": "Sum of all intensities in this scan. Plotted against rt over the whole injection, these values form the TIC chromatogram.",
           "languages": {
             "rust": {
               "name": "total_ion_current",
@@ -6951,7 +6951,7 @@
           }
         },
         {
-          "meaning": "Polarity: 1 positive, 2 negative, 0 unknown.",
+          "meaning": "Ion mode, 1 for positive, 2 for negative and 0 for unknown.",
           "languages": {
             "rust": {
               "name": "polarity",
@@ -6972,7 +6972,7 @@
           }
         },
         {
-          "meaning": "Imaging x position. 0 in non-imaging files.",
+          "meaning": "x position in imaging files. 0 in other files.",
           "languages": {
             "rust": {
               "name": "x",
@@ -6993,7 +6993,7 @@
           }
         },
         {
-          "meaning": "Imaging y position. 0 in non-imaging files.",
+          "meaning": "y position in imaging files. 0 in other files.",
           "languages": {
             "rust": {
               "name": "y",
@@ -7014,7 +7014,7 @@
           }
         },
         {
-          "meaning": "Imaging z position. 0 in non-imaging files.",
+          "meaning": "z position in imaging files. 0 in other files.",
           "languages": {
             "rust": {
               "name": "z",
@@ -7054,7 +7054,7 @@
       "name": "ScanParam",
       "group": "Results",
       "kind": "type",
-      "summary": "One row from get_scan_metadata: an attribute, cvParam or userParam of one tag in a spectrum.",
+      "summary": "One row from get_scan_metadata. It is an attribute, a cvParam or a userParam of one tag in a spectrum.",
       "fields": [
         {
           "meaning": "Where the tag sits, from spectrum down. Repeated tags carry their position from 0, such as spectrum/precursorList/precursor[0]/selectedIonList/selectedIon[0].",
@@ -7078,7 +7078,7 @@
           }
         },
         {
-          "meaning": "What the row holds: ATTRIBUTE, CV or USER. See ScanParamKind.",
+          "meaning": "What the row holds, ATTRIBUTE, CV or USER. See ScanParamKind.",
           "languages": {
             "rust": {
               "name": "kind",
@@ -7223,10 +7223,10 @@
       "name": "IonImage",
       "group": "Results",
       "kind": "type",
-      "summary": "An imaging map of one m/z from get_ion_image.",
+      "summary": "An imaging map of one m/z, from get_ion_image.",
       "fields": [
         {
-          "meaning": "Pixels across.",
+          "meaning": "Number of pixels across.",
           "languages": {
             "rust": {
               "name": "width",
@@ -7247,7 +7247,7 @@
           }
         },
         {
-          "meaning": "Pixels down.",
+          "meaning": "Number of pixels down.",
           "languages": {
             "rust": {
               "name": "height",
@@ -7352,7 +7352,7 @@
           }
         },
         {
-          "meaning": "Summed intensity per pixel, row by row (width × height).",
+          "meaning": "Summed intensity of each pixel, row by row (width × height values).",
           "languages": {
             "rust": {
               "name": "data",
@@ -7373,7 +7373,7 @@
           }
         },
         {
-          "meaning": "Scans per pixel.",
+          "meaning": "Number of scans in each pixel, in the same order as data.",
           "languages": {
             "rust": {
               "name": "counts",
@@ -7413,10 +7413,10 @@
       "name": "QuantionError",
       "group": "Errors",
       "kind": "type",
-      "summary": "The error every function raises, with its kind, code, function, argument and message.",
+      "summary": "The error every function raises. It says what went wrong (kind and code), where (function and argument) and why (message).",
       "fields": [
         {
-          "meaning": "What went wrong.",
+          "meaning": "The type of problem, for example an invalid input or a file that cannot be read.",
           "languages": {
             "rust": {
               "name": "kind",
@@ -7437,7 +7437,7 @@
           }
         },
         {
-          "meaning": "Fixed number for the kind.",
+          "meaning": "A fixed number for the kind, useful in scripts.",
           "languages": {
             "rust": {
               "name": "code",
@@ -7458,7 +7458,7 @@
           }
         },
         {
-          "meaning": "Where: the public function that failed.",
+          "meaning": "The function that failed.",
           "languages": {
             "rust": {
               "name": "function",
@@ -7479,7 +7479,7 @@
           }
         },
         {
-          "meaning": "Which input, such as targets[3].range.",
+          "meaning": "The input that caused it, such as targets[3].range.",
           "languages": {
             "rust": {
               "name": "argument",
@@ -7500,7 +7500,7 @@
           }
         },
         {
-          "meaning": "Why, in plain words. Starts with the function name.",
+          "meaning": "Why it failed, in plain words. It starts with the function name.",
           "languages": {
             "rust": {
               "name": "message",
@@ -7543,7 +7543,7 @@
       "summary": "What went wrong, as a name and a fixed number code.",
       "fields": [
         {
-          "meaning": "A value is out of range or the wrong type.",
+          "meaning": "A value is out of range or has the wrong type.",
           "languages": {
             "rust": {
               "name": "InvalidArgument",
@@ -7585,7 +7585,7 @@
           }
         },
         {
-          "meaning": "An option key that does not exist.",
+          "meaning": "An option name that does not exist, often a typo.",
           "languages": {
             "rust": {
               "name": "UnknownOption",
@@ -7606,7 +7606,7 @@
           }
         },
         {
-          "meaning": "Needs the whole file, but a URL was given.",
+          "meaning": "The function needs the whole file, but a URL was given. Download the file first.",
           "languages": {
             "rust": {
               "name": "RemoteFile",
@@ -7690,7 +7690,7 @@
           }
         },
         {
-          "meaning": "The output file exists and overwrite is false.",
+          "meaning": "The output file already exists and overwrite is false.",
           "languages": {
             "rust": {
               "name": "FileExists",
@@ -7711,7 +7711,7 @@
           }
         },
         {
-          "meaning": "The upload was rejected, with the HTTP status.",
+          "meaning": "The upload was rejected. The message includes the HTTP status.",
           "languages": {
             "rust": {
               "name": "UploadFailed",
@@ -7732,7 +7732,7 @@
           }
         },
         {
-          "meaning": "A bug in quantion. Please report it.",
+          "meaning": "A bug in Quant·ion. Please report it as an issue.",
           "languages": {
             "rust": {
               "name": "Internal",

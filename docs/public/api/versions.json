@@ -5,7 +5,8 @@
       "version": "0.2.2",
       "api": "0.2.1",
       "date": "2026-11-09",
-      "message": "feat: release v0.2.2"
+      "message": "feat: release v0.2.2",
+      "commit": "d3bc6caf2ebd1d4369c51a9d5bcaa69773c07b3f"
     },
     {
       "version": "0.2.1",
