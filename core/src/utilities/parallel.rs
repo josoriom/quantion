@@ -13,8 +13,8 @@ fn shared_pools() -> &'static Mutex<HashMap<usize, Arc<ThreadPool>>> {
 }
 
 #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
-fn get_pool(cores: usize) -> Arc<ThreadPool> {
-    let core_count = cores.max(1);
+fn get_pool(threads: usize) -> Arc<ThreadPool> {
+    let core_count = threads.max(1);
     let mut pools = shared_pools().lock().unwrap();
     pools
         .entry(core_count)
@@ -31,16 +31,16 @@ fn get_pool(cores: usize) -> Arc<ThreadPool> {
 }
 
 #[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
-pub(crate) fn run_with_cores<F, T>(cores: usize, work: F) -> T
+pub(crate) fn run_with_threads<F, T>(threads: usize, work: F) -> T
 where
     F: FnOnce() -> T + Send,
     T: Send,
 {
-    get_pool(cores).install(work)
+    get_pool(threads).install(work)
 }
 
 #[cfg(all(target_arch = "wasm32", not(target_os = "wasi")))]
-pub(crate) fn run_with_cores<F, T>(_cores: usize, work: F) -> T
+pub(crate) fn run_with_threads<F, T>(_threads: usize, work: F) -> T
 where
     F: FnOnce() -> T,
 {

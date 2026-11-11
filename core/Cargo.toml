@@ -1,14 +1,23 @@
 [package]
 name = "quantion"
-version = "0.1.1"
+version = "0.2.2"
 edition = "2024"
+description = "Read Ionic (.ion) and mzML files and turn chromatograms into numbers: noise, baseline, peaks, targets and features."
+license = "MIT"
+repository = "https://github.com/phenological/quantion"
+homepage = "https://phenological.github.io/quantion/"
+documentation = "https://phenological.github.io/quantion/?language=rust"
+readme = "../README.md"
+keywords = ["mass-spectrometry", "chromatography", "mzml", "lcms", "ionic"]
+categories = ["science"]
+exclude = ["tests/**", "examples/**", ".cargo/**"]
 
 [lib]
 name = "quantion"
 crate-type = ["cdylib", "rlib"]
 
 [profile.release]
-opt-level = "s"
+opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "unwind"
@@ -17,12 +26,17 @@ strip = "symbols"
 
 [dependencies]
 bytes = "1.12.1"
-ionic = { git = "https://github.com/phenological/ionic", branch = "main", version = "0.1.0" }
+ionic-rs = "0.2.2"
 memmap2 = "0.9.11"
 serde = { version = "1.0.229", features = ["derive", "rc"] }
+runnet = "0.1.1"
 
 [target.'cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))'.dependencies]
 rayon = "1.12.0"
+ureq = { version = "3.4.2", optional = true }
 
 [build-dependencies]
 cbindgen = "0.29.4"
+
+[features]
+http = ["dep:ureq"]

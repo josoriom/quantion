@@ -1,13 +1,20 @@
 import * as fs from "fs";
 import * as path from "path";
 
+const ANY = 0;
+const RT_RANGE = 1;
+
 describe("parseIonUrl Real WASM End-to-End", () => {
   let test_ion_data: Uint8Array;
   let wasm_instance: WebAssembly.Instance | null = null;
   let wasm_memory: WebAssembly.Memory | null = null;
   let range_source_registry: Map<number, string> | null = null;
   let next_source_id: number = 1;
-  let range_read_calls: Array<{ source_id: number; offset: number; len: number }> = [];
+  let range_read_calls: Array<{
+    source_id: number;
+    offset: number;
+    len: number;
+  }> = [];
   let allowed_ranges: Array<[number, number]> | null = null;
 
   beforeAll(async () => {
@@ -27,7 +34,7 @@ describe("parseIonUrl Real WASM End-to-End", () => {
   function is_allowed(offset: number, len: number): boolean {
     if (!allowed_ranges) return true;
     return allowed_ranges.some(
-      ([start, size]) => offset >= start && offset + len <= start + size
+      ([start, size]) => offset >= start && offset + len <= start + size,
     );
   }
 
@@ -36,7 +43,10 @@ describe("parseIonUrl Real WASM End-to-End", () => {
 
     const version = require("../../package.json").version;
     const wasm_path = path.join(
-      __dirname, "../../../../artifacts", version, "wasm/quantion.wasm",
+      __dirname,
+      "../../../../artifacts",
+      version,
+      "wasm/quantion.wasm",
     );
     const wasm_bytes = fs.readFileSync(wasm_path);
 
@@ -50,9 +60,10 @@ describe("parseIonUrl Real WASM End-to-End", () => {
           offset_lo: number,
           offset_hi: number,
           len: number,
-          dest_ptr: number
+          dest_ptr: number,
         ): number => {
-          const offset = (offset_lo >>> 0) + (offset_hi >>> 0) * Math.pow(2, 32);
+          const offset =
+            (offset_lo >>> 0) + (offset_hi >>> 0) * Math.pow(2, 32);
 
           range_read_calls.push({ source_id, offset, len });
 
@@ -80,11 +91,7 @@ describe("parseIonUrl Real WASM End-to-End", () => {
 
           if (!wasm_memory) return -1;
 
-          const memory_view = new Uint8Array(
-            wasm_memory.buffer,
-            dest_ptr,
-            len
-          );
+          const memory_view = new Uint8Array(wasm_memory.buffer, dest_ptr, len);
           memory_view.set(chunk);
 
           return 0;
@@ -92,10 +99,7 @@ describe("parseIonUrl Real WASM End-to-End", () => {
       },
     };
 
-    const { instance } = await WebAssembly.instantiate(
-      wasm_bytes,
-      imports
-    );
+    const { instance } = await WebAssembly.instantiate(wasm_bytes, imports);
 
     wasm_instance = instance;
     wasm_memory = instance.exports.memory as WebAssembly.Memory;
@@ -104,12 +108,12 @@ describe("parseIonUrl Real WASM End-to-End", () => {
   }
 
   function read_planned_ranges(
-    instance: WebAssembly.Instance
+    instance: WebAssembly.Instance,
   ): Array<[number, number]> {
     const header_len = 1024;
     const header_ptr = (instance.exports.alloc as any)(header_len);
     new Uint8Array(wasm_memory!.buffer, header_ptr, header_len).set(
-      test_ion_data.subarray(0, header_len)
+      test_ion_data.subarray(0, header_len),
     );
 
     const plan_slot = (instance.exports.alloc as any)(8);
@@ -183,7 +187,7 @@ describe("parseIonUrl Real WASM End-to-End", () => {
       const handle_view = new Uint32Array(
         wasm_memory!.buffer,
         handle_scratch,
-        1
+        1,
       );
       const handle = handle_view[0];
       expect(handle).toBeGreaterThan(0);
@@ -195,8 +199,18 @@ describe("parseIonUrl Real WASM End-to-End", () => {
       const get_scans = instance.exports.get_scans as any;
       expect(get_scans).toBeTruthy();
 
-      const query_type = 0;
-      const scans_rc = get_scans(handle, query_type, 0, 1000, 0, output_slot);
+      const scans_rc = get_scans(
+        handle,
+        RT_RANGE,
+        0,
+        1000,
+        ANY,
+        NaN,
+        NaN,
+        0,
+        0,
+        output_slot,
+      );
       expect(scans_rc).toBe(0);
 
       const scans_data = read_bridge_from_slot(output_slot);
@@ -209,11 +223,11 @@ describe("parseIonUrl Real WASM End-to-End", () => {
       const after_getscans_range_read_count = range_read_calls.length;
 
       expect(after_getscans_range_read_count).toBeGreaterThan(
-        after_open_range_read_count
+        after_open_range_read_count,
       );
 
       const reads_triggered_by_getscans = range_read_calls.slice(
-        after_open_range_read_count
+        after_open_range_read_count,
       );
       reads_triggered_by_getscans.forEach((call) => {
         expect(call.source_id).toBe(source_id);
@@ -259,14 +273,14 @@ describe("parseIonUrl Real WASM End-to-End", () => {
       const handle_view_1 = new Uint32Array(
         wasm_memory!.buffer,
         handle_scratch_1,
-        1
+        1,
       );
       const handle_1 = handle_view_1[0];
 
       const handle_view_2 = new Uint32Array(
         wasm_memory!.buffer,
         handle_scratch_2,
-        1
+        1,
       );
       const handle_2 = handle_view_2[0];
 
@@ -278,22 +292,22 @@ describe("parseIonUrl Real WASM End-to-End", () => {
 
       const get_scans = instance.exports.get_scans as any;
 
-      get_scans(handle_1, 0, 0, 1000, 0, output_slot);
+      get_scans(handle_1, RT_RANGE, 0, 1000, ANY, NaN, NaN, 0, 0, output_slot);
       const handle_1_calls_before = range_read_calls.filter(
-        (c) => c.source_id === source_id_1
+        (c) => c.source_id === source_id_1,
       ).length;
 
       range_read_calls = [];
 
-      get_scans(handle_2, 0, 0, 1000, 0, output_slot);
+      get_scans(handle_2, RT_RANGE, 0, 1000, ANY, NaN, NaN, 0, 0, output_slot);
       const handle_2_calls = range_read_calls.filter(
-        (c) => c.source_id === source_id_2
+        (c) => c.source_id === source_id_2,
       );
 
       expect(handle_2_calls.length).toBeGreaterThan(0);
-      expect(
-        handle_2_calls.every((c) => c.source_id === source_id_2)
-      ).toBe(true);
+      expect(handle_2_calls.every((c) => c.source_id === source_id_2)).toBe(
+        true,
+      );
 
       const free_mzml = instance.exports.free_mzml as any;
       free_mzml(handle_1);

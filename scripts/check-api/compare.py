@@ -4,7 +4,7 @@ import sys
 
 def read(path):
     values = {}
-    with open(path) as handle:
+    with open(path, encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if not line or line.startswith("#"):

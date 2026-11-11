@@ -11,7 +11,9 @@
 //!   “The Levenberg–Marquardt algorithm for nonlinear least squares curve-fitting problems.”
 //! * MLJS `levenberg-marquardt` repository.
 
-use std::time::{Duration, Instant};
+#[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
+use std::time::Duration;
+use std::time::Instant;
 
 #[derive(Clone, Debug)]
 pub struct Data2D {
@@ -649,6 +651,12 @@ fn get_filler(
     }
 }
 
+#[cfg(not(all(target_arch = "wasm32", not(target_os = "wasi"))))]
 fn get_check_timeout(timeout: Option<f64>) -> Option<Instant> {
     timeout.map(|secs| Instant::now() + Duration::from_secs_f64(secs.max(0.0)))
+}
+
+#[cfg(all(target_arch = "wasm32", not(target_os = "wasi")))]
+fn get_check_timeout(_timeout: Option<f64>) -> Option<Instant> {
+    None
 }

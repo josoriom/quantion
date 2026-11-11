@@ -1,24 +1,16 @@
-use crate::utilities::cheminfo::air_pls::{AirPlsOptions, air_pls};
+use crate::{
+    traces::CalculateBaselineOptions,
+    utilities::cheminfo::air_pls::{AirPlsOptions, air_pls},
+};
 
-#[derive(Clone, Copy, Debug)]
-pub struct BaselineOptions {
-    pub lambda: Option<f64>,
-    pub max_iterations: Option<usize>,
-    pub edge_slope_level: Option<u8>,
-}
-
-impl Default for BaselineOptions {
-    fn default() -> Self {
-        Self {
-            lambda: Some(20.0),
-            max_iterations: Some(4),
-            edge_slope_level: Some(5),
-        }
-    }
-}
+pub(crate) const STANDALONE_EDGE_SLOPE_LEVEL: u8 = 5;
 const EDGE_SLOPE_POINTS: usize = 4;
 
-pub fn calculate_baseline(y: &[f64], options: BaselineOptions) -> Vec<f64> {
+pub fn calculate_baseline(
+    y: &[f64],
+    options: CalculateBaselineOptions,
+    edge_slope_level: u8,
+) -> Vec<f64> {
     let n = y.len();
     if n == 0 {
         return Vec::new();
@@ -26,14 +18,9 @@ pub fn calculate_baseline(y: &[f64], options: BaselineOptions) -> Vec<f64> {
 
     let x: Vec<f64> = (0..n).map(|i| i as f64).collect();
 
-    let defaults = BaselineOptions::default();
-    let window = options.lambda.unwrap_or(defaults.lambda.unwrap_or(10.0));
-    let factor = options
-        .max_iterations
-        .unwrap_or(defaults.max_iterations.unwrap_or(100));
-    let level = options
-        .edge_slope_level
-        .unwrap_or(defaults.edge_slope_level.unwrap_or(3));
+    let window = options.lambda;
+    let factor = options.max_iterations;
+    let level = edge_slope_level;
 
     let (ys, weights) = curate_edges(y, level, EDGE_SLOPE_POINTS);
 

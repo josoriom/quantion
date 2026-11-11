@@ -1,6 +1,9 @@
 use std::f64::consts::{LN_2, PI, SQRT_2};
 
-use crate::utilities::{cheminfo::lm::ParameterizedFunction, math::erfc_approx};
+use crate::utilities::{
+    cheminfo::lm::ParameterizedFunction,
+    math::{erfc_approx, erfcx_approx},
+};
 
 /// ## Gaussian
 /// Wikipedia https://en.wikipedia.org/wiki/Gaussian_function
@@ -16,18 +19,23 @@ pub fn gaussian_fn(rt: f64, h: f64, mu: f64, sigma: f64) -> f64 {
 /// https://en.wikipedia.org/wiki/Exponentially_modified_Gaussian_distribution
 /// ### Function
 /// f(rt; h, μ, σ, τ) = (h σ / τ) * sqrt(π/2) * exp(0.5*(σ/τ)^2 - (rt - μ)/τ) * erfc( (1/√2) * (σ/τ - (rt - μ)/σ ))
+/// ### Evaluation
+/// With a = σ/τ, d = (rt - μ)/σ and z = (a - d)/√2, the two forms below are equal and each one is used where
+/// none of its factors can overflow (Kalambet et al., J. Chemometrics 25 (2011) 352-356):
+/// - z >= 0: exp(-d^2/2) * erfcx(z), both factors at most 1.
+/// - z < 0: exp(a^2/2 - a d) * erfc(z), the exponent is below -a^2/2.
 pub fn emg_fn(rt: f64, h: f64, mu: f64, sigma: f64, tau: f64) -> f64 {
     let sigma = sigma.max(1e-12);
     let tau = tau.max(1e-12);
     let a = sigma / tau;
-    let z = (a - (rt - mu) / sigma) / SQRT_2;
-    let g = (-0.5 * ((rt - mu) / sigma) * ((rt - mu) / sigma)).exp();
-    h * a * (PI / 2.0).sqrt() * g * erfcx(z)
-}
-
-#[inline]
-fn erfcx(z: f64) -> f64 {
-    (z * z).exp() * erfc_approx(z)
+    let d = (rt - mu) / sigma;
+    let z = (a - d) / SQRT_2;
+    let shape = if z >= 0.0 {
+        (-0.5 * d * d).exp() * erfcx_approx(z)
+    } else {
+        (0.5 * a * a - a * d).exp() * erfc_approx(z)
+    };
+    h * a * (PI / 2.0).sqrt() * shape
 }
 
 #[inline]
@@ -54,7 +62,7 @@ pub fn emg(mu: f64) -> Box<ParameterizedFunction> {
         let sigma = sigma_from_fwhm(fwhm);
         let a = sigma / tau;
 
-        let unit_at_mu = a * (PI / 2.0).sqrt() * erfcx(a / SQRT_2);
+        let unit_at_mu = a * (PI / 2.0).sqrt() * erfcx_approx(a / SQRT_2);
         let h_amp = h_at_mu / unit_at_mu.max(1e-24);
 
         Box::new(move |rt: f64| emg_fn(rt, h_amp, mu, sigma, tau))

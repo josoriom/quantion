@@ -47,9 +47,11 @@ built="core/target/release/$library"
 [ -f "$built" ] || { echo "cargo did not produce $built"; exit 1; }
 
 case "$platform" in
-  windows-*) cp "$built" "$out/libquantion.dll" ;;
-  *)         cp "$built" "$out/$library" ;;
+  windows-*) target="$out/libquantion.dll" ;;
+  *)         target="$out/$library" ;;
 esac
+rm -f "$target"
+cp "$built" "$target"
 
 rm -f "artifacts/$version/manifest.json"
 

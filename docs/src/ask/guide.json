@@ -1,0 +1,681 @@
+{
+  "menu": [
+    "targeted",
+    "untargeted",
+    "open-file",
+    "names"
+  ],
+  "starters": [
+    {
+      "label": "Which tool do I need?"
+    },
+    {
+      "label": "How do I install Quant·ion?"
+    },
+    {
+      "label": "Open a file"
+    },
+    {
+      "label": "How do I do peak detection?"
+    },
+    {
+      "label": "How do I get peaks above 1000 intensity?"
+    },
+    {
+      "label": "What is a target?"
+    },
+    {
+      "label": "What's a feature?"
+    },
+    {
+      "label": "Something not working?"
+    }
+  ],
+  "items": [
+    {
+      "id": "about",
+      "questions": [
+        "What is Quant·ion?",
+        "What is quantion for?",
+        "How does quantion work?",
+        "What can quantion do?",
+        "Why should I use quantion?",
+        "What's quantion helpful for?"
+      ],
+      "answer": "Quant·ion is an LC-MS pipeline for `targeted` and `untargeted` feature detection and quantification. It reads Ionic (.ion) and mzML files, builds chromatograms, and measures noise, baseline and peaks. One Rust core gives the same results in Rust, Python, JavaScript and R.",
+      "functions": [],
+      "link": "overview",
+      "followUps": [
+        {
+          "label": "Which tool do I need?"
+        },
+        {
+          "label": "Open a file"
+        }
+      ]
+    },
+    {
+      "id": "ionic",
+      "questions": [
+        "What's Ionic?",
+        "What is an .ion file?",
+        "What is the Ionic format?",
+        "What does .ion mean?",
+        "Why use Ionic instead of mzML?",
+        "What is the ion file format?"
+      ],
+      "answer": "Ionic (.ion) is a binary file format for mzML data. It can be read partially, even from a remote file or inside a web browser. It is fast to process and uses less memory.",
+      "functions": [
+        "parse_ion"
+      ],
+      "links": [
+        {
+          "label": "doi:10.64898/2026.09.15.751169",
+          "address": "https://doi.org/10.64898/2026.09.15.751169"
+        }
+      ],
+      "link": "Files",
+      "followUps": [
+        {
+          "label": "Open an .ion file",
+          "question": "How do I open an .ion file?"
+        }
+      ]
+    },
+    {
+      "id": "peaks-above",
+      "questions": [
+        "How do I get peaks above 1000 intensity?",
+        "Keep only peaks higher than 500",
+        "Peaks over an intensity of 2000",
+        "How do I remove small peaks?",
+        "Set a minimum intensity for peaks"
+      ],
+      "answer": "To keep only peaks above {value}, set `min_intensity` = {value} in the function that fits your data: `find_peaks` for every peak in a trace, `get_peak` for one peak at a known rt, `find_features` for `untargeted` peaks in one file, and `match_features` to match features across samples.",
+      "answerWithout": "To keep only bigger peaks, set `min_intensity` in the function that fits your data: `find_peaks` for every peak in a trace, `get_peak` for one peak at a known rt, `find_features` for `untargeted` peaks in one file, and `match_features` to match features across samples.",
+      "functions": [
+        "find_peaks",
+        "get_peak",
+        "find_features",
+        "match_features"
+      ],
+      "link": "FindPeaksOptions",
+      "followUps": [
+        {
+          "label": "Every peak in a trace",
+          "question": "How do I use find_peaks with min_intensity {value}?"
+        },
+        {
+          "label": "One peak at an rt",
+          "question": "How do I use get_peak with min_intensity {value}?"
+        },
+        {
+          "label": "Untargeted, one file",
+          "question": "How do I use find_features with min_intensity {value}?"
+        },
+        {
+          "label": "Across samples",
+          "question": "How do I use match_features with min_intensity {value}?"
+        }
+      ]
+    },
+    {
+      "id": "which",
+      "questions": [
+        "Which tool do I need?",
+        "Which function should I use?",
+        "What do I use?",
+        "Where do I start?",
+        "Targeted or untargeted?",
+        "Should I use targeted or untargeted?",
+        "I don't know which compounds are in my sample",
+        "I don't know what is in my sample"
+      ],
+      "answer": "Do you have an id, mz and rt for each compound? Then check the `targeted` tools. Are you exploring a sample without a list? Then check the `untargeted` tools. If you found features and want to know what they are, use `annotate_features`, then the `targeted` tools to quantify them.",
+      "functions": [
+        "find_targets",
+        "find_features",
+        "annotate_features"
+      ],
+      "link": "overview",
+      "followUps": [
+        {
+          "label": "I know my compounds (targeted)",
+          "question": "I know my compounds"
+        },
+        {
+          "label": "I want to explore (untargeted)",
+          "question": "I want to explore my sample"
+        }
+      ]
+    },
+    {
+      "id": "install",
+      "questions": [
+        "How do I install Quant·ion?",
+        "Install quantion",
+        "How do I install it for Python?",
+        "Is quantion on npm?",
+        "How do I add quantion to my Rust project?",
+        "Which platforms are supported?",
+        "Can I use it on Windows?"
+      ],
+      "answer": "Quant·ion is available in each language's package registry. For other languages, switch the language tab.",
+      "functions": [],
+      "link": "overview",
+      "followUps": [
+        {
+          "label": "Which tool do I need?"
+        },
+        {
+          "label": "Open a file"
+        }
+      ],
+      "languages": [
+        {
+          "key": "python",
+          "label": "Python",
+          "registry": {
+            "label": "PyPI",
+            "address": "https://pypi.org/project/quantion/"
+          },
+          "command": "pip install quantion",
+          "github": {
+            "address": "https://github.com/phenological/quantion/tree/main/wrappers/python",
+            "command": "pip install \"git+https://github.com/phenological/quantion.git#subdirectory=wrappers/python\""
+          }
+        },
+        {
+          "key": "js",
+          "label": "JavaScript",
+          "registry": {
+            "label": "npm",
+            "address": "https://www.npmjs.com/package/quantion"
+          },
+          "command": "npm install quantion"
+        },
+        {
+          "key": "rust",
+          "label": "Rust",
+          "registry": {
+            "label": "crates.io",
+            "address": "https://crates.io/crates/quantion"
+          },
+          "command": "cargo add quantion",
+          "github": {
+            "address": "https://github.com/phenological/quantion",
+            "command": "cargo add quantion --git https://github.com/phenological/quantion"
+          }
+        },
+        {
+          "key": "r",
+          "label": "R",
+          "pending": "Not on CRAN yet; install it from GitHub.",
+          "github": {
+            "address": "https://github.com/phenological/quantion/tree/main/wrappers/r",
+            "command": "remotes::install_github(\"phenological/quantion\", subdir = \"wrappers/r\")"
+          }
+        }
+      ]
+    },
+    {
+      "id": "peak-detection",
+      "questions": [
+        "How to do peak detection",
+        "How do I detect peaks?",
+        "How does peak picking work?",
+        "How can I find the peaks in my data?",
+        "Peak detection",
+        "Which function detects peaks?"
+      ],
+      "answer": "Peak detection runs on a trace: build one with `calculate_eic` for an m/z. `find_peaks` finds every peak in that trace, and `get_peak` finds one known peak at its rt. To detect peaks in a whole file without a list, use `find_features` (`untargeted`).",
+      "functions": [
+        "find_peaks",
+        "get_peak",
+        "find_features"
+      ],
+      "link": "find_peaks",
+      "followUps": [
+        {
+          "label": "Every peak in a trace",
+          "question": "How do I use find_peaks?"
+        },
+        {
+          "label": "One peak at an rt",
+          "question": "How do I use get_peak?"
+        },
+        {
+          "label": "Untargeted, one file",
+          "question": "How do I use find_features?"
+        }
+      ]
+    },
+    {
+      "id": "have-mz-rt",
+      "questions": [
+        "I have mz and rt, what do I use?",
+        "I have the mass and retention time of my compound, which function?",
+        "I know the m/z and retention time, how do I measure it?"
+      ],
+      "answer": "An `mz` and an `rt` define one compound, so check the `targeted` tools. One compound in a trace you already have: `get_peak` at its `rt`. Many compounds in one file: `find_targets`, with one `{ id, mz, rt }` per compound.",
+      "functions": [
+        "find_targets",
+        "get_peak"
+      ],
+      "link": "Targeted",
+      "followUps": [
+        {
+          "label": "One compound",
+          "question": "How do I use get_peak for one compound?"
+        },
+        {
+          "label": "Many compounds",
+          "question": "How do I use find_targets for many compounds?"
+        }
+      ]
+    },
+    {
+      "id": "mz-rt",
+      "questions": [
+        "What are mz and rt?",
+        "What do mz and rt mean?",
+        "What is the difference between m/z and retention time?",
+        "Explain mz and rt"
+      ],
+      "answer": "`mz` is the m/z of the ion you look for. It usually comes from the monoisotopic mass, and it differs between positive and negative ion mode. `rt` is when the compound comes off the column, in minutes. An `mz` plus an `rt` is what lets Quant·ion find and measure one compound.",
+      "functions": [
+        "find_targets"
+      ],
+      "link": "Target",
+      "followUps": [
+        {
+          "label": "I have mz and rt",
+          "question": "I have mz and rt, what do I use?"
+        },
+        {
+          "label": "What is a target?"
+        }
+      ]
+    },
+    {
+      "id": "open-file",
+      "questions": [
+        "Open a file",
+        "How do I open a file?",
+        "How do I load my data?",
+        "Which file formats can I open?",
+        "How do I read a sample file?",
+        "How do I get started with a file?"
+      ],
+      "answer": "Ionic files (.ion): `parse_ion`, from a path, a URL or bytes. mzML files: `parse_mzml`, from a path or bytes; URLs are not allowed for mzML.",
+      "functions": [
+        "parse_ion",
+        "parse_mzml"
+      ],
+      "link": "Files",
+      "followUps": [
+        {
+          "label": "Open an .ion file",
+          "question": "How do I open an .ion file?"
+        },
+        {
+          "label": "Open an mzML file",
+          "question": "How do I open an mzML file?"
+        }
+      ]
+    },
+    {
+      "id": "file-to-trace",
+      "questions": [
+        "How do I get a chromatogram from a file?",
+        "How do I make a trace from a file?",
+        "From file to trace",
+        "Where do x and y come from?",
+        "How do I get the x and y for find_peaks?"
+      ],
+      "answer": "`calculate_eic` builds the chromatogram of one `mz` from an open file. Give `from` and `to` to read only that rt range. Peak detection and quantification then run on that trace: its `x` are the retention times and its `y` the intensities.",
+      "functions": [
+        "calculate_eic",
+        "find_peaks"
+      ],
+      "link": "calculate_eic",
+      "followUps": [
+        {
+          "label": "Find peaks in it",
+          "question": "How do I find peaks in a trace?"
+        },
+        {
+          "label": "One peak at an rt",
+          "question": "How do I get the peak at a known rt?"
+        }
+      ]
+    },
+    {
+      "id": "targeted",
+      "questions": [
+        "I know my compounds",
+        "I know which compounds I look for",
+        "How does targeted analysis work?",
+        "How do I quantify known compounds?",
+        "How do I measure the compounds in my list?"
+      ],
+      "answer": "`Targeted` means you know what you look for. A target is `{ id, mz, rt }`, plus an optional `range`. Many compounds in one file: `find_targets` builds each EIC and finds each peak. SRM or MRM data (Q1, Q3): `find_transitions`. One known compound in a trace you already have: `get_peak` at its `rt`. Every peak in a trace: `find_peaks`. Peak shape (width, tailing): `fit_peak`.",
+      "functions": [
+        "find_targets",
+        "find_transitions",
+        "get_peak",
+        "find_peaks",
+        "fit_peak"
+      ],
+      "link": "Targeted",
+      "followUps": [
+        {
+          "label": "Many compounds",
+          "question": "How do I use find_targets for many compounds?"
+        },
+        {
+          "label": "Untargeted instead",
+          "question": "I want to explore my sample"
+        }
+      ]
+    },
+    {
+      "id": "untargeted",
+      "questions": [
+        "I want to explore my sample",
+        "I don't know what is in my sample, how do I find everything?",
+        "How does untargeted analysis work?",
+        "How do I discover unknown compounds?",
+        "How do I find every peak in a file?"
+      ],
+      "answer": "`Untargeted` means you do not know what is in the sample. One file: `find_features` finds every peak by scanning an m/z grid. Many samples matched across files: `match_features`. Remove isotope peaks: `deisotope_features`. Names for features, from MS2 spectra and a library: `annotate_features`.",
+      "functions": [
+        "find_features",
+        "match_features",
+        "deisotope_features",
+        "annotate_features"
+      ],
+      "link": "Untargeted",
+      "followUps": [
+        {
+          "label": "Many samples",
+          "question": "How do I match features across many samples?"
+        },
+        {
+          "label": "Name my features",
+          "question": "How do I know what my features are?"
+        }
+      ]
+    },
+    {
+      "id": "names",
+      "questions": [
+        "How do I know what my features are?",
+        "Name my features",
+        "How do I identify my features?",
+        "Which compounds are my features?",
+        "How do I put names on the peaks I found?"
+      ],
+      "answer": "Use `annotate_features`: it matches the MS2 spectrum of each feature against a spectral library and gives it a name and a score. Once you know the names, make them targets and quantify them with `find_targets`.",
+      "functions": [
+        "annotate_features",
+        "find_targets"
+      ],
+      "link": "annotate_features",
+      "followUps": [
+        {
+          "label": "Find features first",
+          "question": "How do I use find_features?"
+        },
+        {
+          "label": "Quantify them",
+          "question": "How do I use find_targets for many compounds?"
+        }
+      ]
+    },
+    {
+      "id": "identify",
+      "questions": [
+        "How do I identify metabolites?",
+        "How do I find the identity of a compound?",
+        "How do I annotate unknown compounds?",
+        "How do I identify my analytes?"
+      ],
+      "answer": "Use `annotate_features`. It matches the MS2 spectrum of each feature against a spectral library and gives it a name and a score. By default it uses the positive mode library below. Once you know the names, make them targets and quantify them with `find_targets`.",
+      "functions": [
+        "annotate_features",
+        "find_targets"
+      ],
+      "links": [
+        {
+          "label": "Spectral library (.ion)",
+          "address": "https://github.com/josoriom/cipher/releases/latest/download/library_positive.ion"
+        }
+      ],
+      "link": "annotate_features",
+      "followUps": [
+        {
+          "label": "Find features first",
+          "question": "How do I use find_features?"
+        },
+        {
+          "label": "Quantify them",
+          "question": "How do I use find_targets for many compounds?"
+        }
+      ]
+    },
+    {
+      "id": "rt-shift",
+      "questions": [
+        "My retention times shift between runs",
+        "The peaks move between samples, what can I do?",
+        "How do I handle retention time drift?",
+        "How do I predict where my targets elute in a new sample?"
+      ],
+      "answer": "Quant·ion does not align retention times. To predict where each target elutes in a new sample, use `predict_rts` with a warp model. You train the model in Python, save it as ONNX, load it with `load_model`, and make the warp model with `load_warp`. `calibrate` builds the reference rt from anchor samples (LTRs, QCs). Both are experimental.",
+      "functions": [
+        "predict_rts",
+        "calibrate"
+      ],
+      "link": "Models",
+      "followUps": [
+        {
+          "label": "Load a warp model",
+          "question": "How do I use load_warp?"
+        },
+        {
+          "label": "Predict the rt",
+          "question": "How do I use predict_rts?"
+        },
+        {
+          "label": "Calibrate from QCs",
+          "question": "How do I use calibrate?"
+        }
+      ]
+    },
+    {
+      "id": "errors",
+      "questions": [
+        "Something fails",
+        "I get an error, what does it mean?",
+        "My code throws an exception",
+        "What do the error codes mean?"
+      ],
+      "answer": "Every function raises one error, `QuantionError`, with a kind and a fixed number code, so you can tell what went wrong. Paste the error message or your code with `/fix` and I will check the names and options in it.",
+      "functions": [],
+      "link": "QuantionError",
+      "followUps": [
+        {
+          "label": "What are the error kinds?",
+          "question": "What is ErrorKind?"
+        },
+        {
+          "label": "Show the commands",
+          "question": "/help"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "questions": [
+        "Something not working?",
+        "It does not work",
+        "I found a bug",
+        "How do I report a problem?",
+        "Where can I open an issue?",
+        "Quant·ion is broken"
+      ],
+      "answer": "Please report it as an issue in phenological/quantion. Say what you ran, what you expected and what happened, and add the error message if there is one.",
+      "links": [
+        {
+          "label": "Open an issue",
+          "address": "https://github.com/phenological/quantion/issues/new"
+        }
+      ],
+      "functions": [],
+      "link": "overview",
+      "followUps": [
+        {
+          "label": "What do the error codes mean?"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "find_targets": [
+      {
+        "label": "Set the threads",
+        "question": "How do I run find_targets on 4 threads?"
+      },
+      {
+        "label": "Untargeted instead",
+        "question": "I want to explore my sample"
+      }
+    ],
+    "find_transitions": [
+      {
+        "label": "Set the threads",
+        "question": "How do I run find_transitions on 2 threads?"
+      },
+      {
+        "label": "What is a transition?"
+      }
+    ],
+    "get_peak": [
+      {
+        "label": "Many compounds",
+        "question": "How do I use find_targets for many compounds?"
+      },
+      {
+        "label": "Limit the search range",
+        "question": "How do I search for the peak only within 0.1 minutes in get_peak?"
+      }
+    ],
+    "find_peaks": [
+      {
+        "label": "Set a minimum intensity",
+        "question": "How do I find peaks above intensity 1000?"
+      },
+      {
+        "label": "One peak at an rt",
+        "question": "How do I get the peak at rt 2.38?"
+      }
+    ],
+    "fit_peak": [
+      {
+        "label": "Fit an EMG",
+        "question": "How do I fit an EMG curve to a peak?"
+      },
+      {
+        "label": "What is PeakShape?"
+      }
+    ],
+    "find_features": [
+      {
+        "label": "Many samples",
+        "question": "How do I match features across many samples?"
+      },
+      {
+        "label": "Name my features",
+        "question": "How do I know what my features are?"
+      }
+    ],
+    "match_features": [
+      {
+        "label": "Remove isotopes",
+        "question": "How do I use deisotope_features?"
+      },
+      {
+        "label": "Name my features",
+        "question": "How do I know what my features are?"
+      }
+    ],
+    "deisotope_features": [
+      {
+        "label": "Name my features",
+        "question": "How do I know what my features are?"
+      },
+      {
+        "label": "What is a feature?"
+      }
+    ],
+    "annotate_features": [
+      {
+        "label": "Quantify them",
+        "question": "How do I use find_targets for many compounds?"
+      },
+      {
+        "label": "Keep 3 matches",
+        "question": "How do I keep the 3 best matches per file in annotate_features?"
+      }
+    ],
+    "calculate_eic": [
+      {
+        "label": "Find peaks in it",
+        "question": "How do I find peaks in a trace?"
+      },
+      {
+        "label": "Set a ppm tolerance",
+        "question": "How do I set a 10 ppm tolerance for the EIC?"
+      }
+    ],
+    "get_scans": [
+      {
+        "label": "Scan metadata",
+        "question": "How do I read the metadata of one scan?"
+      },
+      {
+        "label": "Only MS2 scans",
+        "question": "How do I read only MS2 scans, level 2?"
+      }
+    ],
+    "write_ion": [
+      {
+        "label": "Overwrite the file",
+        "question": "How do I overwrite an existing .ion file when writing?"
+      },
+      {
+        "label": "Open it again",
+        "question": "How do I open an .ion file?"
+      }
+    ],
+    "calibrate": [
+      {
+        "label": "Predict the rt",
+        "question": "How do I use predict_rts?"
+      },
+      {
+        "label": "What is a target?"
+      }
+    ],
+    "predict_rts": [
+      {
+        "label": "Calibrate from QCs",
+        "question": "How do I use calibrate?"
+      },
+      {
+        "label": "What is PredictedRt?"
+      }
+    ]
+  }
+}

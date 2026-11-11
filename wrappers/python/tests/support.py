@@ -9,6 +9,7 @@ WRAPPER_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = WRAPPER_ROOT.parents[1]
 ARTIFACTS_ROOT = REPO_ROOT / "artifacts"
 ION_FIXTURE = REPO_ROOT / "core" / "tests" / "fixtures" / "api" / "api.ion"
+SRM_FIXTURE = REPO_ROOT / "core" / "tests" / "fixtures" / "srm.ion"
 
 if str(WRAPPER_ROOT) not in sys.path:
     sys.path.insert(0, str(WRAPPER_ROOT))

@@ -15,7 +15,7 @@ const GRID_START = 89.0;
 const GRID_END = 91.0;
 const GRID_STEP = 0.005;
 const ROI_RANGE = 0.05;
-const CORES = 1;
+const THREADS = 1;
 
 const FEATURE_MIN_INTENSITY = 500.0;
 const FEATURE_MIN_PEAK_WIDTH_POINTS = 5;
@@ -68,6 +68,15 @@ function digest(values) {
   return hash.toString(16).padStart(8, "0");
 }
 
+function eicOptions() {
+  return {
+    from: FROM_RT,
+    to: TO_RT,
+    ppmTolerance: EIC_PPM,
+    mzTolerance: EIC_MZ,
+  };
+}
+
 function peakOptions(channel) {
   return {
     minIntensity: channel.minIntensity,
@@ -105,22 +114,12 @@ function sharedPeakLines(prefix, peak, out) {
 
 function peakLines(prefix, peak, out) {
   sharedPeakLines(prefix, peak, out);
-  out.push(`${prefix}.n_points = ${Number(peak.nPoints ?? peak.n_points)}`);
+  out.push(`${prefix}.n_points = ${peak.nPoints}`);
 }
 
-function chromatogramIndex(channel) {
-  return CHANNELS.filter((other) => other.mass < channel.mass).length;
-}
-
-async function reportChannel(file, channel, out) {
+async function reportChannel(file, transitions, channel, out) {
   const name = channel.name;
-  const eic = await quantion.calculateEic(
-    file,
-    channel.mass,
-    { from: FROM_RT, to: TO_RT },
-    EIC_PPM,
-    EIC_MZ,
-  );
+  const eic = await quantion.calculateEic(file, channel.mass, eicOptions());
   const x = eic.x;
   const y = eic.y;
 
@@ -138,7 +137,10 @@ async function reportChannel(file, channel, out) {
   );
 
   const target = channel.targets[2][1];
-  const single = quantion.getPeak(x, y, target, ROI_RANGE, peakOptions(channel));
+  const single = quantion.getPeak(x, y, target, {
+    range: ROI_RANGE,
+    findPeaks: peakOptions(channel),
+  });
   peakLines(`${name}.get_peak`, single, out);
 
   const targets = channel.targets.map(([id, rt]) => ({
@@ -147,37 +149,33 @@ async function reportChannel(file, channel, out) {
     mz: channel.mass,
     range: ROI_RANGE,
   }));
-  const rows = quantion.getPeaksFromEic(
-    file,
-    targets,
-    { from: FROM_RT, to: TO_RT },
-    peakOptions(channel),
-    CORES,
-  );
-  rows.forEach((row) =>
-    sharedPeakLines(`${name}.get_peaks_from_eic.${row.id}`, row, out),
+  const rows = await quantion.findTargets(file, targets, {
+    eic: eicOptions(),
+    findPeaks: peakOptions(channel),
+    threads: THREADS,
+  });
+  rows.forEach((row, position) =>
+    sharedPeakLines(`${name}.find_targets.${targets[position].id}`, row, out),
   );
 
-  const index = chromatogramIndex(channel);
-  const items = channel.targets.map(([id, rt]) => ({
+  const chromTargets = channel.targets.map(([id, rt]) => ({
     id,
-    index,
+    precursor: channel.mass,
+    product: channel.mass,
     rt,
     range: ROI_RANGE,
   }));
-  const chromRows = quantion.getPeaksFromChrom(
-    file,
-    items,
-    chromPeakOptions(channel),
-    CORES,
-  );
+  const chromRows = quantion.findTransitions(transitions, chromTargets, {
+    findPeaks: chromPeakOptions(channel),
+    threads: THREADS,
+  });
   chromRows.forEach((row, position) => {
-    const prefix = `${name}.get_peaks_from_chrom.${channel.targets[position][0]}`;
-    out.push(`${prefix}.rt = ${number(row.rt ?? row.peakRt)}`);
-    out.push(`${prefix}.from = ${number(row.from ?? row.fromRt)}`);
-    out.push(`${prefix}.to = ${number(row.to ?? row.toRt)}`);
+    const prefix = `${name}.find_transitions.${channel.targets[position][0]}`;
+    out.push(`${prefix}.rt = ${number(row.rt)}`);
+    out.push(`${prefix}.from = ${number(row.from)}`);
+    out.push(`${prefix}.to = ${number(row.to)}`);
     out.push(`${prefix}.intensity = ${number(row.intensity)}`);
-    out.push(`${prefix}.area = ${number(row.integral ?? row.area)}`);
+    out.push(`${prefix}.area = ${number(row.integral)}`);
   });
 }
 
@@ -192,7 +190,7 @@ function featureLines(label, rows, out, withPoints) {
     out.push(`${name}.integral = ${number(row.integral)}`);
     out.push(`${name}.intensity = ${number(row.intensity)}`);
     if (withPoints) {
-      out.push(`${name}.n_points = ${Number(row.nPoints ?? row.n_points)}`);
+      out.push(`${name}.n_points = ${row.nPoints}`);
     }
   });
 }
@@ -202,6 +200,9 @@ async function main() {
   const fixture = path.join(directory, "api.ion");
 
   const file = await quantion.parseIon(readFileSync(fixture));
+  const transitions = await quantion.parseIon(
+    readFileSync(path.join(path.dirname(directory), "srm.ion")),
+  );
   const out = [];
   out.push(`fnv1a.self_check = ${digest(SELF_CHECK_VALUES)}`);
 
@@ -209,27 +210,69 @@ async function main() {
     rt: { from: FROM_RT, to: TO_RT },
   });
   out.push(`parse_ion.scans = ${scans.length}`);
+  const lastIndex = scans[scans.length - 1].index;
+  out.push(`get_scans.first.index = ${scans[0].index}`);
+  out.push(`get_scans.last.index = ${lastIndex}`);
+  const rows = await quantion.getScanMetadata(file, lastIndex);
+  out.push(`get_scan_metadata.count = ${rows.length}`);
+  rows.forEach((row, position) => {
+    const fields = [row.path, row.kind, row.accession, row.name, row.value, row.unit, row.unitAccession];
+    out.push(`get_scan_metadata.${position} = ${fields.map((field) => field ?? "NA").join(" | ")}`);
+  });
+  const scanRows = await quantion.getScanMetadata(file, lastIndex, { tags: ["scan"] });
+  out.push(`get_scan_metadata.scan.count = ${scanRows.length}`);
 
   for (const channel of CHANNELS) {
-    await reportChannel(file, channel, out);
+    await reportChannel(file, transitions, channel, out);
   }
 
   const grid = { start: GRID_START, end: GRID_END, stepSize: GRID_STEP };
-  const eic = { ppmTolerance: EIC_PPM, mzTolerance: EIC_MZ };
+  const featureOptions = {
+    eic: eicOptions(),
+    grid,
+    findPeaks: featurePeakOptions(),
+    threads: THREADS,
+  };
 
-  const found = quantion.findFeatures(
-    file,
-    { from: FROM_RT, to: TO_RT },
-    { eic, grid, findPeak: featurePeakOptions(), cores: CORES },
-  );
+  const found = await quantion.findFeatures(file, featureOptions);
   featureLines("find_features", found, out, true);
 
-  const consensus = quantion.getFeatures(
-    directory,
-    { from: FROM_RT, to: TO_RT },
-    { eic, grid, findPeak: featurePeakOptions(), cores: CORES },
+  const consensus = quantion.matchFeatures(directory, featureOptions);
+  featureLines("match_features", consensus, out, false);
+  featureLines("deisotope_features", quantion.deisotopeFeatures(consensus), out, false);
+
+  const warp = quantion.loadWarp(await quantion.loadModel(path.join(directory, "..", "shift_model.onnx")));
+  const targets = CHANNELS.flatMap((channel) =>
+    channel.targets.map(([id, rt]) => ({ id: `${channel.name}.${id}`, mz: channel.mass, rt })),
   );
-  featureLines("get_features", consensus, out, false);
+  const predicted = await warp.predictRts(file, targets);
+  out.push(`predict_rts.count = ${predicted.length}`);
+  targets.forEach((target, index) => {
+    out.push(`predict_rts.${target.id}.rt = ${number(predicted[index].rt)}`);
+    out.push(`predict_rts.${target.id}.uncertainty = ${number(predicted[index].uncertainty)}`);
+  });
+
+  const folder = path.join(directory, "..", "annotate");
+  const samples = await Promise.all(
+    ["sample_peak_and_ms2", "sample_peak_only", "sample_no_peak"].map((name) => quantion.parseIon(path.join(folder, `${name}.ion`))),
+  );
+  const options = { library: path.join(folder, "library.ion"), model: path.join(folder, "model.onnx") };
+  const annotations = await quantion.annotateFeatures(samples, [{ mz: 195.0877, rt: 2.0 }], options);
+  out.push(`annotate_features.count = ${annotations.length}`);
+  annotations.forEach((annotation, index) => {
+    const name = `annotate_features[${index}]`;
+    for (const key of ["label", "id", "database"]) out.push(`${name}.${key} = ${annotation[key] ?? "NA"}`);
+    out.push(`${name}.frequency = ${number(annotation.frequency)}`);
+    for (const key of ["score", "cosine"]) out.push(`${name}.${key} = ${annotation[key] === null ? "NA" : number(annotation[key])}`);
+    for (const file of annotation.files) {
+      out.push(`${name}.files[${file.file}].scan_index = ${file.scanIndex ?? "NA"}`);
+      file.matches.forEach((match, rank) => {
+        const prefix = `${name}.files[${file.file}].matches[${rank}]`;
+        for (const key of ["label", "id", "database"]) out.push(`${prefix}.${key} = ${match[key]}`);
+        for (const key of ["score", "cosine"]) out.push(`${prefix}.${key} = ${number(match[key])}`);
+      });
+    }
+  });
 
   process.stdout.write(out.join("\n") + "\n");
 }

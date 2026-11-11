@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use crate::utilities::{
-        EicOptions,
-        calculate_eic::{lower_bound, mz_tolerance_for},
-        find_features::{
-            Feature, FeaturePoint, FindFeaturesOptions, MzTolerance, Scan, build_mz_grid,
-            dedup_points, deduplicate_masses, group_by_mz, keep_masses_with_signal,
-            max_eic_per_mass, pick_best_per_rt_cluster, sort_features,
+    use crate::{
+        files::CalculateEicOptions,
+        utilities::{
+            calculate_eic::{lower_bound, mz_tolerance_for},
+            find_features::{
+                Feature, FeaturePoint, FeatureSettings, GridScan, MzTolerance, build_mz_grid,
+                dedup_points, deduplicate_masses, group_by_mz, keep_masses_with_signal,
+                max_eic_per_mass, pick_best_per_rt_cluster, sort_features,
+            },
         },
     };
 
@@ -23,8 +25,8 @@ mod tests {
         FeaturePoint { rt, mz, intensity }
     }
 
-    fn eic_abs(mz_tol: f64) -> EicOptions {
-        EicOptions {
+    fn eic_abs(mz_tol: f64) -> CalculateEicOptions {
+        CalculateEicOptions {
             ppm_tolerance: 0.0,
             mz_tolerance: mz_tol,
             ..Default::default()
@@ -111,49 +113,11 @@ mod tests {
         assert!(abs_tol(0.01).are_close_to_ref(100.0, 100.0));
     }
 
-    #[test]
-    fn test_mz_tolerance_window_at_symmetric() {
-        let (lo, hi) = abs_tol(0.5).window_at(100.0);
-        assert_eq!(lo, 99.5);
-        assert_eq!(hi, 100.5);
-    }
-
-    #[test]
-    fn test_mz_tolerance_ppm_dominates_abs_at_high_mz() {
-        let tol = MzTolerance {
-            mz_absolute: 0.001,
-            ppm: 10.0,
-        };
-        let (lo, hi) = tol.window_at(1000.0);
-        assert!((hi - lo) > 0.005);
-    }
-
-    #[test]
-    fn test_mz_tolerance_abs_dominates_ppm_at_low_mz() {
-        let tol = MzTolerance {
-            mz_absolute: 0.01,
-            ppm: 1.0,
-        };
-        let (lo, hi) = tol.window_at(1.0);
-        assert!((hi - lo - 0.02).abs() < 1e-10);
-    }
-
-    #[test]
-    fn test_mz_tolerance_zero_ppm_uses_abs_only() {
-        let tol = MzTolerance {
-            mz_absolute: 0.5,
-            ppm: 0.0,
-        };
-        let (lo, hi) = tol.window_at(100.0);
-        assert_eq!(lo, 99.5);
-        assert_eq!(hi, 100.5);
-    }
-
     // --- deduplicate_masses ---
 
     #[test]
     fn test_deduplicate_masses_empty() {
-        assert!(deduplicate_masses(vec![], EicOptions::default()).is_empty());
+        assert!(deduplicate_masses(vec![], CalculateEicOptions::default()).is_empty());
     }
 
     #[test]
@@ -376,11 +340,11 @@ mod tests {
         assert_eq!(result.len(), 1);
     }
 
-    // --- FindFeaturesOptions ---
+    // --- FeatureSettings ---
 
     #[test]
     fn test_find_features_config_from_default_options() {
-        let opts = FindFeaturesOptions::default();
+        let opts = FeatureSettings::default();
         assert_eq!(opts.seed_eic_options.ppm_tolerance, 10.0);
         assert_eq!(opts.final_eic_options.ppm_tolerance, 20.0);
         assert_eq!(opts.min_seed_width_points, 5);
@@ -389,20 +353,20 @@ mod tests {
 
     #[test]
     fn test_find_features_default_values() {
-        let opts = FindFeaturesOptions::default();
+        let opts = FeatureSettings::default();
         assert_eq!(opts.seed_eic_options.ppm_tolerance, 10.0);
         assert_eq!(opts.min_seed_width_points, 5);
     }
 
     #[test]
     fn test_find_features_custom_values_passthrough() {
-        let opts = FindFeaturesOptions {
-            seed_eic_options: EicOptions {
+        let opts = FeatureSettings {
+            seed_eic_options: CalculateEicOptions {
                 ppm_tolerance: 5.0,
                 mz_tolerance: 0.002,
                 ..Default::default()
             },
-            final_eic_options: EicOptions {
+            final_eic_options: CalculateEicOptions {
                 ppm_tolerance: 15.0,
                 mz_tolerance: 0.004,
                 ..Default::default()
@@ -430,13 +394,17 @@ mod tests {
         values
     }
 
-    fn random_scan(state: &mut u64, points: usize) -> Scan {
+    fn random_scan(state: &mut u64, points: usize) -> GridScan {
         let mz = random_sorted(state, points, 100.0, 50.0);
         let intensity = (0..points).map(|_| next_random(state) * 1000.0).collect();
-        Scan { mz, intensity }
+        GridScan { mz, intensity }
     }
 
-    fn reference_max_eic(scans: &[Scan], masses: &[f64], options: EicOptions) -> Vec<f64> {
+    fn reference_max_eic(
+        scans: &[GridScan],
+        masses: &[f64],
+        options: CalculateEicOptions,
+    ) -> Vec<f64> {
         let lo: Vec<f64> = masses
             .iter()
             .map(|&m| m - mz_tolerance_for(m, options))
@@ -475,9 +443,9 @@ mod tests {
 
     fn reference_keep_masses(
         grid: &[f64],
-        scans: &[Scan],
+        scans: &[GridScan],
         min_intensity: f64,
-        eic_options: EicOptions,
+        eic_options: CalculateEicOptions,
     ) -> Vec<f64> {
         let mut found_masses: Vec<f64> = Vec::new();
         for scan in scans {
@@ -504,7 +472,7 @@ mod tests {
         1 + (next_random(state) * max) as usize
     }
 
-    fn random_scans(state: &mut u64, count: usize) -> Vec<Scan> {
+    fn random_scans(state: &mut u64, count: usize) -> Vec<GridScan> {
         (0..count)
             .map(|_| {
                 let points = random_count(state, 40.0);
@@ -513,10 +481,10 @@ mod tests {
             .collect()
     }
 
-    fn random_options(state: &mut u64) -> EicOptions {
+    fn random_options(state: &mut u64) -> CalculateEicOptions {
         let ppm = next_random(state) * 40.0;
         let mz = next_random(state) * 0.02;
-        EicOptions {
+        CalculateEicOptions {
             ppm_tolerance: ppm,
             mz_tolerance: mz,
             ..Default::default()

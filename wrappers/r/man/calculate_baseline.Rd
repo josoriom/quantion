@@ -1,33 +1,37 @@
 \name{calculate_baseline}
 \alias{calculate_baseline}
-\title{Estimate a signal baseline}
+\title{Estimate a baseline}
 \description{
-Fits an airPLS baseline to one numeric signal vector.
+Estimate a signal's baseline with airPLS.
 }
 \usage{
-calculate_baseline(
-  y,
-  lambda = 0L,
-  max_iterations = 0L
-)
+calculate_baseline(y, options = calculate_baseline_options())
 }
 \arguments{
-  \item{y}{Numeric signal vector.}
-  \item{lambda}{airPLS smoothing parameter. \code{0} uses a default.}
-  \item{max_iterations}{Maximum airPLS iterations. \code{0} uses a default.}
+  \item{y}{Intensities. Type: \code{numeric}.}
+  \item{options}{Settings from \code{\link{calculate_baseline_options}()}: \code{lambda = 20}, \code{max_iterations = 4L}.
+    \href{https://phenological.github.io/quantion/?language=r#CalculateBaselineOptions}{CalculateBaselineOptions documentation}
+  }
 }
 \value{
-Numeric vector, same length as \code{y}, with the estimated baseline values.
+The baseline, same length as y. Type: \code{numeric}.
+}
+\section{Documentation}{
+\url{https://phenological.github.io/quantion/?language=r#calculate_baseline}
 }
 \examples{
 \donttest{
-x <- seq(0, 10, length.out = 1000)
-y <- sin(x) + 0.1 * x + 2
-bl <- calculate_baseline(y)
-plot(x, y, type = "l")
-lines(x, bl, col = 2)
+if (curl::has_internet()) {
+  library(quantion)
+
+  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion"
+  sample <- parse_ion(url)
+  eic <- calculate_eic(sample, 260.103, options = calculate_eic_options(from = 2, to = 3))
+  baseline <- calculate_baseline(eic$y, options = calculate_baseline_options(lambda = 50))
+  print(head(baseline))
+}
 }
 }
 \seealso{
-\code{\link{find_peaks}()}, \code{\link{get_peak}()}
+\code{\link{calculate_baseline_options}()}
 }

@@ -4,6 +4,7 @@ ARTIFACTS      := artifacts
 LLVM_PREFIX    ?= /opt/homebrew/opt/llvm
 
 DOCKER_BULLSEYE_IMAGE := rust:1-bullseye
+DOCKER_BOOKWORM_IMAGE := rust:1-bookworm
 CARGO_CACHE           := $(HOME)/.cache/quantion-cargo
 WINDOWS_ARM64_IMAGE   := dockcross/windows-arm64:latest
 WINDOWS_ARM64_TARGET  := aarch64-pc-windows-gnullvm
@@ -16,7 +17,7 @@ OUT           ?= $(ARTIFACTS)/$(CRATE_VERSION)
 .PHONY: release mac linux windows wasm \
         macos-arm64 macos-x86_64 linux-amd64 linux-arm64 windows-amd64 windows-arm64 \
         check-version test header header-check native quick-check check-api check-api-update \
-        publish clean
+        publish publish_py clean
 
 release: mac linux windows wasm
 
@@ -73,11 +74,11 @@ linux-arm64:
 windows-amd64:
 	docker run --rm --platform=linux/amd64 \
 	  -e CARGO_TARGET_DIR=/work/core/target-windows-amd64 \
-	  -v $$PWD:/work -w /work $(DOCKER_BULLSEYE_IMAGE) bash -lc '\
+	  -v $$PWD:/work -w /work $(DOCKER_BOOKWORM_IMAGE) bash -lc '\
 	    set -euo pipefail; \
 	    export PATH=/usr/local/cargo/bin:$$PATH; \
 	    apt-get update && apt-get install -y --no-install-recommends \
-	      curl ca-certificates gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 mingw-w64; \
+	      curl gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 mingw-w64; \
 	    if ! command -v rustup >/dev/null 2>&1; then \
 	      curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; \
 	    fi; \
@@ -136,6 +137,9 @@ check-api-update:
 
 publish:
 	@scripts/publish.sh "$(VERSION)"
+
+publish_py:
+	@scripts/publish-python.sh "$(VERSION)"
 
 clean:
 	cargo clean --manifest-path $(CRATE_MANIFEST)

@@ -1,5 +1,3 @@
-import type { Target } from "../types/types";
-
 export function encodeTargetIds(ids: string[]): {
   packedBytes: Uint8Array;
   offsets: Uint32Array;
@@ -19,26 +17,4 @@ export function encodeTargetIds(ids: string[]): {
     cursor += encoded[i].length;
   }
   return { packedBytes, offsets, lengths };
-}
-
-export function unpackTargets(
-  targets: Target[],
-  defaultRange = 0,
-): {
-  rts: Float64Array;
-  mzs: Float64Array;
-  ranges: Float64Array;
-  ids: string[];
-} {
-  const n = targets.length;
-  const rts = new Float64Array(n);
-  const mzs = new Float64Array(n);
-  const ranges = new Float64Array(n);
-  const ids = targets.map((t, i) => {
-    rts[i] = +t.rt;
-    mzs[i] = +t.mz;
-    ranges[i] = t.range ?? defaultRange;
-    return t.id ?? "";
-  });
-  return { rts, mzs, ranges, ids };
 }

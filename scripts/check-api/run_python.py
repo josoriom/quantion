@@ -6,13 +6,15 @@ import quantion
 
 FROM_RT = 0.0
 TO_RT = 5.0
+FROM_TO = {"from": FROM_RT, "to": TO_RT}
 EIC_PPM = 20.0
 EIC_MZ = 0.005
+EIC = {"from": FROM_RT, "to": TO_RT, "ppm_tolerance": EIC_PPM, "mz_tolerance": EIC_MZ}
 GRID_START = 89.0
 GRID_END = 91.0
 GRID_STEP = 0.005
 ROI_RANGE = 0.05
-CORES = 1
+THREADS = 1
 
 FEATURE_MIN_INTENSITY = 500.0
 FEATURE_MIN_PEAK_WIDTH_POINTS = 5
@@ -97,16 +99,9 @@ def shared_peak_lines(prefix, peak, out):
     out.append(f"{prefix}.intensity = {number(peak['intensity'])}")
 
 
-def chromatogram_index(channel):
-    return sum(1 for other in CHANNELS if other["mass"] < channel["mass"])
-
-
-def report_channel(file, channel, out):
-    chrom_index = chromatogram_index(channel)
+def report_channel(file, transitions, channel, out):
     name = channel["name"]
-    eic = quantion.calculate_eic(
-        file, channel["mass"], FROM_RT, TO_RT, EIC_PPM, EIC_MZ
-    )
+    eic = quantion.calculate_eic(file, channel["mass"], EIC)
     x, y = list(eic["x"]), list(eic["y"])
 
     out.append(f"{name}.calculate_eic.points = {len(x)}")
@@ -123,28 +118,28 @@ def report_channel(file, channel, out):
         peak_lines(f"{name}.find_peaks[{index}]", peak, out)
 
     target = channel["targets"][2][1]
-    single = quantion.get_peak(x, y, target, ROI_RANGE, peak_options(channel))
+    single = quantion.get_peak(x, y, target, {"range": ROI_RANGE, "find_peaks": peak_options(channel)})
     peak_lines(f"{name}.get_peak", single, out)
 
     targets = [
         {"id": id_, "rt": rt, "mz": channel["mass"], "range": ROI_RANGE}
         for id_, rt in channel["targets"]
     ]
-    rows = quantion.get_peaks_from_eic(
-        file, targets, FROM_RT, TO_RT, peak_options(channel), CORES
+    rows = quantion.find_targets(
+        file, targets, {"eic": EIC, "find_peaks": peak_options(channel), "threads": THREADS}
     )
-    for row in rows:
-        shared_peak_lines(f"{name}.get_peaks_from_eic.{row['id']}", row, out)
+    for target, row in zip(targets, rows):
+        shared_peak_lines(f"{name}.find_targets.{target['id']}", row, out)
 
-    items = [
-        {"id": id_, "index": chrom_index, "rt": rt, "range": ROI_RANGE}
+    chrom_targets = [
+        {"id": id_, "precursor": channel["mass"], "product": channel["mass"], "rt": rt, "range": ROI_RANGE}
         for id_, rt in channel["targets"]
     ]
-    chrom_rows = quantion.get_peaks_from_chrom(
-        file, items, chrom_peak_options(channel), CORES
+    chrom_rows = quantion.find_transitions(
+        transitions, chrom_targets, {"find_peaks": chrom_peak_options(channel), "threads": THREADS}
     )
     for (id_, _), row in zip(channel["targets"], chrom_rows):
-        prefix = f"{name}.get_peaks_from_chrom.{id_}"
+        prefix = f"{name}.find_transitions.{id_}"
         out.append(f"{prefix}.rt = {number(row['rt'])}")
         out.append(f"{prefix}.from = {number(row['from'])}")
         out.append(f"{prefix}.to = {number(row['to'])}")
@@ -156,28 +151,34 @@ def main():
     directory = sys.argv[1] if len(sys.argv) > 1 else "core/tests/fixtures/api"
     fixture = os.path.join(directory, "api.ion")
 
-    file = quantion.parse_ion_path(fixture)
+    file = quantion.parse_ion(fixture)
+    transitions = quantion.parse_ion(os.path.join(os.path.dirname(directory), "srm.ion"))
     out = []
     out.append(f"fnv1a.self_check = {digest(SELF_CHECK_VALUES)}")
 
-    scans = quantion.get_scans(file, rt_range=(FROM_RT, TO_RT))
+    scans = quantion.get_scans(file, rt=FROM_TO)
     out.append(f"parse_ion.scans = {len(scans)}")
+    out.append(f"get_scans.first.index = {scans[0]['index']}")
+    out.append(f"get_scans.last.index = {scans[-1]['index']}")
+    rows = quantion.get_scan_metadata(file, scans[-1]["index"])
+    out.append(f"get_scan_metadata.count = {len(rows)}")
+    for position, row in enumerate(rows):
+        fields = [row["path"], row["kind"].value, row["accession"], row["name"], row["value"], row["unit"], row["unit_accession"]]
+        out.append(f"get_scan_metadata.{position} = {' | '.join('NA' if field is None else field for field in fields)}")
+    scan_rows = quantion.get_scan_metadata(file, scans[-1]["index"], {"tags": ["scan"]})
+    out.append(f"get_scan_metadata.scan.count = {len(scan_rows)}")
 
     for channel in CHANNELS:
-        report_channel(file, channel, out)
+        report_channel(file, transitions, channel, out)
 
-    grid = {"start": GRID_START, "end": GRID_END, "step_size": GRID_STEP}
-    eic = {"ppm_tolerance": EIC_PPM, "mz_tolerance": EIC_MZ}
+    feature_options = {
+        "eic": EIC,
+        "grid": {"start": GRID_START, "end": GRID_END, "step_size": GRID_STEP},
+        "find_peaks": feature_peak_options(),
+        "threads": THREADS,
+    }
 
-    found = quantion.find_features(
-        file,
-        FROM_RT,
-        TO_RT,
-        eic=eic,
-        grid=grid,
-        options=feature_peak_options(),
-        cores=CORES,
-    )
+    found = quantion.find_features(file, feature_options)
     out.append(f"find_features.count = {len(found)}")
     for index, feature in enumerate(found):
         name = f"find_features[{index}]"
@@ -189,24 +190,51 @@ def main():
         out.append(f"{name}.intensity = {number(feature['intensity'])}")
         out.append(f"{name}.n_points = {int(feature['n_points'])}")
 
-    consensus = quantion.get_features(
-        directory,
-        FROM_RT,
-        TO_RT,
-        eic=eic,
-        grid=grid,
-        options=feature_peak_options(),
-        cores=CORES,
-    )
-    out.append(f"get_features.count = {len(consensus)}")
-    for index, feature in enumerate(consensus):
-        name = f"get_features[{index}]"
-        out.append(f"{name}.mz = {number(feature['mz'])}")
-        out.append(f"{name}.rt = {number(feature['rt'])}")
-        out.append(f"{name}.from = {number(feature['from'])}")
-        out.append(f"{name}.to = {number(feature['to'])}")
-        out.append(f"{name}.integral = {number(feature['integral'])}")
-        out.append(f"{name}.intensity = {number(feature['intensity'])}")
+    consensus = quantion.match_features(directory, feature_options)
+    for label, features in (("match_features", consensus), ("deisotope_features", quantion.deisotope_features(consensus))):
+        out.append(f"{label}.count = {len(features)}")
+        for index, feature in enumerate(features):
+            name = f"{label}[{index}]"
+            out.append(f"{name}.mz = {number(feature['mz'])}")
+            out.append(f"{name}.rt = {number(feature['rt'])}")
+            out.append(f"{name}.from = {number(feature['from'])}")
+            out.append(f"{name}.to = {number(feature['to'])}")
+            out.append(f"{name}.integral = {number(feature['integral'])}")
+            out.append(f"{name}.intensity = {number(feature['intensity'])}")
+
+    warp = quantion.load_warp(quantion.load_model(os.path.join(directory, "..", "shift_model.onnx")))
+    targets = [
+        {"id": f"{channel['name']}.{name}", "mz": channel["mass"], "rt": rt}
+        for channel in CHANNELS
+        for name, rt in channel["targets"]
+    ]
+    predicted = warp.predict_rts(file, targets)
+    out.append(f"predict_rts.count = {len(predicted)}")
+    for target, prediction in zip(targets, predicted):
+        out.append(f"predict_rts.{target['id']}.rt = {number(prediction['rt'])}")
+        out.append(f"predict_rts.{target['id']}.uncertainty = {number(prediction['uncertainty'])}")
+
+    folder = os.path.join(directory, "..", "annotate")
+    samples = [quantion.parse_ion(os.path.join(folder, f"{name}.ion")) for name in ("sample_peak_and_ms2", "sample_peak_only", "sample_no_peak")]
+    options = {"library": os.path.join(folder, "library.ion"), "model": os.path.join(folder, "model.onnx")}
+    found = quantion.annotate_features(samples, [{"mz": 195.0877, "rt": 2.0}], options)
+    out.append(f"annotate_features.count = {len(found)}")
+    for index, annotation in enumerate(found):
+        name = f"annotate_features[{index}]"
+        for key in ("label", "id", "database"):
+            out.append(f"{name}.{key} = {'NA' if annotation[key] is None else annotation[key]}")
+        out.append(f"{name}.frequency = {number(annotation['frequency'])}")
+        for key in ("score", "cosine"):
+            out.append(f"{name}.{key} = {'NA' if annotation[key] is None else number(annotation[key])}")
+        for file in annotation["files"]:
+            scan = "NA" if file["scan_index"] is None else file["scan_index"]
+            out.append(f"{name}.files[{file['file']}].scan_index = {scan}")
+            for rank, match in enumerate(file["matches"]):
+                prefix = f"{name}.files[{file['file']}].matches[{rank}]"
+                for key in ("label", "id", "database"):
+                    out.append(f"{prefix}.{key} = {match[key]}")
+                for key in ("score", "cosine"):
+                    out.append(f"{prefix}.{key} = {number(match[key])}")
 
     print("\n".join(out))
 

@@ -1,10 +1,23 @@
 import type { IonInput } from "../types/types";
 import { toUint8 } from "./shared";
+import { invalidArgument } from "./errors";
 
-export type IonSource =
-  | { kind: "path"; path: string }
-  | { kind: "url"; url: URL }
-  | { kind: "buffer"; bytes: Uint8Array };
+export interface PathSource {
+  kind: "path";
+  path: string;
+}
+
+export interface UrlSource {
+  kind: "url";
+  url: URL;
+}
+
+export interface BufferSource {
+  kind: "buffer";
+  bytes: Uint8Array;
+}
+
+export type IonSource = PathSource | UrlSource | BufferSource;
 
 function isUrlString(value: string): boolean {
   return (
@@ -12,17 +25,15 @@ function isUrlString(value: string): boolean {
   );
 }
 
-function getPathSource(value: string): IonSource {
+function getPathSource(value: string, caller: string): IonSource {
   if (value.length === 0) {
-    throw new TypeError("parseIon: path string must not be empty");
+    throw invalidArgument(caller, "source", "must not be an empty path");
   }
   if (/^https?:/i.test(value)) {
     return { kind: "url", url: new URL(value) };
   }
   if (isUrlString(value)) {
-    throw new TypeError(
-      "parseIon: only http and https URLs can be read remotely",
-    );
+    throw invalidArgument(caller, "source", "must be a path or an http(s) URL");
   }
   return { kind: "path", path: value };
 }
@@ -31,18 +42,14 @@ function isBytes(value: unknown): value is Uint8Array | ArrayBuffer {
   return value instanceof Uint8Array || value instanceof ArrayBuffer;
 }
 
-export function getIonSource(input: IonInput): IonSource {
-  if (typeof input === "string") return getPathSource(input);
+export function getIonSource(input: IonInput, caller: string): IonSource {
+  if (typeof input === "string") return getPathSource(input, caller);
   if (input instanceof URL) {
     if (input.protocol !== "http:" && input.protocol !== "https:") {
-      throw new TypeError(
-        "parseIon: only http and https URLs can be read remotely",
-      );
+      throw invalidArgument(caller, "source", "must be an http(s) URL");
     }
     return { kind: "url", url: input };
   }
   if (isBytes(input)) return { kind: "buffer", bytes: toUint8(input) };
-  throw new TypeError(
-    "parseIon: source must be a path string, a URL, or a byte buffer",
-  );
+  throw invalidArgument(caller, "source", "must be a path, a URL or bytes");
 }

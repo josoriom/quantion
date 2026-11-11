@@ -94,7 +94,10 @@ mod tests {
             let start = 32 + index * 24;
             let byte_offset = read_u64(&bytes, start + 8);
             let byte_length = read_u64(&bytes, start + 16);
-            assert!(byte_offset >= reach, "section {index} overlaps the previous");
+            assert!(
+                byte_offset >= reach,
+                "section {index} overlaps the previous"
+            );
             assert!(byte_offset <= total);
             assert!(byte_length <= total - byte_offset);
             reach = byte_offset + byte_length;
@@ -112,7 +115,10 @@ mod tests {
             read_f64_section(&bytes, QUANTION_SECTION_INTENSITY),
             vec![1.0, 2.0, 3.0, 4.0, 5.0]
         );
-        assert_eq!(read_f64_section(&bytes, QUANTION_SECTION_RT), vec![0.5, 1.5]);
+        assert_eq!(
+            read_f64_section(&bytes, QUANTION_SECTION_RT),
+            vec![0.5, 1.5]
+        );
     }
 
     #[test]
@@ -178,7 +184,6 @@ mod tests {
             vec![1.0, 2.0, 3.0, 4.0]
         );
     }
-
 
     #[test]
     fn test_free_contract_requires_align_one_bytes() {

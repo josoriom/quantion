@@ -1,17 +1,23 @@
-use std::{borrow::Cow, f64};
+use std::borrow::Cow;
 
-use crate::utilities::cheminfo::{
-    kmeans,
-    noise_san_plot::{NoiseSanPlotOptions, noise_san_plot},
-};
+use crate::utilities::cheminfo::kmeans;
 
+/// **NoiseLevel** · Results
+///
+/// Result of find_noise_level.
+///
+/// Fields:
+/// - `width`: Window width (points) the estimate came from.
+/// - `intensity`: Noise intensity.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#NoiseLevel)
 #[derive(Clone, Copy, Debug)]
-pub struct Noise {
+pub struct NoiseLevel {
     pub width: usize,
     pub intensity: f64,
 }
 
-impl Default for Noise {
+impl Default for NoiseLevel {
     fn default() -> Self {
         Self {
             width: 0,
@@ -20,7 +26,7 @@ impl Default for Noise {
     }
 }
 
-pub fn find_noise_level<'a, Y>(y: Y) -> Noise
+pub fn find_noise_level<'a, Y>(y: Y) -> NoiseLevel
 where
     Y: IntoF64Slice<'a>,
 {
@@ -28,10 +34,10 @@ where
     let floor = min_value(&y);
     let segments = scan_segments(y.as_ref(), floor);
     if segments.is_empty() {
-        return Noise::default();
+        return NoiseLevel::default();
     }
     if segments.len() == 1 {
-        return Noise {
+        return NoiseLevel {
             width: 0,
             intensity: floor,
         };
@@ -41,11 +47,12 @@ where
     let labels = cluster_intensities(&segments, params);
 
     let noise_label = 0usize;
+    let still_high_chance = find_still_high_chance(&segments, &labels, noise_label);
 
     let mut max_in_noise = f64::NEG_INFINITY;
     let mut max_noise_width = 0usize;
     for (i, &Segment { width, intensity }) in segments.iter().enumerate() {
-        if labels[i] == noise_label {
+        if labels[i] == noise_label && is_noise_run(width, still_high_chance) {
             if intensity.is_finite() && intensity > max_in_noise {
                 max_in_noise = intensity;
             }
@@ -56,42 +63,12 @@ where
     }
 
     if max_in_noise.is_finite() {
-        Noise {
+        NoiseLevel {
             width: max_noise_width,
             intensity: max_in_noise,
         }
     } else {
-        Noise::default()
-    }
-}
-
-pub fn find_noise_level_san_plot<'a, Y>(y: Y) -> Noise
-where
-    Y: IntoF64Slice<'a>,
-{
-    let y = y.into_f64_slice();
-    if y.is_empty() {
-        return Noise::default();
-    }
-
-    let result = noise_san_plot(
-        y.as_ref(),
-        NoiseSanPlotOptions {
-            cut_off: Some(0.5),
-            refine: false,
-            fix_offset: false,
-            ..Default::default()
-        },
-    );
-    let intensity = if result.positive.is_finite() && result.positive > 0.0 {
-        result.positive
-    } else {
-        0.0
-    };
-
-    Noise {
-        width: 0,
-        intensity,
+        NoiseLevel::default()
     }
 }
 
@@ -156,6 +133,28 @@ impl Default for ClusterParams {
             intensity_weight: 1.0,
         }
     }
+}
+
+const NOISE_WIDTH_SIGNIFICANCE: f64 = 0.05;
+
+fn find_still_high_chance(segments: &[Segment], labels: &[usize], noise_label: usize) -> f64 {
+    let mut segment_count = 0usize;
+    let mut point_count = 0usize;
+    for (segment, &label) in segments.iter().zip(labels) {
+        if label == noise_label {
+            segment_count += 1;
+            point_count += segment.width;
+        }
+    }
+    if point_count == 0 {
+        return 0.0;
+    }
+    1.0 - segment_count as f64 / point_count as f64
+}
+
+fn is_noise_run(width: usize, still_high_chance: f64) -> bool {
+    let width_chance = still_high_chance.powf((width - 1) as f64);
+    width_chance >= NOISE_WIDTH_SIGNIFICANCE
 }
 
 struct Segment {

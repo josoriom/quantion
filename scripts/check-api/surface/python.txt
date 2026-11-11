@@ -1,0 +1,343 @@
+typeddict AnnotateFeaturesOptions total=False
+    library?: str
+    matches?: int
+    min_relative_intensity?: float
+    model?: str
+    mz_tolerance?: float
+    ppm_tolerance?: float
+    rt_range?: float
+
+typeddict CalculateBaselineOptions total=False
+    lambda?: float
+    max_iterations?: int
+
+typeddict CalculateEicOptions total=False
+    from?: float
+    mz_tolerance?: float
+    ppm_tolerance?: float
+    time_unit?: TimeUnit | str
+    to?: float
+
+typeddict CompoundMatch total=True
+    cosine: float
+    database: str
+    id: str
+    intensity: np.ndarray
+    label: str
+    metadata: Dict[str, str]
+    mz: np.ndarray
+    score: float
+
+typeddict DataXY total=True
+    x: np.ndarray
+    y: np.ndarray
+
+typeddict DeisotopeFeaturesOptions total=False
+    mz_tolerance?: float
+    rt_tolerance?: float
+
+typeddict DrawPeaksOptions total=False
+    from?: float
+    points?: int
+    to?: float
+
+typeddict Feature total=False
+    frequency?: float
+    from: float
+    integral: float
+    intensity: float
+    mz: float
+    n_points: int
+    rt: float
+    to: float
+
+typeddict FeatureAnnotation total=True
+    cosine: float | None
+    database: str | None
+    files: List[FileAnnotation]
+    frequency: float
+    id: str | None
+    label: str | None
+    mz: float
+    rt: float
+    score: float | None
+
+typeddict FileAnnotation total=True
+    file: int
+    matches: List[CompoundMatch]
+    scan_index: int | None
+
+typeddict FindFeaturesOptions total=False
+    eic?: CalculateEicOptions
+    find_peaks?: FindPeaksOptions
+    grid?: GridOptions
+    threads?: int
+
+typeddict FindPeaksOptions total=False
+    allow_overlap?: bool
+    auto_baseline?: bool
+    auto_noise?: bool
+    kernel_size?: int
+    lambda?: float
+    max_iterations?: int
+    min_integral?: float
+    min_intensity?: float
+    min_peak_width_points?: int
+    min_r2?: float
+    min_snr?: float
+    noise?: float
+    shape?: PeakShape | str
+
+typeddict FindTargetsOptions total=False
+    eic?: CalculateEicOptions
+    find_peaks?: FindPeaksOptions
+    threads?: int
+
+typeddict FindTransitionsOptions total=False
+    find_peaks?: FindPeaksOptions
+    threads?: int
+
+typeddict FitPeakOptions total=False
+    intensity?: float
+    shape?: PeakShape | str
+
+typeddict FromTo total=True
+    from: float
+    to: float
+
+typeddict GetIonImageOptions total=False
+    level?: int
+    on_progress?: Callable[[int, int, int], None]
+    tolerance?: float
+
+typeddict GetPeakOptions total=False
+    find_peaks?: FindPeaksOptions
+    range?: float
+
+typeddict GetScanMetadataOptions total=False
+    tags?: List[str]
+
+typeddict GetScansOptions total=False
+    arrays?: List[ScanArray]
+    level?: int
+    time_unit?: TimeUnit | str
+
+typeddict GridOptions total=False
+    end?: float
+    start?: float
+    step_size?: float
+
+typeddict GroupingOptions total=False
+    min_frequency?: float
+    mz_tolerance?: float
+    ppm_tolerance?: float
+    rt_tolerance?: float
+
+typeddict Header total=True
+    name: str
+    value: str
+
+typeddict IonImage total=True
+    counts: np.ndarray
+    data: np.ndarray
+    height: int
+    max_z: int
+    min_x: int
+    min_y: int
+    min_z: int
+    width: int
+
+typeddict MatchFeaturesOptions total=False
+    eic?: CalculateEicOptions
+    find_peaks?: FindPeaksOptions
+    grid?: GridOptions
+    grouping?: GroupingOptions
+    threads?: int
+
+class Model(Metadata)
+    def __enter__(self) -> Model
+    def __exit__(self, *_: Any) -> None
+    def __init__(self, handle: ctypes.c_void_p, abi: _ABI) -> None
+    def dispose(self) -> None
+    property handle
+
+typeddict NoiseLevel total=True
+    intensity: float
+    width: int
+
+typeddict ParseIonOptions total=False
+    max_cache_size?: int
+
+typeddict Peak total=True
+    from: float
+    integral: float
+    intensity: float
+    n_points: int
+    rt: float
+    to: float
+
+typeddict PeakParameters total=False
+    center: float
+    fwhm: float
+    height: float
+    r2?: float
+    tail: float
+
+enum PeakShape
+    GAUSSIAN = GAUSSIAN
+    EMG = EMG
+
+typeddict PredictedRt total=True
+    rt: float
+    uncertainty: float
+
+class Quantion(object)
+    def __init__(self, abi: _ABI) -> None
+    def annotate_features(self, files, features, options=None)
+    def calculate_baseline(self, y, options=None)
+    def calculate_eic(self, file: SampleFile, mz: float, options=None)
+    def deisotope_features(self, features, options=None)
+    def draw_peaks(self, params, options=None)
+    def find_features(self, file: SampleFile, options=None)
+    def find_noise_level(self, y)
+    def find_peaks(self, x, y, options=None)
+    def find_targets(self, file: SampleFile, targets, options=None)
+    def find_transitions(self, file: SampleFile, targets, options=None)
+    def fit_peak(self, x, y, rt: float, options=None)
+    def get_ion_image(self, file: SampleFile, mz: float, options=None)
+    def get_peak(self, x, y, rt: float, options=None)
+    def get_scan_metadata(self, file: SampleFile, index: int, options=None)
+    def get_scans(self, file: SampleFile, rt=None, mz=None, options=None)
+    def load_model(self, source) -> Model
+    def load_warp(self, model: Model) -> WarpModel
+    def match_features(self, directory, options=None)
+    def parse_ion(self, source, options=None) -> SampleFile
+    def parse_mzml(self, source) -> SampleFile
+    def write_ion(self, file: SampleFile, options=None)
+    def write_mzml(self, file: SampleFile, options=None)
+
+class QuantionError(Exception)
+    def __init__(self, kind: str, function: str, message: str, argument: str | None = None, code: int | None = None) -> None
+
+class SampleFile(object)
+    def __enter__(self) -> SampleFile
+    def __exit__(self, *_: Any) -> None
+    def __init__(self, handle: ctypes.c_void_p, abi: _ABI) -> None
+    def dispose(self) -> None
+    property handle
+
+typeddict Scan total=True
+    base_peak_intensity: float
+    base_peak_mz: float
+    index: int
+    intensity: np.ndarray
+    level: int
+    mz: np.ndarray
+    polarity: int
+    precursor_mz: float
+    rt: float
+    total_ion_current: float
+    x: int
+    y: int
+    z: int
+
+typeddict ScanArray total=True
+    accession: str
+    key: str
+
+typeddict ScanParam total=True
+    accession: str | None
+    kind: ScanParamKind
+    name: str
+    path: str
+    unit: str | None
+    unit_accession: str | None
+    value: str | None
+
+enum ScanParamKind
+    ATTRIBUTE = ATTRIBUTE
+    CV = CV
+    USER = USER
+
+typeddict Target total=False
+    id?: str
+    mz: float
+    range?: float
+    rt: float
+
+enum TimeUnit
+    MINUTES = MINUTES
+    SECONDS = SECONDS
+
+typeddict Transition total=False
+    id?: str
+    precursor: float
+    product: float
+    range: float
+    rt: float
+
+class WarpModel(Metadata)
+    def __enter__(self) -> WarpModel
+    def __exit__(self, *_: Any) -> None
+    def __init__(self, handle: ctypes.c_void_p, abi: _ABI, metadata: List[Dict[str, str]]) -> None
+    def calibrate(self, anchor_samples: Sequence[SampleFile], target_lists: Sequence[Sequence[Dict[str, Any]]]) -> List[Dict[str, Any]]
+    def dispose(self) -> None
+    property handle
+    def predict_rts(self, file: SampleFile, targets: Sequence[Dict[str, Any]]) -> List[Dict[str, float]]
+
+typeddict WriteIonOptions total=False
+    block_size?: int
+    f32_compress?: bool
+    headers?: List[Header]
+    level?: int
+    mz_window?: int
+    out?: str
+    overwrite?: bool
+
+typeddict WriteMzmlOptions total=False
+    out?: str
+    overwrite?: bool
+
+def annotate_features(files: Sequence[SampleFile], features: Sequence[Feature], options: AnnotateFeaturesOptions | None = None) -> List[FeatureAnnotation]
+
+def calculate_baseline(y: Sequence, options: CalculateBaselineOptions | None = None) -> np.ndarray
+
+def calculate_eic(file: SampleFile, mz: float, options: CalculateEicOptions | None = None) -> DataXY
+
+def deisotope_features(features: Sequence[Feature], options: DeisotopeFeaturesOptions | None = None) -> List[Feature]
+
+def draw_peaks(params: Sequence[PeakParameters], options: DrawPeaksOptions | None = None) -> DataXY
+
+def find_features(file: SampleFile, options: FindFeaturesOptions | None = None) -> List[Feature]
+
+def find_noise_level(y: Sequence) -> NoiseLevel
+
+def find_peaks(x: Sequence, y: Sequence, options: FindPeaksOptions | None = None) -> List[Peak]
+
+def find_targets(file: SampleFile, targets: Sequence[Target], options: FindTargetsOptions | None = None) -> List[Peak]
+
+def find_transitions(file: SampleFile, targets: Sequence[Transition], options: FindTransitionsOptions | None = None) -> List[Peak]
+
+def fit_peak(x: Sequence, y: Sequence, rt: float, options: FitPeakOptions | None = None) -> PeakParameters | None
+
+def get_ion_image(file: SampleFile, mz: float, options: GetIonImageOptions | None = None) -> IonImage
+
+def get_peak(x: Sequence, y: Sequence, rt: float, options: GetPeakOptions | None = None) -> Peak
+
+def get_scan_metadata(file: SampleFile, index: int, options: GetScanMetadataOptions | None = None) -> List[ScanParam]
+
+def get_scans(file: SampleFile, rt: float | FromTo | None = None, mz: float | FromTo | None = None, options: GetScansOptions | None = None) -> List[Scan]
+
+def load_model(source) -> Model
+
+def load_warp(model: Model) -> WarpModel
+
+def match_features(directory, options: MatchFeaturesOptions | None = None) -> List[Feature]
+
+def parse_ion(source, options: ParseIonOptions | None = None) -> SampleFile
+
+def parse_mzml(source) -> SampleFile
+
+def write_ion(file: SampleFile, options: WriteIonOptions | None = None) -> bytes | None
+
+def write_mzml(file: SampleFile, options: WriteMzmlOptions | None = None) -> bytes | None

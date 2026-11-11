@@ -54,7 +54,7 @@ SanPlot assumes the noise is symmetric around a center. Our EIC is baseline-subt
 One process ran `find_peaks` **twice** on every EIC — once with `NoiseMethod::FindNoiseLevel`, once with `NoiseMethod::SanPlot` — on the exact same real data. Only the noise method changed.
 
 - Dataset: MTBLS733 TripleTOF 6600, 8 samples, 970 truth features, 7760 EICs.
-- Settings (same as the real `get_features` run): time 0.4–35 min, EIC 20 ppm / 0.005 Da, min intensity 1000, min width 5 points, min S/N 3, min r² 0, EMG shape, keep frequency 1, match a peak within ±0.5 min of the truth rt.
+- Settings (same as the real `match_features` run): time 0.4–35 min, EIC 20 ppm / 0.005 Da, min intensity 1000, min width 5 points, min S/N 3, min r² 0, EMG shape, keep frequency 1, match a peak within ±0.5 min of the truth rt.
 
 Code: [core/examples/noise_bench.rs](../../examples/noise_bench.rs).
 
@@ -74,7 +74,7 @@ python3 core/tests/noise_method_benchmark/make_figures.py
 
 ## Honest limits of this test
 
-- This is the `find_peaks` level (one targeted EIC per truth feature). The noise method acts only here, so the full `get_features` numbers move with it. The 1.85x peak ratio strongly predicts many more junk features in a full untargeted run.
+- This is the `find_peaks` level (one targeted EIC per truth feature). The noise method acts only here, so the full `match_features` numbers move with it. The 1.85x peak ratio strongly predicts many more junk features in a full untargeted run.
 - TripleTOF has only 3 isolated-peak cases, so this run mainly measures the **downside** (junk). The **upside** — recovering the 27 QE HF isolated-peak cases — comes from the `find_noise_level` single-segment fix, not from SanPlot.
 
 ## Files here

@@ -81,7 +81,9 @@ run python run_python.py python3
 
 if command -v Rscript >/dev/null 2>&1 && [ -f "$here/run_r.R" ]; then
   r_work="$(mktemp -d)"
-  cp -R "$root/wrappers/r" "$r_work/rpkg"
+  (cd "$root/wrappers" && tar -cf - --exclude=r/src/rust r) | tar -xf - -C "$r_work"
+  mv "$r_work/r" "$r_work/rpkg"
+  sh "$root/scripts/stage-r-rust.sh" "$r_work/rpkg" > /dev/null
   r_lib="$r_work"
   if command -v cygpath >/dev/null 2>&1; then
     r_lib="$(cygpath -m "$r_work")"

@@ -23,9 +23,13 @@ if (clean) {
   }
 } else {
   for (const [platform, file] of platforms) {
-    const source = join(artifacts, platform, file);
-    if (!existsSync(source)) {
-      throw new Error(`quantion: ${source} is missing. Run 'make release' at the repo root first.`);
+    for (const name of [file, "quantion.node"]) {
+      const source = join(artifacts, platform, name);
+      if (!existsSync(source)) {
+        throw new Error(
+          `quantion: ${source} is missing. Run scripts/stage-js-release.sh ${version} at the repo root first.`,
+        );
+      }
     }
   }
 
@@ -34,5 +38,6 @@ if (clean) {
     rmSync(target, { recursive: true, force: true });
     mkdirSync(target, { recursive: true });
     copyFileSync(join(artifacts, platform, file), join(target, file));
+    copyFileSync(join(artifacts, platform, "quantion.node"), join(target, "quantion.node"));
   }
 }

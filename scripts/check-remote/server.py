@@ -32,6 +32,7 @@ def parse_range(header: str, total: int):
 class RangeServer:
     def __init__(self, path: str) -> None:
         self.data = open(path, "rb").read()
+        self.uploads = {}
         self.bytes_sent = 0
         self.requests = 0
         self._server = socketserver.TCPServer(("127.0.0.1", 0), self._handler())
@@ -72,7 +73,17 @@ class RangeServer:
                 if self.path == "/nolength":
                     self.reply_ignoring_range()
                     return
+                if self.path in outer.uploads:
+                    self.reply_range(outer.uploads[self.path])
+                    return
                 self.reply_range(outer.data)
+
+            def do_PUT(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                outer.uploads[self.path] = self.rfile.read(length)
+                self.send_response(201)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
 
             def do_HEAD(self):
                 self.send_response(200)

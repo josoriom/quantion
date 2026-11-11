@@ -1,43 +1,32 @@
-default_of <- function(work, name) eval(formals(work)[[name]], asNamespace("quantion"))
-
-peak_finders <- function() list(
-  find_peaks = quantion::find_peaks,
-  get_peak = quantion::get_peak,
-  find_feature = quantion::find_feature,
-  get_features = quantion::get_features,
-  get_peaks_from_eic = quantion::get_peaks_from_eic,
-  get_peaks_from_chrom = quantion::get_peaks_from_chrom
-)
-
-shared_settings <- c("min_intensity", "min_peak_width_points", "auto_noise",
-                     "auto_baseline", "min_snr", "min_r2", "shape")
-
-test_that("get_peaks_from_chrom starts with the automatic noise and baseline on", {
+test_that("every group of options starts from the same peak defaults", {
   skip_if_not_installed("quantion")
-
-  expect_true(default_of(quantion::get_peaks_from_chrom, "auto_noise"))
-  expect_true(default_of(quantion::get_peaks_from_chrom, "auto_baseline"))
+  defaults <- find_peaks_options()
+  expect_identical(get_peak_options()$find_peaks, defaults)
+  expect_identical(find_targets_options()$find_peaks, defaults)
+  expect_identical(find_transitions_options()$find_peaks, defaults)
+  expect_identical(find_features_options()$find_peaks, defaults)
+  expect_identical(match_features_options()$find_peaks, defaults)
 })
 
-test_that("every peak finder starts from the same filter defaults", {
+test_that("the peak defaults are the agreed ones", {
   skip_if_not_installed("quantion")
-
-  finders <- peak_finders()
-  for (name in shared_settings) {
-    values <- lapply(finders, default_of, name = name)
-    first <- values[[1]]
-    for (value in values) expect_identical(value, first, info = name)
-  }
+  defaults <- find_peaks_options()
+  expect_identical(defaults$min_intensity, 500)
+  expect_identical(defaults$min_peak_width_points, 3)
+  expect_true(defaults$auto_noise)
+  expect_true(defaults$auto_baseline)
+  expect_identical(defaults$lambda, 20)
+  expect_identical(defaults$max_iterations, 4)
+  expect_identical(defaults$min_snr, 2)
+  expect_identical(defaults$shape, "EMG")
 })
 
-test_that("the shared filter defaults are the ones the package publishes", {
+test_that("the EIC defaults read the whole run with 20 ppm or 0.005 Da", {
   skip_if_not_installed("quantion")
-
-  for (name in shared_settings) {
-    expect_identical(
-      default_of(quantion::get_peaks_from_chrom, name),
-      quantion:::.DEFAULTS[[name]],
-      info = name
-    )
-  }
+  eic <- calculate_eic_options()
+  expect_identical(eic$from, 0)
+  expect_identical(eic$to, Inf)
+  expect_identical(eic$ppm_tolerance, 20)
+  expect_identical(eic$mz_tolerance, 0.005)
+  expect_identical(eic$time_unit, "MINUTES")
 })

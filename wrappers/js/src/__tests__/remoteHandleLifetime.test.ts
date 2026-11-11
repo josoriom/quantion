@@ -1,4 +1,11 @@
-import { describe, test, expect, beforeAll, afterAll, beforeEach } from "@jest/globals";
+import {
+  describe,
+  test,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "@jest/globals";
 import * as http from "http";
 import type { AddressInfo } from "net";
 
@@ -64,7 +71,7 @@ const EMPTY_SCANS = emptyBridge(1, [
   [1, 3, 1],
   [2, 1, 0],
   [3, 1, 0],
-  ...[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(
+  ...[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 90].map(
     (id) => [id, 1, 0] as [number, number, number],
   ),
 ]);
@@ -74,139 +81,158 @@ const EMPTY_IMAGE = emptyBridge(2, [
   [17, 2, 0],
 ]);
 
-
 const SAVED_LIB = process.env.QUANTION_LIB;
 process.env.QUANTION_LIB = SAVED_LIB ?? "/quantion/mocked/native/library";
 
-describe.each(modulePaths)("remote handle lifetime (%s)", (_name, modulePath) => {
-  const { NodeBackend } = require(modulePath);
+const WHOLE_RUN = {
+  rt: { kind: 1, from: 0, to: 10 },
+  mz: { kind: 0, from: NaN, to: NaN },
+};
 
-  let server: http.Server;
-  let origin: string;
-  let backend: any;
-  let native: any;
-  let disposedWhileStillTracked: boolean | null;
+describe.each(modulePaths)(
+  "remote handle lifetime (%s)",
+  (_name, modulePath) => {
+    const { NodeBackend } = require(modulePath);
 
-  beforeAll((done) => {
-    server = http.createServer((_request, response) => {
-      const bytes = Buffer.alloc(1024, 7);
-      response.writeHead(206, {
-        "content-length": bytes.length,
-        "content-range": `bytes 0-1023/${bytes.length}`,
+    let server: http.Server;
+    let origin: string;
+    let backend: any;
+    let native: any;
+    let disposedWhileStillTracked: boolean | null;
+
+    beforeAll((done) => {
+      server = http.createServer((_request, response) => {
+        const bytes = Buffer.alloc(1024, 7);
+        response.writeHead(206, {
+          "content-length": bytes.length,
+          "content-range": `bytes 0-1023/${bytes.length}`,
+        });
+        response.end(bytes);
       });
-      response.end(bytes);
+      server.listen(0, () => {
+        const port = (server.address() as AddressInfo).port;
+        origin = `http://127.0.0.1:${port}`;
+        done();
+      });
     });
-    server.listen(0, () => {
-      const port = (server.address() as AddressInfo).port;
-      origin = `http://127.0.0.1:${port}`;
-      done();
+
+    afterAll((done) => {
+      server.close(() => done());
     });
-  });
 
-  afterAll((done) => {
-    server.close(() => done());
-  });
+    beforeEach(() => {
+      disposedWhileStillTracked = null;
+      backend = new NodeBackend(process);
+      native = {
+        parseIonSource: jest.fn(() => ({ handle: "native file" })),
+        planOpen: jest.fn(() => []),
+        planEic: jest.fn(() => []),
+        planScans: jest.fn(() => []),
+        planImage: jest.fn(() => []),
+        calculateEic: jest.fn(() => EMPTY_EIC),
+        getScans: jest.fn(() => EMPTY_SCANS),
+        getIonImage: jest.fn(() => EMPTY_IMAGE),
+        dispose: jest.fn((handle: object) => {
+          disposedWhileStillTracked = backend.remoteByHandle.has(handle);
+        }),
+      };
+      backend.native = native;
+    });
 
-  beforeEach(() => {
-    disposedWhileStillTracked = null;
-    backend = new NodeBackend(process);
-    native = {
-      parseIonSource: jest.fn(() => ({ handle: "native file" })),
-      planOpen: jest.fn(() => []),
-      planEic: jest.fn(() => []),
-      planScans: jest.fn(() => []),
-      planImage: jest.fn(() => []),
-      calculateEic: jest.fn(() => EMPTY_EIC),
-      getScans: jest.fn(() => EMPTY_SCANS),
-      getIonImage: jest.fn(() => EMPTY_IMAGE),
-      dispose: jest.fn((handle: object) => {
-        disposedWhileStillTracked = backend.remote_by_handle.has(handle);
-      }),
-    };
-    backend.native = native;
-  });
+    async function openRemote(): Promise<object> {
+      return backend.parseIonRemote(new URL(`${origin}/file.ion`), 0);
+    }
 
-  async function openRemote(): Promise<object> {
-    return backend.parseIonRemote(new URL(`${origin}/file.ion`), 0);
-  }
+    test("the remote store is a weak map, so nothing pins a handle", () => {
+      expect(backend.remoteByHandle).toBeInstanceOf(WeakMap);
+      expect(backend.remoteByHandle).not.toBeInstanceOf(Map);
+    });
 
-  test("the remote store is a weak map, so nothing pins a handle", () => {
-    expect(backend.remote_by_handle).toBeInstanceOf(WeakMap);
-    expect(backend.remote_by_handle).not.toBeInstanceOf(Map);
-  });
+    test("a numeric handle is rejected by the weak store", async () => {
+      native.parseIonSource = jest.fn(() => 42);
+      await expect(openRemote()).rejects.toThrow(/weak/i);
+    });
 
-  test("a numeric handle is rejected by the weak store", async () => {
-    native.parseIonSource = jest.fn(() => 42);
-    await expect(openRemote()).rejects.toThrow(/weak/i);
-  });
+    test("an open remote file is tracked and prefetches on eic", async () => {
+      const handle = await openRemote();
 
-  test("an open remote file is tracked and prefetches on eic", async () => {
-    const handle = await openRemote();
+      expect(backend.remoteByHandle.has(handle)).toBe(true);
 
-    expect(backend.remote_by_handle.has(handle)).toBe(true);
+      await backend.calculateEic(handle, 100, {
+        from: 0,
+        to: 1,
+        ppmTolerance: 5,
+        mzTolerance: 0.01,
+        timeUnit: 0,
+      });
+      expect(native.planEic).toHaveBeenCalledTimes(1);
+    });
 
-    await backend.calculateEic(handle, 100, 0, 1, 5, 0.01);
-    expect(native.planEic).toHaveBeenCalledTimes(1);
-  });
+    test("an open remote file prefetches on scans", async () => {
+      const handle = await openRemote();
 
-  test("an open remote file prefetches on scans", async () => {
-    const handle = await openRemote();
+      await backend.getScans(handle, WHOLE_RUN, 1, 0);
 
-    await backend.getScans(handle, 0, 0, 10, 1);
+      expect(native.planScans).toHaveBeenCalledTimes(1);
+      expect(native.getScans).toHaveBeenCalledTimes(1);
+    });
 
-    expect(native.planScans).toHaveBeenCalledTimes(1);
-    expect(native.getScans).toHaveBeenCalledTimes(1);
-  });
+    test("an open remote file prefetches on ion image", async () => {
+      const handle = await openRemote();
 
-  test("an open remote file prefetches on ion image", async () => {
-    const handle = await openRemote();
+      await backend.getIonImage(handle, 100, 0.1, 1);
 
-    await backend.getIonImage(handle, 100, 0.1, 1);
+      expect(native.planImage).toHaveBeenCalledTimes(1);
+      expect(native.getIonImage).toHaveBeenCalledTimes(1);
+    });
 
-    expect(native.planImage).toHaveBeenCalledTimes(1);
-    expect(native.getIonImage).toHaveBeenCalledTimes(1);
-  });
+    test("a local file asks for no scan plan at all", async () => {
+      const handle = { handle: "local file" };
 
-  test("a local file asks for no scan plan at all", async () => {
-    const handle = { handle: "local file" };
+      await backend.getScans(handle, WHOLE_RUN, 1, 0);
+      await backend.getIonImage(handle, 100, 0.1, 1);
 
-    await backend.getScans(handle, 0, 0, 10, 1);
-    await backend.getIonImage(handle, 100, 0.1, 1);
+      expect(native.planScans).not.toHaveBeenCalled();
+      expect(native.planImage).not.toHaveBeenCalled();
+      expect(native.getScans).toHaveBeenCalledTimes(1);
+      expect(native.getIonImage).toHaveBeenCalledTimes(1);
+    });
 
-    expect(native.planScans).not.toHaveBeenCalled();
-    expect(native.planImage).not.toHaveBeenCalled();
-    expect(native.getScans).toHaveBeenCalledTimes(1);
-    expect(native.getIonImage).toHaveBeenCalledTimes(1);
-  });
+    test("freeFile drops the entry before it disposes the handle", async () => {
+      const handle = await openRemote();
 
-  test("freeFile drops the entry before it disposes the handle", async () => {
-    const handle = await openRemote();
+      backend.freeFile(handle);
 
-    backend.freeFile(handle);
+      expect(disposedWhileStillTracked).toBe(false);
+      expect(native.dispose).toHaveBeenCalledWith(handle);
+      expect(backend.remoteByHandle.has(handle)).toBe(false);
+    });
 
-    expect(disposedWhileStillTracked).toBe(false);
-    expect(native.dispose).toHaveBeenCalledWith(handle);
-    expect(backend.remote_by_handle.has(handle)).toBe(false);
-  });
+    test("freeFile releases the byte cache, so later reads stop prefetching", async () => {
+      const handle = await openRemote();
+      backend.freeFile(handle);
 
-  test("freeFile releases the byte cache, so later reads stop prefetching", async () => {
-    const handle = await openRemote();
-    backend.freeFile(handle);
+      await backend.calculateEic(handle, 100, {
+        from: 0,
+        to: 1,
+        ppmTolerance: 5,
+        mzTolerance: 0.01,
+        timeUnit: 0,
+      });
 
-    await backend.calculateEic(handle, 100, 0, 1, 5, 0.01);
+      expect(native.planEic).not.toHaveBeenCalled();
+      expect(native.calculateEic).toHaveBeenCalledTimes(1);
+    });
 
-    expect(native.planEic).not.toHaveBeenCalled();
-    expect(native.calculateEic).toHaveBeenCalledTimes(1);
-  });
+    test("freeing one remote file leaves another one tracked", async () => {
+      const first = await openRemote();
+      native.parseIonSource = jest.fn(() => ({ handle: "second file" }));
+      const second = await openRemote();
 
-  test("freeing one remote file leaves another one tracked", async () => {
-    const first = await openRemote();
-    native.parseIonSource = jest.fn(() => ({ handle: "second file" }));
-    const second = await openRemote();
+      backend.freeFile(first);
 
-    backend.freeFile(first);
-
-    expect(backend.remote_by_handle.has(first)).toBe(false);
-    expect(backend.remote_by_handle.has(second)).toBe(true);
-  });
-});
+      expect(backend.remoteByHandle.has(first)).toBe(false);
+      expect(backend.remoteByHandle.has(second)).toBe(true);
+    });
+  },
+);

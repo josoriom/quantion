@@ -4,36 +4,105 @@ import ctypes
 import math
 import os
 from ctypes import POINTER, c_double, c_float, c_int32, c_size_t, c_uint8, c_uint32
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
 from quantion._bridge import (
+    buf_to_scan_arrays,
     PeakOptions,
     READ_RANGE,
     _ABI,
     _Buf,
-    _check,
     buf_to_bytes,
     buf_to_f64,
+    buf_to_image,
     buf_to_records,
     buf_to_scans,
-    buf_to_str,
 )
-from quantion._pack import (
-    encode_target_ids,
+from quantion._errors import QuantionError, _check, _invalid, _missing, _unknown_option
+from quantion._options import (
+    ANNOTATE_FEATURES,
+    DEFAULT_SCAN_ARRAYS,
+    read_scan_arrays,
+    read_scan_metadata_tags,
+    BASELINE,
+    DEISOTOPE_FEATURES,
+    DRAW_PEAKS,
+    EIC,
+    FIND_FEATURES,
+    FIND_PEAKS,
+    FIND_TARGETS,
+    FIND_TRANSITIONS,
+    FIT_PEAK,
+    GET_PEAK,
+    GET_SCAN_METADATA,
+    GET_SCANS,
+    ION_IMAGE,
+    MATCH_FEATURES,
+    PARSE_ION,
+    WRITE_ION,
+    WRITE_MZML,
+    get_count,
+    get_flag,
+    get_number,
+    get_shape,
+    get_time_unit,
     pack_peak_options,
-    unpack_targets,
+    read_options,
 )
-from quantion._shared import to_cores
+from quantion._types import (
+    AnnotateFeaturesOptions,
+    CalculateBaselineOptions,
+    CompoundMatch,
+    FeatureAnnotation,
+    FileAnnotation,
+    DataXY,
+    DrawPeaksOptions,
+    CalculateEicOptions,
+    Feature,
+    FindFeaturesOptions,
+    FindPeaksOptions,
+    FindTargetsOptions,
+    FindTransitionsOptions,
+    FitPeakOptions,
+    FromTo,
+    GetPeakOptions,
+    GetScanMetadataOptions,
+    GetScansOptions,
+    IonImage,
+    GetIonImageOptions,
+    DeisotopeFeaturesOptions,
+    MatchFeaturesOptions,
+    NoiseLevel,
+    ParseIonOptions,
+    Peak,
+    PeakParameters,
+    PredictedRt,
+    Scan,
+    ScanParam,
+    ScanParamKind,
+    Target,
+    Transition,
+    WriteIonOptions,
+    WriteMzmlOptions,
+)
 from quantion.file import SampleFile
+from quantion.model import Model
+from quantion.warp_model import WarpModel
 
 _abi: Optional[_ABI] = None
+
+_POSITION_ANY = 0
+_POSITION_RANGE = 1
+_POSITION_CLOSEST = 2
+_IMAGE_SCANS_PER_STEP = 256
+_MAX_LEVEL = 255
 
 
 def _get_abi() -> _ABI:
     if _abi is None:
-        raise RuntimeError("quantion backend not loaded.")
+        raise QuantionError("internal", "quantion", "the native library is not loaded")
     return _abi
 
 
@@ -42,167 +111,1023 @@ def _set_abi(abi: _ABI) -> None:
     _abi = abi
 
 
-class _EicDefaults:
-    mz_tolerance: float  = 0.005
-    ppm_tolerance: float = 10.0
-
-class _GridDefaults:
-    start: float     = 40.0
-    end: float       = 1000.0
-    step_size: float = 0.005
-
-class _GroupingDefaults:
-    ppm_tolerance: float = 5.0
-    mz_tolerance: float  = 0.0025
-    rt_tolerance: float  = 0.05
-    frequency: int       = 1
-
-class _FindPeakDefaults:
-    min_intensity: float        = 500.0
-    min_peak_width_points: int  = 3
-    auto_noise: bool            = True
-    auto_baseline: bool         = True
-    min_snr: float              = 2.0
-    min_r2: float               = 0.0
-    shape: str                  = "emg"
-
-
-def _as_f64_ptr(array: np.ndarray) -> POINTER(c_double):
+def _as_f64_ptr(array: np.ndarray):
     return array.ctypes.data_as(POINTER(c_double))
 
-def _as_u32_ptr(array: np.ndarray) -> POINTER(c_uint32):
+
+def _as_u32_ptr(array: np.ndarray):
     return array.ctypes.data_as(POINTER(c_uint32))
 
+
 def _as_u8_ptr(data: bytes):
-    arr = (c_uint8 * len(data)).from_buffer_copy(data)
-    return ctypes.cast(arr, POINTER(c_uint8)), arr
-
-def _as_opts_ptr(peak_options: Optional[PeakOptions]):
-    if peak_options is None:
-        return ctypes.cast(None, POINTER(PeakOptions))
-    return ctypes.byref(peak_options)
-
-def _to_f64_array(sequence: Sequence) -> np.ndarray:
-    return np.ascontiguousarray(sequence, dtype=np.float64)
+    array = (c_uint8 * len(data)).from_buffer_copy(data)
+    return ctypes.cast(array, POINTER(c_uint8)), array
 
 
-def _get_float(mapping: Optional[Dict], key: str, default: float) -> float:
-    if mapping is None:
-        return default
-    value = mapping.get(key, default)
-    parsed = float(value)
-    return parsed if math.isfinite(parsed) and parsed >= 0 else math.nan
+def _get_numbers(function: str, argument: str, values: Sequence) -> np.ndarray:
+    try:
+        return np.ascontiguousarray(values, dtype=np.float64).reshape(-1)
+    except (TypeError, ValueError):
+        raise _invalid(function, argument, "must be a sequence of numbers") from None
 
 
-def _get_tolerance(mapping: Optional[Dict], key: str, default: float) -> float:
-    if mapping is None:
-        return default
-    value = mapping.get(key, default)
-    parsed = float(value)
-    if not math.isfinite(parsed) or parsed < 0:
-        raise TypeError(f"{key} must be a finite non-negative number")
-    return parsed
+def _get_level(function: str, argument: str, value: Any) -> int:
+    level = get_count(function, argument, value)
+    if level > _MAX_LEVEL:
+        raise _invalid(function, argument, f"must be between 0 and {_MAX_LEVEL}, got {value!r}")
+    return level
 
 
-def _get_numeric(mapping: Optional[Dict], key: str, default: float) -> float:
-    if mapping is None:
-        return default
-    value = mapping.get(key, default)
-    parsed = float(value)
-    return parsed if math.isfinite(parsed) else default
+_LARGEST_U32 = 2**32 - 1
 
 
-def _ion_to_mzml_raw(file: SampleFile) -> str:
-    abi = file._abi
-    buf = _Buf()
-    _check("bin_to_mzml", abi.bin_to_mzml(file.handle, ctypes.byref(buf)))
-    return buf_to_str(abi, buf)
+def _get_block_size(function: str, value: Any) -> int:
+    size = get_count(function, "block_size", value)
+    if size < 1 or size > _LARGEST_U32:
+        raise _invalid(function, "block_size", f"must be a whole number from 1 to {_LARGEST_U32} MB, got {value!r}")
+    return size
 
 
-def _mzml_to_ion_raw(file: SampleFile, level: int, f32_compress: bool) -> bytes:
-    abi = file._abi
-    if not (0 <= level <= 22):
-        raise ValueError("level must be in [0, 22]")
-    buf = _Buf()
-    _check(
-        "mzml_to_bin",
-        abi.mzml_to_bin(
-            file.handle,
-            ctypes.byref(buf),
-            c_uint8(level),
-            c_uint8(1 if f32_compress else 0),
-        ),
+def _get_mz_window(function: str, value: Any) -> int:
+    window = get_count(function, "mz_window", value)
+    if window > _LARGEST_U32:
+        raise _invalid(function, "mz_window", f"must be a whole number from 0 to {_LARGEST_U32}, got {value!r}")
+    return window
+
+
+def _read_record(
+    function: str,
+    argument: str,
+    record: Any,
+    required: Sequence[str],
+    optional: Sequence[str] = (),
+) -> Dict[str, Any]:
+    if not isinstance(record, Mapping):
+        raise _invalid(function, argument, "must be a dict")
+    for key in record:
+        if key not in required and key not in optional:
+            raise _unknown_option(function, f"{argument}.{key}", [*required, *optional])
+    for key in required:
+        if record.get(key) is None:
+            raise _missing(function, f"{argument}.{key}")
+    return dict(record)
+
+
+def _encode_ids(ids: Sequence[str]) -> Tuple[np.ndarray, np.ndarray, bytes]:
+    offsets = np.zeros(len(ids), dtype=np.uint32)
+    lengths = np.zeros(len(ids), dtype=np.uint32)
+    parts: List[bytes] = []
+    cursor = 0
+    for index, text in enumerate(ids):
+        encoded = (text or "").encode("utf-8")
+        offsets[index] = cursor
+        lengths[index] = len(encoded)
+        parts.append(encoded)
+        cursor += len(encoded)
+    return offsets, lengths, b"".join(parts)
+
+
+def _read_ids(function: str, argument: str, records: Sequence[Mapping[str, Any]]):
+    ids = []
+    for index, record in enumerate(records):
+        value = record.get("id")
+        if value is not None and not isinstance(value, str):
+            raise _invalid(function, f"{argument}[{index}].id", "must be text")
+        ids.append(value or "")
+    offsets, lengths, text = _encode_ids(ids)
+    if not text:
+        return None, None, None, 0, None
+    text_pointer, text_array = _as_u8_ptr(text)
+    return _as_u32_ptr(offsets), _as_u32_ptr(lengths), text_pointer, len(text), (offsets, lengths, text_array)
+
+
+def _get_eic(function: str, eic: Mapping[str, Any], prefix: str = "") -> Tuple[float, float, float, float, int]:
+    return (
+        get_number(function, f"{prefix}from", eic["from"]),
+        get_number(function, f"{prefix}to", eic["to"]),
+        get_number(function, f"{prefix}ppm_tolerance", eic["ppm_tolerance"]),
+        get_number(function, f"{prefix}mz_tolerance", eic["mz_tolerance"]),
+        get_time_unit(function, f"{prefix}time_unit", eic["time_unit"]),
     )
-    return buf_to_bytes(abi, buf)
 
 
-def parse_mzml(data: bytes) -> SampleFile:
-    """Load an mzML file.
+def _get_grid(function: str, grid: Mapping[str, Any]) -> Tuple[float, float, float]:
+    return (
+        get_number(function, "grid.start", grid["start"]),
+        get_number(function, "grid.end", grid["end"]),
+        get_number(function, "grid.step_size", grid["step_size"]),
+    )
+
+
+def _unpack_ranges(packed: bytes) -> List[Tuple[int, int]]:
+    return [
+        (int.from_bytes(packed[index:index + 8], "little"),
+         int.from_bytes(packed[index + 8:index + 16], "little"))
+        for index in range(0, len(packed), 16)
+    ]
+
+
+def _prefetch(file: SampleFile, function: str, plan: Callable[[Any], int]) -> None:
+    source = getattr(file, "_remote_source", None)
+    if source is None:
+        return
+    buffer = _Buf()
+    _check(file._abi, function, plan(ctypes.byref(buffer)))
+    source.prefetch(_unpack_ranges(buf_to_bytes(file._abi, buffer)))
+
+
+def _is_url(text: str) -> bool:
+    return text.lower().startswith(("http://", "https://"))
+
+
+def _open_file(function: str, abi: _ABI, call: Callable[[Any], int], is_ion: bool) -> SampleFile:
+    handle = ctypes.c_void_p()
+    _check(abi, function, call(ctypes.byref(handle)))
+    file = SampleFile(handle, abi)
+    file._is_ion = is_ion
+    return file
+
+
+def parse_ion(source, options: Optional[ParseIonOptions] = None) -> SampleFile:
+    """parse_ion · Files
+
+    Open an Ionic file (.ion) from a path, a URL or bytes. Paths and URLs are read lazily: only the bytes a query needs are fetched.
+
+    Warning:
+        The sample is freed by the library once it is no longer used, so dispose is not needed in normal use. When processing many samples, dispose each one after using it, so its memory is freed right away instead of piling up.
 
     Args:
-        data: Raw bytes from one mzML file.
+        source: Where the file is: a path, an http(s) URL, or raw bytes.
+        options: Optional settings: max_cache_size = 0. See ParseIonOptions: https://phenological.github.io/quantion/?language=python#ParseIonOptions
 
-    Returns: A SampleFile for use in other quantion functions.
+    Returns:
+        The opened sample.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#parse_ion
     """
+    function = "parse_ion"
+    settings = read_options(function, options, PARSE_ION)
+    cache_size = get_count(function, "max_cache_size", settings["max_cache_size"])
     abi = _get_abi()
-    arr = (c_uint8 * len(data)).from_buffer_copy(data)
-    ptr = ctypes.c_void_p()
-    _check("parse_mzml", abi.parse_mzml(
-        ctypes.cast(arr, POINTER(c_uint8)), len(data),
-        ctypes.byref(ptr),
-    ))
-    return SampleFile(ptr, abi)
-
-
-def parse_ion(source, max_cache_size: int = 0) -> SampleFile:
-    """Load an ion file from raw bytes, a path, or a URL.
-
-    Picks the right one for you: bytes go to parse_ion_raw, a string that looks
-    like a URL goes to parse_ion_remote, any other string goes to parse_ion_path.
-    """
     if isinstance(source, (str, os.PathLike)):
         text = os.fspath(source)
-        if text.startswith("http://") or text.startswith("https://"):
-            return parse_ion_remote(text, max_cache_size)
-        return parse_ion_path(text, max_cache_size)
-    return parse_ion_raw(source, max_cache_size)
+        if _is_url(text):
+            return _parse_ion_remote(text, cache_size)
+        return _open_file(function, abi, lambda out: abi.parse_ion_path(
+            os.fsencode(text), c_size_t(cache_size), out), True)
+    if isinstance(source, (bytes, bytearray, memoryview)):
+        pointer, array = _as_u8_ptr(bytes(source))
+        return _open_file(function, abi, lambda out: abi.parse_bin(
+            pointer, c_size_t(len(array)), c_size_t(cache_size), out), True)
+    raise _invalid(function, "source", "must be a path, an http(s) URL or bytes")
 
 
-def parse_ion_raw(source, max_cache_size: int = 0) -> SampleFile:
-    """Load an ion file from raw bytes already in memory."""
+def parse_mzml(source) -> SampleFile:
+    """parse_mzml · Files
+
+    Open an mzML file from a path or bytes. It is always loaded fully into memory. URLs are refused.
+
+    Warning:
+        The sample is freed by the library once it is no longer used, so dispose is not needed in normal use. When processing many samples, dispose each one after using it, so its memory is freed right away instead of piling up.
+
+    Args:
+        source: Where the file is: a path or raw bytes.
+
+    Returns:
+        The loaded sample.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#parse_mzml
+    """
+    function = "parse_mzml"
+    abi = _get_abi()
+    if isinstance(source, (str, os.PathLike)):
+        text = os.fsencode(os.fspath(source))
+        return _open_file(function, abi, lambda out: abi.parse_mzml_path(text, out), False)
+    if isinstance(source, (bytes, bytearray, memoryview)):
+        pointer, array = _as_u8_ptr(bytes(source))
+        return _open_file(function, abi, lambda out: abi.parse_mzml(pointer, len(array), out), False)
+    raise _invalid(function, "source", "must be a path or bytes")
+
+
+def _encode_out(function: str, out: Any) -> Optional[bytes]:
+    if out is None:
+        return None
+    if not isinstance(out, (str, os.PathLike)):
+        raise _invalid(function, "out", "must be a path or a URL")
+    return os.fsencode(os.fspath(out))
+
+
+def _encode_headers(function: str, headers: Any) -> bytes:
+    if not isinstance(headers, (list, tuple)):
+        raise _invalid(function, "headers", "must be a list of {\"name\", \"value\"}")
+    parts = []
+    for index, header in enumerate(headers):
+        record = _read_record(function, f"headers[{index}]", header, ("name", "value"))
+        for key in ("name", "value"):
+            text = record[key]
+            if not isinstance(text, str):
+                raise _invalid(function, f"headers[{index}].{key}", "must be text")
+            if "\0" in text:
+                raise _invalid(function, f"headers[{index}].{key}", "must not contain a NUL character")
+            parts.append(text.encode("utf-8") + b"\0")
+    return b"".join(parts)
+
+
+def write_ion(file: SampleFile, options: Optional[WriteIonOptions] = None) -> Optional[bytes]:
+    """write_ion · Files
+
+    Write a sample as an Ionic file (.ion). With no out, it returns the bytes. A path writes a file; a URL uploads it in one PUT request.
+
+    Args:
+        file: The sample to write.
+        options: Optional settings: out = None, overwrite = False, level = 12, f32_compress = False, block_size = 8, mz_window = 20, headers = []. See WriteIonOptions: https://phenological.github.io/quantion/?language=python#WriteIonOptions
+
+    Returns:
+        The bytes when out is left out; nothing when it is written or uploaded.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#write_ion
+    """
+    function = "write_ion"
+    settings = read_options(function, options, WRITE_ION)
+    out = _encode_out(function, settings["out"])
+    level = _get_level(function, "level", settings["level"])
+    block_size = _get_block_size(function, settings["block_size"])
+    mz_window = _get_mz_window(function, settings["mz_window"])
+    headers = _encode_headers(function, settings["headers"])
+    headers_pointer, headers_array = _as_u8_ptr(headers) if headers else (None, None)
+    abi = file._abi
+    buffer = _Buf()
+    _check(abi, function, abi.write_ion(
+        file.handle, out,
+        c_uint8(get_flag(function, "overwrite", settings["overwrite"])),
+        c_uint8(level),
+        c_uint8(get_flag(function, "f32_compress", settings["f32_compress"])),
+        c_uint32(block_size), c_uint32(mz_window),
+        headers_pointer, c_size_t(len(headers)), ctypes.byref(buffer),
+    ))
+    if out is not None and _is_url(os.fsdecode(out)):
+        _upload_ion(os.fsdecode(out), settings["headers"], buf_to_bytes(abi, buffer))
+        return None
+    return buf_to_bytes(abi, buffer) if out is None else None
+
+
+def _upload_ion(url: str, headers: Sequence[Mapping[str, str]], data: bytes) -> None:
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    fields = {header["name"].strip(): header["value"] for header in headers}
+    request = Request(url, data=data, method="PUT", headers=fields)
+    try:
+        with urlopen(request):
+            pass
+    except HTTPError as error:
+        raise QuantionError("upload_failed", "write_ion", f"PUT returned {error.code}") from None
+    except URLError as error:
+        raise QuantionError("upload_failed", "write_ion", f"PUT failed: {error.reason}") from None
+
+
+def write_mzml(file: SampleFile, options: Optional[WriteMzmlOptions] = None) -> Optional[bytes]:
+    """write_mzml · Files
+
+    Write a sample as mzML. With no out, it returns the bytes. Only a path is allowed, no URL.
+
+    Args:
+        file: The sample to write.
+        options: Optional settings: out = None, overwrite = False. See WriteMzmlOptions: https://phenological.github.io/quantion/?language=python#WriteMzmlOptions
+
+    Returns:
+        The bytes when out is left out; nothing when it is written.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#write_mzml
+    """
+    function = "write_mzml"
+    settings = read_options(function, options, WRITE_MZML)
+    out = _encode_out(function, settings["out"])
+    abi = file._abi
+    buffer = _Buf()
+    _check(abi, function, abi.write_mzml(
+        file.handle, out, c_uint8(get_flag(function, "overwrite", settings["overwrite"])), ctypes.byref(buffer)))
+    return buf_to_bytes(abi, buffer) if out is None else None
+
+
+def _get_position(function: str, name: str, value: Any) -> list:
+    if value is None:
+        return [c_uint8(_POSITION_ANY), c_double(math.nan), c_double(math.nan)]
+    if isinstance(value, Mapping):
+        window = _read_record(function, name, value, ("from", "to"))
+        return [c_uint8(_POSITION_RANGE),
+                c_double(get_number(function, f"{name}.from", window["from"])),
+                c_double(get_number(function, f"{name}.to", window["to"]))]
+    return [c_uint8(_POSITION_CLOSEST), c_double(get_number(function, name, value)), c_double(math.nan)]
+
+
+def get_scans(
+    file: SampleFile,
+    rt: "float | FromTo | None" = None,
+    mz: "float | FromTo | None" = None,
+    options: Optional[GetScansOptions] = None,
+) -> List[Scan]:
+    """get_scans · Files
+
+    Read scans by retention time, by precursor m/z, or by both. Ranges return every scan inside them; when rt or mz is one value, you get the closest scan, as a list of one.
+
+    Warning:
+        It is best to write the argument names rt and mz to avoid confusion. Without names, rt comes before mz, so a number given without a name is taken as rt.
+
+    Args:
+        file: The sample to read, from parse_ion or parse_mzml.
+        rt: Which scans by retention time: a range or one value. Optional when mz is given. Each FromTo has from, to. See FromTo: https://phenological.github.io/quantion/?language=python#FromTo
+            Example: window: FromTo = {"from": 1.0, "to": 2.5}
+        mz: Which scans by precursor m/z: a range or one value. Give rt, mz or both. Each FromTo has from, to. See FromTo: https://phenological.github.io/quantion/?language=python#FromTo
+            Example: window: FromTo = {"from": 1.0, "to": 2.5}
+        options: Optional settings: level = 1, time_unit = MINUTES, arrays = {"key": "mz", "accession": "MS:1000514"}, {"key": "intensity", "accession": "MS:1000515"}. See GetScansOptions: https://phenological.github.io/quantion/?language=python#GetScansOptions
+
+    Returns:
+        The scans found, in rt order.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#get_scans
+    """
+    function = "get_scans"
+    settings = read_options(function, options, GET_SCANS)
+    if rt is None and mz is None:
+        raise _missing(function, "rt")
+    query = _get_position(function, "rt", rt) + _get_position(function, "mz", mz)
+    level = _get_level(function, "level", settings["level"])
+    time_unit = get_time_unit(function, "time_unit", settings["time_unit"])
+    keys, numbers = read_scan_arrays(function, settings["arrays"])
+    abi = file._abi
+    if settings["arrays"] != DEFAULT_SCAN_ARRAYS:
+        accessions = (c_uint32 * len(numbers))(*numbers)
+        count = c_size_t(len(numbers))
+        _prefetch(file, function, lambda out: abi.plan_scans_with_arrays(
+            file.handle, *query, c_uint8(level), c_uint8(time_unit), accessions, count, out))
+        buffer = _Buf()
+        _check(abi, function, abi.get_scans_with_arrays(
+            file.handle, *query, c_uint8(level), c_uint8(time_unit), accessions, count, ctypes.byref(buffer)))
+        return buf_to_scan_arrays(abi, buffer, keys)
+    _prefetch(file, function, lambda out: abi.plan_scans(
+        file.handle, *query, c_uint8(level), c_uint8(time_unit), out))
+    buffer = _Buf()
+    _check(abi, function, abi.get_scans(
+        file.handle, *query, c_uint8(level), c_uint8(time_unit), ctypes.byref(buffer)))
+    return buf_to_scans(abi, buffer)
+
+
+_LARGEST_SIZE = c_size_t(-1).value
+
+
+def get_scan_metadata(file: SampleFile, index: int, options: Optional[GetScanMetadataOptions] = None) -> List[ScanParam]:
+    """get_scan_metadata · Metadata
+
+    Read the attributes, cvParams and userParams of one scan, one row each, parents before children. Find the scan with get_scans, then pass its index.
+
+    Args:
+        file: The sample to read, from parse_ion or parse_mzml.
+        index: Position of the scan in the spectrum list, from 0: the index of a scan from get_scans.
+        options: Optional settings: tags = []. See GetScanMetadataOptions: https://phenological.github.io/quantion/?language=python#GetScanMetadataOptions
+
+    Returns:
+        One row per attribute or param, in the order of the mzML tree. Values are text. A field the file does not give is missing: None in Rust and Python, null in JS, NA in R.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#get_scan_metadata
+    """
+    function = "get_scan_metadata"
+    settings = read_options(function, options, GET_SCAN_METADATA)
+    tags = ctypes.c_char_p(read_scan_metadata_tags(function, settings["tags"]))
+    if isinstance(index, str):
+        raise _invalid(function, "index", f"must be a whole number 0 or more, got {index!r}")
+    whole_number = get_count(function, "index", index)
+    if whole_number > _LARGEST_SIZE:
+        raise _invalid(function, "index", f"must be less than the scan count, got {index!r}")
+    position = c_size_t(whole_number)
+    abi = file._abi
+    _prefetch(file, function, lambda out: abi.plan_scan_metadata(file.handle, position, out))
+    buffer = _Buf()
+    _check(abi, function, abi.get_scan_metadata(file.handle, position, tags, ctypes.byref(buffer)))
+    rows = buf_to_records(abi, buffer)
+    for row in rows:
+        row["kind"] = ScanParamKind(row["kind"])
+    return rows
+
+
+def calculate_eic(file: SampleFile, mz: float, options: Optional[CalculateEicOptions] = None) -> DataXY:
+    """calculate_eic · Files
+
+    Extract the ion chromatogram of one m/z.
+
+    Args:
+        file: The sample to read, from parse_ion or parse_mzml.
+        mz: The m/z to extract (Da).
+        options: Optional settings: from = 0, to = inf, ppm_tolerance = 20, mz_tolerance = 0.005, time_unit = MINUTES. See CalculateEicOptions: https://phenological.github.io/quantion/?language=python#CalculateEicOptions
+
+    Returns:
+        The chromatogram: x = retention times, y = summed intensities.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#calculate_eic
+    """
+    function = "calculate_eic"
+    settings = read_options(function, options, EIC)
+    start, end, ppm_tolerance, mz_tolerance, time_unit = _get_eic(function, settings)
+    mz = get_number(function, "mz", mz)
+    abi = file._abi
+    _prefetch(file, function, lambda out: abi.plan_eic(
+        file.handle, c_double(mz), c_double(start), c_double(end),
+        c_double(ppm_tolerance), c_double(mz_tolerance), c_uint8(time_unit), out))
+    x_buffer, y_buffer = _Buf(), _Buf()
+    _check(abi, function, abi.calculate_eic(
+        file.handle, c_double(mz), c_double(start), c_double(end),
+        c_double(ppm_tolerance), c_double(mz_tolerance), c_uint8(time_unit),
+        ctypes.byref(x_buffer), ctypes.byref(y_buffer)))
+    return {"x": buf_to_f64(abi, x_buffer), "y": buf_to_f64(abi, y_buffer)}
+
+
+def get_ion_image(file: SampleFile, mz: float, options: Optional[GetIonImageOptions] = None) -> IonImage:
+    """get_ion_image · Files
+
+    Build an imaging map of one m/z: summed intensity at each x, y position.
+
+    Warning:
+        Only Ionic files (.ion). The sample must come from parse_ion; a sample from parse_mzml gives an invalid_argument error.
+
+    Args:
+        file: The sample to read. Must come from parse_ion.
+        mz: The m/z to map (Da).
+        options: Optional settings: tolerance = 0.125, level = 1, on_progress = None. See GetIonImageOptions: https://phenological.github.io/quantion/?language=python#GetIonImageOptions
+
+    Returns:
+        The image.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#get_ion_image
+    """
+    function = "get_ion_image"
+    settings = read_options(function, options, ION_IMAGE)
+    mz = get_number(function, "mz", mz)
+    tolerance = get_number(function, "tolerance", settings["tolerance"])
+    level = _get_level(function, "level", settings["level"])
+    on_progress = settings["on_progress"]
+    if on_progress is not None and not callable(on_progress):
+        raise _invalid(function, "on_progress", "must be a function")
+    abi = file._abi
+    if getattr(file, "_is_ion", False):
+        _prefetch(file, function, lambda out: abi.plan_image(
+            file.handle, c_double(mz), c_double(tolerance), c_uint8(level), out))
+    if on_progress is None or not getattr(file, "_is_ion", False):
+        buffer = _Buf()
+        _check(abi, function, abi.get_ion_image(
+            file.handle, c_double(mz), c_double(tolerance), c_uint8(level), ctypes.byref(buffer)))
+        return buf_to_image(abi, buffer)
+    return _get_ion_image_in_steps(file, mz, tolerance, level, on_progress)
+
+
+def _get_ion_image_in_steps(file: SampleFile, mz: float, tolerance: float, level: int, on_progress) -> IonImage:
+    function = "get_ion_image"
+    abi = file._abi
+    session = c_size_t(0)
+    _check(abi, function, abi.image_begin(
+        file.handle, c_double(mz), c_double(tolerance), c_uint8(level), ctypes.byref(session)))
+    pointer = ctypes.c_void_p(session.value)
+    try:
+        total = c_size_t(0)
+        _check(abi, function, abi.image_scan_count(pointer, ctypes.byref(total)))
+        done = 0
+        while done < total.value:
+            count = min(_IMAGE_SCANS_PER_STEP, total.value - done)
+            _check(abi, function, abi.image_fold(file.handle, pointer, c_size_t(done), c_size_t(count)))
+            done += count
+            on_progress(done, total.value, 0)
+        buffer = _Buf()
+        _check(abi, function, abi.image_finish(pointer, ctypes.byref(buffer)))
+        return buf_to_image(abi, buffer)
+    finally:
+        abi.image_free(pointer)
+
+
+def _get_trace(function: str, x: Sequence, y: Sequence) -> Tuple[np.ndarray, np.ndarray]:
+    return _get_numbers(function, "x", x), _get_numbers(function, "y", y)
+
+
+def find_peaks(x: Sequence, y: Sequence, options: Optional[FindPeaksOptions] = None) -> List[Peak]:
+    """find_peaks · Traces
+
+    Find every peak in one trace.
+
+    Args:
+        x: Retention times, ascending. At least 3 points.
+        y: Intensities, same length as x.
+        options: Optional settings: min_integral = off, min_intensity = 500, min_peak_width_points = 3, noise = off, auto_noise = True, auto_baseline = True, lambda = 20, max_iterations = 4, allow_overlap = False, min_snr = 2, min_r2 = 0, shape = EMG, kernel_size = 0. See FindPeaksOptions: https://phenological.github.io/quantion/?language=python#FindPeaksOptions
+
+    Returns:
+        Every peak that passes the filters.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#find_peaks
+    """
+    function = "find_peaks"
+    settings = read_options(function, options, FIND_PEAKS)
+    packed = pack_peak_options(function, settings, "")
+    x_values, y_values = _get_trace(function, x, y)
+    _check_lengths(function, x_values, y_values)
+    abi = _get_abi()
+    buffer = _Buf()
+    _check(abi, function, abi.find_peaks(
+        _as_f64_ptr(x_values), _as_f64_ptr(y_values), c_size_t(len(x_values)),
+        ctypes.byref(packed), ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
+
+
+def _check_lengths(function: str, x_values: np.ndarray, y_values: np.ndarray) -> None:
+    if len(x_values) != len(y_values):
+        raise _invalid(function, "y", f"must have the same length as x ({len(x_values)}), got {len(y_values)}")
+
+
+def get_peak(x: Sequence, y: Sequence, rt: float, options: Optional[GetPeakOptions] = None) -> Peak:
+    """get_peak · Traces
+
+    Find the one peak near rt. With a range, only rt ± range is searched; without one, the whole trace is searched and the peak is chosen by its size and its distance to rt.
+
+    Args:
+        x: Retention times, ascending. At least 3 points.
+        y: Intensities, same length as x.
+        rt: Expected retention time of the peak.
+        options: Optional settings: range = 0, find_peaks. See GetPeakOptions: https://phenological.github.io/quantion/?language=python#GetPeakOptions
+
+    Returns:
+        The best peak near rt. No peak gives a Peak with every field 0.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#get_peak
+    """
+    function = "get_peak"
+    settings = read_options(function, options, GET_PEAK)
+    packed = pack_peak_options(function, settings["find_peaks"])
+    x_values, y_values = _get_trace(function, x, y)
+    _check_lengths(function, x_values, y_values)
+    abi = _get_abi()
+    buffer = _Buf()
+    _check(abi, function, abi.get_peak(
+        _as_f64_ptr(x_values), _as_f64_ptr(y_values), c_size_t(len(x_values)),
+        c_double(get_number(function, "rt", rt)), c_double(get_number(function, "range", settings["range"])),
+        ctypes.byref(packed), ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)[0]
+
+
+def fit_peak(x: Sequence, y: Sequence, rt: float, options: Optional[FitPeakOptions] = None) -> Optional[PeakParameters]:
+    """fit_peak · Traces
+
+    Fit a Gaussian or EMG curve to the peak near rt. rt says which peak; its apex intensity is the starting point unless you force one.
+
+    Args:
+        x: Retention times, ascending. At least 3 points.
+        y: Intensities, same length as x.
+        rt: Expected retention time of the peak.
+        options: Optional settings: shape = EMG, intensity = 0. See FitPeakOptions: https://phenological.github.io/quantion/?language=python#FitPeakOptions
+
+    Returns:
+        The fitted curve, or none when no peak is found or the fit fails.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#fit_peak
+    """
+    function = "fit_peak"
+    settings = read_options(function, options, FIT_PEAK)
+    x_values, y_values = _get_trace(function, x, y)
+    _check_lengths(function, x_values, y_values)
+    abi = _get_abi()
+    buffer = _Buf()
+    _check(abi, function, abi.fit_peak(
+        _as_f64_ptr(x_values), _as_f64_ptr(y_values), c_size_t(len(x_values)),
+        c_double(get_number(function, "rt", rt)),
+        c_int32(get_shape(function, "shape", settings["shape"])),
+        c_double(get_number(function, "intensity", settings["intensity"])),
+        ctypes.byref(buffer)))
+    rows = buf_to_records(abi, buffer)
+    return rows[0] if rows else None
+
+
+def draw_peaks(params: Sequence[PeakParameters], options: Optional[DrawPeaksOptions] = None) -> DataXY:
+    """draw_peaks · Traces
+
+    Simulate a chromatogram from one or more peak shapes. Every peak is drawn into the same chromatogram; where they overlap, intensities add up. No real data is needed.
+
+    Args:
+        params: The peaks to draw, one PeakParameters per peak. Each PeakParameters has height, center, fwhm, tail, r2. See PeakParameters: https://phenological.github.io/quantion/?language=python#PeakParameters
+            Example: peak: PeakParameters = {"height": 9800, "center": 2.38, "fwhm": 0.021, "tail": 0.006}
+        options: Optional settings: from = 0, to = 0, points = 1000. See DrawPeaksOptions: https://phenological.github.io/quantion/?language=python#DrawPeaksOptions
+
+    Returns:
+        The simulated chromatogram: x = retention times, y = summed intensities.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#draw_peaks
+    """
+    function = "draw_peaks"
+    settings = read_options(function, options, DRAW_PEAKS)
+    if not isinstance(params, (list, tuple)):
+        raise _invalid(function, "params", "must be a list of peak parameters")
+    columns = {key: np.zeros(len(params), dtype=np.float64) for key in ("height", "center", "fwhm", "tail")}
+    for index, peak in enumerate(params):
+        record = _read_record(function, f"params[{index}]", peak, ("height", "center", "fwhm", "tail"), ("r2",))
+        for key, column in columns.items():
+            column[index] = get_number(function, f"params[{index}].{key}", record[key])
+    abi = _get_abi()
+    x_buffer, y_buffer = _Buf(), _Buf()
+    _check(abi, function, abi.draw_peaks(
+        _as_f64_ptr(columns["height"]), _as_f64_ptr(columns["center"]),
+        _as_f64_ptr(columns["fwhm"]), _as_f64_ptr(columns["tail"]), c_size_t(len(params)),
+        c_double(get_number(function, "from", settings["from"])),
+        c_double(get_number(function, "to", settings["to"])),
+        c_size_t(get_count(function, "points", settings["points"])),
+        ctypes.byref(x_buffer), ctypes.byref(y_buffer)))
+    return {"x": buf_to_f64(abi, x_buffer), "y": buf_to_f64(abi, y_buffer)}
+
+
+def find_noise_level(y: Sequence) -> NoiseLevel:
+    """find_noise_level · Traces
+
+    Estimate the noise level of a signal.
+
+    Args:
+        y: Intensities.
+
+    Returns:
+        The noise intensity and the window width it came from.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#find_noise_level
+    """
+    function = "find_noise_level"
+    values = np.ascontiguousarray(_get_numbers(function, "y", y), dtype=np.float32)
+    abi = _get_abi()
+    width, intensity = c_size_t(0), c_double(0.0)
+    _check(abi, function, abi.find_noise_level(
+        values.ctypes.data_as(POINTER(c_float)), c_size_t(len(values)), ctypes.byref(width), ctypes.byref(intensity)))
+    return {"width": int(width.value), "intensity": float(intensity.value)}
+
+
+def calculate_baseline(y: Sequence, options: Optional[CalculateBaselineOptions] = None) -> np.ndarray:
+    """calculate_baseline · Traces
+
+    Estimate a signal's baseline with airPLS.
+
+    Args:
+        y: Intensities.
+        options: Optional settings: lambda = 20, max_iterations = 4. See CalculateBaselineOptions: https://phenological.github.io/quantion/?language=python#CalculateBaselineOptions
+
+    Returns:
+        The baseline, same length as y.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#calculate_baseline
+    """
+    function = "calculate_baseline"
+    settings = read_options(function, options, BASELINE)
+    values = _get_numbers(function, "y", y)
+    abi = _get_abi()
+    buffer = _Buf()
+    _check(abi, function, abi.calculate_baseline(
+        _as_f64_ptr(values), c_size_t(len(values)),
+        c_double(get_number(function, "lambda", settings["lambda"])),
+        c_size_t(get_count(function, "max_iterations", settings["max_iterations"])),
+        ctypes.byref(buffer)))
+    return buf_to_f64(abi, buffer)
+
+
+FEATURE_KEYS = ("mz", "rt", "from", "to", "intensity", "integral", "n_points")
+
+
+def _read_targets(function: str, targets: Sequence[Target]):
+    if not isinstance(targets, (list, tuple)):
+        raise _invalid(function, "targets", "must be a list of targets")
+    records = [_read_record(function, f"targets[{index}]", target, ("mz", "rt"), ("id", "range"))
+               for index, target in enumerate(targets)]
+    mzs = np.array([get_number(function, f"targets[{index}].mz", record["mz"])
+                    for index, record in enumerate(records)], dtype=np.float64)
+    rts = np.array([get_number(function, f"targets[{index}].rt", record["rt"])
+                    for index, record in enumerate(records)], dtype=np.float64)
+    ranges = np.array([math.nan if record.get("range") is None
+                       else get_number(function, f"targets[{index}].range", record["range"])
+                       for index, record in enumerate(records)], dtype=np.float64)
+    return records, mzs, rts, ranges
+
+
+def find_targets(file: SampleFile, targets: Sequence[Target], options: Optional[FindTargetsOptions] = None) -> List[Peak]:
+    """find_targets · Targeted
+
+    For each target, build its EIC at mz and find its peak near rt ± range.
+
+    Args:
+        file: The sample to read, from parse_ion or parse_mzml.
+        targets: What to look for. A target without range searches its whole EIC. Each Target has id, mz, rt, range. See Target: https://phenological.github.io/quantion/?language=python#Target
+            Example: target: Target = {"id": "compound_1", "mz": 260.103, "rt": 2.383, "range": 0.05}
+        options: Optional settings: eic, find_peaks, threads = 1. See FindTargetsOptions: https://phenological.github.io/quantion/?language=python#FindTargetsOptions
+
+    Returns:
+        One Peak per target, in the same order. A target with no peak gets a Peak with every field 0.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#find_targets
+    """
+    function = "find_targets"
+    settings = read_options(function, options, FIND_TARGETS)
+    start, end, ppm_tolerance, mz_tolerance, time_unit = _get_eic(function, settings["eic"], "eic.")
+    packed = pack_peak_options(function, settings["find_peaks"])
+    threads = get_count(function, "threads", settings["threads"])
+    records, mzs, rts, ranges = _read_targets(function, targets)
+    offsets, lengths, text, text_length, keep = _read_ids(function, "targets", records)
+    abi = file._abi
+    _prefetch(file, function, lambda out: abi.plan_find_targets(
+        file.handle, _as_f64_ptr(mzs), c_size_t(len(mzs)), c_double(start), c_double(end),
+        c_double(ppm_tolerance), c_double(mz_tolerance), c_uint8(time_unit), out))
+    buffer = _Buf()
+    _check(abi, function, abi.find_targets(
+        file.handle, _as_f64_ptr(rts), _as_f64_ptr(mzs), _as_f64_ptr(ranges),
+        offsets, lengths, text, c_size_t(text_length), c_size_t(len(records)),
+        c_double(start), c_double(end), c_double(ppm_tolerance), c_double(mz_tolerance), c_uint8(time_unit),
+        ctypes.byref(packed), c_size_t(threads), ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
+
+
+def find_transitions(
+    file: SampleFile, targets: Sequence[Transition], options: Optional[FindTransitionsOptions] = None
+) -> List[Peak]:
+    """find_transitions · Targeted
+
+    For each SRM transition, take the stored chromatogram whose precursor (Q1) and product (Q3) are both within 0.005 m/z, and find its peak near rt ± range.
+
+    Warning:
+        Needs the whole file. A sample opened from a URL gives a remote_file error; open it from a path or bytes.
+
+    Args:
+        file: The sample to read, from parse_ion or parse_mzml.
+        targets: The transitions. Each Transition has id, precursor, product, rt, range. See Transition: https://phenological.github.io/quantion/?language=python#Transition
+            Example: transition: Transition = {"id": "compound_1", "precursor": 89.04768, "product": 89.04768, "rt": 2.385, "range": 0.1}
+        options: Optional settings: find_peaks, threads = 1. See FindTransitionsOptions: https://phenological.github.io/quantion/?language=python#FindTransitionsOptions
+
+    Returns:
+        One Peak per transition, in the same order. No match gives a Peak with every field 0.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#find_transitions
+    """
+    function = "find_transitions"
+    settings = read_options(function, options, FIND_TRANSITIONS)
+    packed = pack_peak_options(function, settings["find_peaks"])
+    threads = get_count(function, "threads", settings["threads"])
+    if not isinstance(targets, (list, tuple)):
+        raise _invalid(function, "targets", "must be a list of transitions")
+    keys = ("precursor", "product", "rt", "range")
+    records = [_read_record(function, f"targets[{index}]", target, keys, ("id",))
+               for index, target in enumerate(targets)]
+    columns = {key: np.array([get_number(function, f"targets[{index}].{key}", record[key])
+                              for index, record in enumerate(records)], dtype=np.float64) for key in keys}
+    offsets, lengths, text, text_length, keep = _read_ids(function, "targets", records)
+    abi = file._abi
+    buffer = _Buf()
+    _check(abi, function, abi.find_transitions(
+        file.handle, _as_f64_ptr(columns["precursor"]), _as_f64_ptr(columns["product"]),
+        _as_f64_ptr(columns["rt"]), _as_f64_ptr(columns["range"]),
+        offsets, lengths, text, c_size_t(text_length), c_size_t(len(records)),
+        ctypes.byref(packed), c_size_t(threads), ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
+
+
+def find_features(file: SampleFile, options: Optional[FindFeaturesOptions] = None) -> List[Feature]:
+    """find_features · Untargeted
+
+    Untargeted: find every feature in one file by scanning an m/z grid.
+
+    Args:
+        file: The sample to read, from parse_ion or parse_mzml.
+        options: Optional settings: eic, grid, find_peaks, threads = 1. See FindFeaturesOptions: https://phenological.github.io/quantion/?language=python#FindFeaturesOptions
+
+    Returns:
+        Every feature found, without frequency.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#find_features
+    """
+    function = "find_features"
+    settings = read_options(function, options, FIND_FEATURES)
+    start, end, ppm_tolerance, mz_tolerance, time_unit = _get_eic(function, settings["eic"], "eic.")
+    grid_start, grid_end, grid_step_size = _get_grid(function, settings["grid"])
+    packed = pack_peak_options(function, settings["find_peaks"])
+    threads = get_count(function, "threads", settings["threads"])
+    abi = file._abi
+    _prefetch(file, function, lambda out: abi.plan_find_features(
+        file.handle, c_double(start), c_double(end), c_double(ppm_tolerance), c_double(mz_tolerance),
+        c_uint8(time_unit), c_double(grid_start), c_double(grid_end), c_double(grid_step_size), out))
+    buffer = _Buf()
+    _check(abi, function, abi.find_features(
+        file.handle, c_double(start), c_double(end), c_double(ppm_tolerance), c_double(mz_tolerance),
+        c_uint8(time_unit), c_double(grid_start), c_double(grid_end), c_double(grid_step_size),
+        ctypes.byref(packed), c_size_t(threads), ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
+
+
+def match_features(directory, options: Optional[MatchFeaturesOptions] = None) -> List[Feature]:
+    """match_features · Untargeted
+
+    Untargeted across samples: find features in every file of a folder and match them. Values are medians over the samples where a feature was found.
+
+    Args:
+        directory: Folder with the Ionic (.ion) or mzML files.
+        options: Optional settings: eic, grid, grouping, find_peaks, threads = 1. See MatchFeaturesOptions: https://phenological.github.io/quantion/?language=python#MatchFeaturesOptions
+
+    Returns:
+        One Feature per matched feature; frequency is the fraction of samples (0–1).
+
+    Documentation: https://phenological.github.io/quantion/?language=python#match_features
+    """
+    function = "match_features"
+    settings = read_options(function, options, MATCH_FEATURES)
+    if not isinstance(directory, (str, os.PathLike)):
+        raise _invalid(function, "directory", "must be a path")
+    start, end, ppm_tolerance, mz_tolerance, time_unit = _get_eic(function, settings["eic"], "eic.")
+    grid_start, grid_end, grid_step_size = _get_grid(function, settings["grid"])
+    grouping = settings["grouping"]
+    packed = pack_peak_options(function, settings["find_peaks"])
+    threads = get_count(function, "threads", settings["threads"])
+    abi = _get_abi()
+    buffer = _Buf()
+    _check(abi, function, abi.match_features(
+        os.fsencode(os.fspath(directory)),
+        c_double(start), c_double(end), c_double(ppm_tolerance), c_double(mz_tolerance), c_uint8(time_unit),
+        c_double(grid_start), c_double(grid_end), c_double(grid_step_size),
+        c_double(get_number(function, "grouping.ppm_tolerance", grouping["ppm_tolerance"])),
+        c_double(get_number(function, "grouping.mz_tolerance", grouping["mz_tolerance"])),
+        c_double(get_number(function, "grouping.rt_tolerance", grouping["rt_tolerance"])),
+        c_double(get_number(function, "grouping.min_frequency", grouping["min_frequency"])),
+        ctypes.byref(packed), c_size_t(threads), ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
+
+
+def _read_feature_values(function: str, features: Sequence[Feature]) -> np.ndarray:
+    if not isinstance(features, (list, tuple)):
+        raise _invalid(function, "features", "must be a list of features")
+    values = np.empty((len(features), len(FEATURE_KEYS) + 1), dtype=np.float64)
+    for index, feature in enumerate(features):
+        argument = f"features[{index}]"
+        record = _read_record(function, argument, feature, FEATURE_KEYS, ("frequency",))
+        for position, key in enumerate(FEATURE_KEYS):
+            values[index, position] = get_number(function, f"{argument}.{key}", record[key])
+        frequency = record.get("frequency")
+        values[index, -1] = math.nan if frequency is None else get_number(function, f"{argument}.frequency", frequency)
+    return values
+
+
+def deisotope_features(features: Sequence[Feature], options: Optional[DeisotopeFeaturesOptions] = None) -> List[Feature]:
+    """deisotope_features · Untargeted
+
+    Remove 13C isotope peaks from a feature list, keeping the monoisotopic peak (M) of each compound. A feature is an isotope when it sits 1.00335/charge above the previous peak (charge = 1 or 2), has the same rt as M, and its intensity is not too high: M+1 at most M × mz × charge / 12 × 0.0108157.
+
+    Args:
+        features: The features to clean, from find_features or match_features.
+        options: Optional settings: rt_tolerance = 0.02, mz_tolerance = 0.005. See DeisotopeFeaturesOptions: https://phenological.github.io/quantion/?language=python#DeisotopeFeaturesOptions
+
+    Returns:
+        The features that are not isotopes, sorted by m/z.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#deisotope_features
+    """
+    function = "deisotope_features"
+    settings = read_options(function, options, DEISOTOPE_FEATURES)
+    values = _read_feature_values(function, features)
+    abi = _get_abi()
+    buffer = _Buf()
+    _check(abi, function, abi.deisotope_features(
+        _as_f64_ptr(values), c_size_t(len(values)),
+        c_double(get_number(function, "rt_tolerance", settings["rt_tolerance"])),
+        c_double(get_number(function, "mz_tolerance", settings["mz_tolerance"])),
+        ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
+
+
+def load_model(source) -> Model:
+    """load_model · Models
+
+    Load an ONNX model from a path, a URL or bytes, and read the keys and values stored in it.
+
+    Args:
+        source: Where the model is: a path, an http(s) URL, or raw bytes.
+
+    Returns:
+        The model, with get_keys(), get_values() and get_value(key).
+
+    Documentation: https://phenological.github.io/quantion/?language=python#load_model
+    """
+    function = "load_model"
+    abi = _get_abi()
+    if isinstance(source, (str, os.PathLike)):
+        text = os.fspath(source)
+        if not _is_url(text):
+            path = os.fsencode(text)
+            path_pointer, path_array = _as_u8_ptr(path)
+            return _open_model(abi, lambda handle, message: abi.model_load_path(
+                path_pointer, len(path), handle, message))
+        from urllib.request import urlopen
+
+        try:
+            with urlopen(text) as response:
+                source = response.read()
+        except OSError as error:
+            raise QuantionError("parse_failed", function,
+                                f"the file could not be read: GET {text} failed: {error}", "source") from error
     if not isinstance(source, (bytes, bytearray, memoryview)):
-        raise TypeError("parse_ion_raw: source must be ion bytes")
-    if not isinstance(max_cache_size, int) or max_cache_size < 0:
-        raise ValueError("parse_ion_raw: max_cache_size must be a non-negative integer")
-    abi = _get_abi()
-    arr = (c_uint8 * len(source)).from_buffer_copy(source)
-    ptr = ctypes.c_void_p()
-    _check("parse_bin", abi.parse_bin(
-        ctypes.cast(arr, POINTER(c_uint8)),
-        c_size_t(len(source)),
-        c_size_t(max_cache_size),
-        ctypes.byref(ptr),
-    ))
-    return SampleFile(ptr, abi)
+        raise _invalid(function, "source", "must be a path, an http(s) URL or bytes")
+    data = bytes(source)
+    data_pointer, data_array = _as_u8_ptr(data)
+    return _open_model(abi, lambda handle, message: abi.model_load_bytes(data_pointer, len(data), handle, message))
 
 
-def parse_ion_path(path, max_cache_size: int = 0) -> SampleFile:
-    """Load an ion file from a path, reading only what it needs from disk."""
-    if not isinstance(max_cache_size, int) or max_cache_size < 0:
-        raise ValueError("parse_ion_path: max_cache_size must be a non-negative integer")
-    file_path = os.fspath(path)
-    if not file_path:
-        raise ValueError("parse_ion_path: path must be a non-empty string")
-    if not os.path.isfile(file_path):
-        raise FileNotFoundError(f"parse_ion_path: no file at {file_path}")
+def _open_model(abi: _ABI, call) -> Model:
+    handle, message = ctypes.c_void_p(), _Buf()
+    code = call(ctypes.byref(handle), ctypes.byref(message))
+    if message.ptr:
+        buf_to_bytes(abi, message)
+    _check(abi, "load_model", code)
+    return Model(handle, abi)
+
+
+def load_warp(model: Model) -> WarpModel:
+    """load_warp · Models
+
+    Make a retention-time warp model from a loaded model.
+
+    Args:
+        model: A model from load_model that holds a warp.
+
+    Returns:
+        The warp model.
+
+    Documentation: https://phenological.github.io/quantion/?language=python#load_warp
+    """
+    function = "load_warp"
+    if not isinstance(model, Model):
+        raise _invalid(function, "model", "must be a Model from load_model")
     abi = _get_abi()
-    ptr = ctypes.c_void_p()
-    _check("parse_ion_path", abi.parse_ion_path(
-        os.fsencode(file_path),
-        c_size_t(max_cache_size),
-        ctypes.byref(ptr),
-    ))
-    return SampleFile(ptr, abi)
+    handle, message = ctypes.c_void_p(), _Buf()
+    code = abi.warp_model_load(model.handle, ctypes.byref(handle), ctypes.byref(message))
+    if message.ptr:
+        buf_to_bytes(abi, message)
+    _check(abi, function, code)
+    return WarpModel(handle, abi, model._get_metadata())
+
+
+def _get_model_metadata(model: Model) -> List[Dict[str, str]]:
+    abi = _get_abi()
+    buffer = _Buf()
+    _check(abi, "load_model", abi.model_metadata(model.handle, ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
+
+
+def _read_warp_targets(function: str, argument: str, targets: Sequence[Target]):
+    if not isinstance(targets, (list, tuple)):
+        raise _invalid(function, argument, "must be a list of targets")
+    records = [_read_record(function, f"{argument}[{index}]", target, ("mz", "rt"), ("id", "range"))
+               for index, target in enumerate(targets)]
+    mzs = np.array([get_number(function, f"{argument}[{index}].mz", record["mz"])
+                    for index, record in enumerate(records)], dtype=np.float64)
+    rts = np.array([get_number(function, f"{argument}[{index}].rt", record["rt"])
+                    for index, record in enumerate(records)], dtype=np.float64)
+    return records, mzs, rts
+
+
+def _prefetch_warp(warp: WarpModel, file: SampleFile, function: str, mzs: np.ndarray, rts: np.ndarray) -> None:
+    if len(mzs) == 0:
+        return
+    abi = warp._abi
+    _prefetch(file, function, lambda out: abi.plan_predict_rts(
+        warp.handle, file.handle, _as_f64_ptr(mzs), _as_f64_ptr(rts), c_size_t(len(mzs)), out))
+
+
+def _predict_rts(warp: WarpModel, file: SampleFile, targets: Sequence[Target]) -> List[PredictedRt]:
+    function = "predict_rts"
+    records, mzs, rts = _read_warp_targets(function, "targets", targets)
+    if not records:
+        return []
+    _prefetch_warp(warp, file, function, mzs, rts)
+    abi = warp._abi
+    buffer = _Buf()
+    _check(abi, function, abi.predict_rts_from_file(
+        warp.handle, file.handle, _as_f64_ptr(mzs), _as_f64_ptr(rts), c_size_t(len(mzs)), ctypes.byref(buffer)))
+    values = buf_to_f64(abi, buffer).reshape(-1, 2)
+    return [{"rt": float(rt), "uncertainty": float(uncertainty)} for rt, uncertainty in values]
+
+
+def _calibrate_rts(
+    warp: WarpModel,
+    anchor_samples: Sequence[SampleFile],
+    target_lists: Sequence[Sequence[Target]],
+) -> List[Target]:
+    function = "calibrate"
+    lists = [_read_warp_targets(function, f"target_lists[{index}]", targets)
+             for index, targets in enumerate(target_lists)]
+    for sample, (records, mzs, rts) in zip(anchor_samples, lists):
+        _prefetch_warp(warp, sample, function, mzs, rts)
+    records = [record for records, _, _ in lists for record in records]
+    mzs = np.concatenate([mzs for _, mzs, _ in lists]) if lists else np.zeros(0)
+    rts = np.concatenate([rts for _, _, rts in lists]) if lists else np.zeros(0)
+    offsets, lengths, text, text_length, keep = _read_ids(function, "target_lists", records)
+    files = (ctypes.c_void_p * len(anchor_samples))(*[sample.handle for sample in anchor_samples])
+    list_lengths = (c_size_t * len(lists))(*[len(records) for records, _, _ in lists])
+    abi = warp._abi
+    buffer = _Buf()
+    _check(abi, function, abi.calibrate_rts(
+        warp.handle, files, c_size_t(len(anchor_samples)), list_lengths, c_size_t(len(lists)),
+        offsets, lengths, text, c_size_t(text_length),
+        _as_f64_ptr(mzs), _as_f64_ptr(rts), c_size_t(len(records)), ctypes.byref(buffer)))
+    return buf_to_records(abi, buffer)
 
 
 LARGEST_GAP = 131072
@@ -282,7 +1207,7 @@ def _plan_open(header: bytes) -> list[tuple[int, int]]:
     abi = _get_abi()
     buffer = _Buf()
     array = (c_uint8 * len(header)).from_buffer_copy(header)
-    _check("plan_open", abi.plan_open(
+    _check(abi, "parse_ion", abi.plan_open(
         ctypes.cast(array, POINTER(c_uint8)),
         c_size_t(len(header)),
         ctypes.byref(buffer),
@@ -296,59 +1221,9 @@ def _plan_open(header: bytes) -> list[tuple[int, int]]:
     return ranges
 
 
-def _plan_eic(file: SampleFile, target_mz: float, from_rt: float, to_rt: float,
-              ppm_tol: float, mz_tol: float) -> list[tuple[int, int]]:
-    buffer = _Buf()
-    _check("plan_eic", file._abi.plan_eic(
-        file.handle,
-        c_double(target_mz), c_double(from_rt), c_double(to_rt),
-        c_double(ppm_tol), c_double(mz_tol),
-        ctypes.byref(buffer),
-    ))
-    packed = buf_to_bytes(file._abi, buffer)
-    return [
-        (int.from_bytes(packed[i:i + 8], "little"),
-         int.from_bytes(packed[i + 8:i + 16], "little"))
-        for i in range(0, len(packed), 16)
-    ]
 
 
-def _plan_scans(file: SampleFile, query_type: int, from_value: float,
-                to_value: float, level: int) -> list[tuple[int, int]]:
-    buffer = _Buf()
-    _check("plan_scans", file._abi.plan_scans(
-        file.handle,
-        c_uint8(query_type), c_double(from_value), c_double(to_value),
-        c_uint8(level),
-        ctypes.byref(buffer),
-    ))
-    packed = buf_to_bytes(file._abi, buffer)
-    return [
-        (int.from_bytes(packed[i:i + 8], "little"),
-         int.from_bytes(packed[i + 8:i + 16], "little"))
-        for i in range(0, len(packed), 16)
-    ]
-
-
-def parse_ion_remote(url: str, max_cache_size: int = 0) -> SampleFile:
-    """Load an ion file over HTTP, reading only the bytes it needs.
-
-    Fetches the header, asks the library for the file's map, prefetches those
-    ranges in one pass, then serves everything else on demand.
-
-    Args:
-        url: HTTP or HTTPS URL pointing to an ion file.
-        max_cache_size: Cache size in bytes. 0 sets no limit.
-
-    Returns: A SampleFile for use in other quantion functions.
-    """
-    if not isinstance(url, str) or not url:
-        raise ValueError("parse_ion_remote: url must be a non-empty string")
-    if not (url.startswith("http://") or url.startswith("https://")):
-        raise ValueError("parse_ion_remote: url must start with http:// or https://")
-    if not isinstance(max_cache_size, int) or max_cache_size < 0:
-        raise ValueError("parse_ion_remote: max_cache_size must be a non-negative integer")
-
+def _parse_ion_remote(url: str, max_cache_size: int) -> SampleFile:
     source = _RemoteSource(url)
 
     def serve(context, offset, length, dest):
@@ -363,734 +1238,157 @@ def parse_ion_remote(url: str, max_cache_size: int = 0) -> SampleFile:
 
     callback = READ_RANGE(serve)
     abi = _get_abi()
-    ptr = ctypes.c_void_p()
-    _check("parse_ion_source", abi.parse_ion_source(
-        callback,
-        None,
-        c_size_t(max_cache_size),
-        ctypes.byref(ptr),
-    ))
-    file = SampleFile(ptr, abi)
+    file = _open_file("parse_ion", abi, lambda out: abi.parse_ion_source(
+        callback, None, c_size_t(max_cache_size), out), True)
     file._range_callback = callback
     file._remote_source = source
     return file
 
 
-def ion_to_mzml(file: SampleFile) -> str:
-    """Get mzML file from a sample.
-
-    Args:
-        file: SampleFile from parse_mzml() or parse_ion().
-
-    Returns: A string with valid mzML content.
-    """
-    return _ion_to_mzml_raw(file)
-
-
-def mzml_to_ion(
-    file: SampleFile,
-    level: int = 12,
-    f32_compress: bool = False,
-) -> bytes:
-    """Convert a sample to ion binary bytes.
-
-    Args:
-        file: SampleFile from parse_mzml() or parse_ion().
-        level: Compression level, integer 0 (none) to 22 (max). Default 12.
-        f32_compress: If True, compress intensity values to 32-bit float.
-
-    Returns: Raw ion binary bytes.
-    """
-    if not isinstance(level, int) or not (0 <= level <= 22):
-        raise ValueError("mzml_to_ion: level must be an integer in [0, 22]")
-    if not isinstance(f32_compress, bool):
-        raise TypeError("mzml_to_ion: f32_compress must be a bool")
-    return _mzml_to_ion_raw(file, level, f32_compress)
-
-
-def mzml_to_ion_file(
-    input_path: str,
-    output_path: str,
-    level: int = 12,
-    f32_compress: bool = False,
-) -> None:
-    """Stream-convert an mzML file on disk into an ion file on disk.
-
-    Reads the mzML file one scan at a time and writes the ion file directly,
-    so the whole file is never held in memory. Use this for large files.
-
-    Args:
-        input_path: Path to the source mzML file.
-        output_path: Path where the ion file is written.
-        level: Compression level, integer 0 (none) to 22 (max). Default 12.
-        f32_compress: If True, store intensity values as 32-bit float.
-    """
-    abi = _get_abi()
-    if not input_path:
-        raise ValueError("mzml_to_ion_file: input_path is required")
-    if not output_path:
-        raise ValueError("mzml_to_ion_file: output_path is required")
-    if not isinstance(level, int) or not (0 <= level <= 22):
-        raise ValueError("mzml_to_ion_file: level must be an integer in [0, 22]")
-    if not isinstance(f32_compress, bool):
-        raise TypeError("mzml_to_ion_file: f32_compress must be a bool")
-    _check(
-        "convert_mzml_file_to_ion_file",
-        abi.convert_mzml_file_to_ion_file(
-            input_path.encode("utf-8"),
-            output_path.encode("utf-8"),
-            c_uint8(level),
-            c_uint8(1 if f32_compress else 0),
-        ),
-    )
-
-
-def calculate_eic(
-    file: SampleFile,
-    target_mz: float,
-    from_rt: float,
-    to_rt: float,
-    ppm_tol: float = 20.0,
-    mz_tol: float  = 0.005,
-) -> Dict[str, np.ndarray]:
-    """Get an extracted ion chromatogram (EIC).
-
-    Extracts an EIC for one target m/z over a given retention-time range.
-
-    Args:
-        file: SampleFile from parse_mzml() or parse_ion().
-        target_mz: Target m/z value (Da).
-        from_rt: Start retention time (minutes).
-        to_rt: End retention time (minutes).
-        ppm_tol: Mass tolerance in ppm. Default 20.
-        mz_tol: Absolute mass tolerance in Da. Default 0.005.
-
-    Returns: Dict with keys 'x' (retention time array) and 'y' (intensity array).
-    """
-    abi = _get_abi()
-    source = getattr(file, "_remote_source", None)
-    if source is not None:
-        source.prefetch(_plan_eic(file, target_mz, from_rt, to_rt, ppm_tol, mz_tol))
-    buf_x, buf_y = _Buf(), _Buf()
-    _check("calculate_eic", abi.calculate_eic(
-        file.handle,
-        c_double(target_mz), c_double(from_rt), c_double(to_rt),
-        c_double(ppm_tol), c_double(mz_tol),
-        ctypes.byref(buf_x), ctypes.byref(buf_y),
-    ))
-    return {"x": buf_to_f64(abi, buf_x), "y": buf_to_f64(abi, buf_y)}
-
-
-def find_peaks(
-    x: Sequence,
-    y: Sequence,
-    options: Optional[Dict[str, Any]] = None,
-) -> List[Dict]:
-    """Find all peaks in a trace.
-
-    Detects peaks in one numeric trace (x = time, y = intensity).
-    Returns all peaks that pass the given filters.
-
-    Args:
-        x: Retention-time sequence. Minimum 3 points.
-        y: Intensity sequence, same length as x.
-        options: Optional dict of peak filter settings. Keys:
-            min_intensity (float),
-            min_peak_width_points (int),
-            noise (float),
-            auto_noise (bool, default True),
-            auto_baseline (bool, default True),
-            lambda_ (int),
-            max_iterations (int),
-            allow_overlap (bool),
-            min_snr (float).
-
-    Returns:
-        List of dicts, one per peak. Each dict has keys: rt, from, to, intensity and integral.
-    """
-    abi = _get_abi()
-    x_array, y_array = _to_f64_array(x), _to_f64_array(y)
-    if len(x_array) != len(y_array) or len(x_array) < 3:
-        raise ValueError("x and y must have equal length >= 3")
-    peak_options = pack_peak_options(options)
-    buf = _Buf()
-    _check("find_peaks", abi.find_peaks(
-        _as_f64_ptr(x_array), _as_f64_ptr(y_array), c_size_t(len(x_array)),
-        _as_opts_ptr(peak_options), ctypes.byref(buf),
-    ))
-    return buf_to_records(abi, buf)
-
-
-def get_peak(
-    x: Sequence,
-    y: Sequence,
-    rt: float,
-    range_: float,
-    options: Optional[Dict[str, Any]] = None,
-) -> Dict:
-    """Find one peak near a target RT.
-
-    Finds the best peak within a given retention-time window around one
-    target RT. Use this when you already know approximately where to look.
-
-    Args:
-        x: Retention-time sequence. Minimum 3 points.
-        y: Intensity sequence, same length as x.
-        rt: Target retention time.
-        range_: Half-width of the search window around rt.
-        options: Optional dict of peak filter settings (same keys as find_peaks).
-
-    Returns:
-        Dict with peak fields: rt, from, to, intensity, integral.
-        Empty dict if no peak was found.
-    """
-    abi = _get_abi()
-    x_array, y_array = _to_f64_array(x), _to_f64_array(y)
-    if len(x_array) != len(y_array) or len(x_array) < 3:
-        raise ValueError("x and y must have equal length >= 3")
-    peak_options = pack_peak_options(options)
-    buf = _Buf()
-    _check("get_peak", abi.get_peak(
-        _as_f64_ptr(x_array),
-        _as_f64_ptr(y_array),
-        c_size_t(len(x_array)),
-        c_double(rt),
-        c_double(range_),
-        _as_opts_ptr(peak_options),
-        ctypes.byref(buf),
-    ))
-    rows = buf_to_records(abi, buf)
-    return rows[0] if rows else {}
-
-
-def _shape_code(shape: str) -> int:
-    name = str(shape).lower()
-    if name == "gaussian":
-        return 0
-    if name == "emg":
-        return 1
-    raise ValueError(f"shape must be 'gaussian' or 'emg', got {shape!r}")
-
-
-def fit_peak(
-    x: Sequence,
-    y: Sequence,
-    rt: float,
-    intensity: float,
-    shape: str = "emg",
-) -> Optional[Dict]:
-    """Fit a Gaussian or EMG model to one peak.
-
-    The apex (rt, intensity) from peak picking seeds the fit, so the optimizer
-    only has to find the shape.
-
-    Args:
-        x: Retention-time sequence. Minimum 5 points.
-        y: Intensity sequence, same length as x.
-        rt: Apex retention time.
-        intensity: Apex intensity.
-        shape: 'gaussian' or 'emg'. Default 'emg'.
-
-    Returns:
-        Dict with keys shape, height, center, fwhm, tail, r2.
-        None if the peak could not be fit.
-    """
-    abi = _get_abi()
-    x_array, y_array = _to_f64_array(x), _to_f64_array(y)
-    if len(x_array) != len(y_array) or len(x_array) < 5:
-        raise ValueError("x and y must have equal length >= 5")
-    buf = _Buf()
-    _check("fit_peak", abi.fit_peak(
-        _as_f64_ptr(x_array),
-        _as_f64_ptr(y_array),
-        c_size_t(len(x_array)),
-        c_double(rt),
-        c_double(intensity),
-        c_int32(_shape_code(shape)),
-        ctypes.byref(buf),
-    ))
-    rows = buf_to_records(abi, buf)
-    return rows[0] if rows else None
-
-
-def draw_peak(x: Sequence, params: Dict) -> np.ndarray:
-    """Render a fitted peak model over x.
-
-    Args:
-        x: Retention-time sequence to draw on.
-        params: Result of fit_peak (shape, height, center, fwhm, tail).
-
-    Returns:
-        Intensity array with the same length and x as the input.
-    """
-    abi = _get_abi()
-    x_array = _to_f64_array(x)
-    buf = _Buf()
-    _check("draw_peak", abi.draw_peak(
-        _as_f64_ptr(x_array),
-        c_size_t(len(x_array)),
-        c_int32(_shape_code(params["shape"])),
-        c_double(params["height"]),
-        c_double(params["center"]),
-        c_double(params["fwhm"]),
-        c_double(params.get("tail", 0.0)),
-        ctypes.byref(buf),
-    ))
-    return buf_to_f64(abi, buf)
-
-
-def find_noise_level(y: Sequence) -> Dict[str, Any]:
-    """Estimate the noise level of a signal.
-
-    Args:
-        y: Intensity sequence.
-
-    Returns:
-        A dict with `width` (int) and `intensity` (float).
-    """
-    abi = _get_abi()
-    arr = np.ascontiguousarray(y, dtype=np.float32)
-    ptr = arr.ctypes.data_as(POINTER(c_float))
-    width = c_size_t(0)
-    intensity = c_double(0.0)
-    _check("find_noise_level", abi.find_noise_level(
-        ptr, len(arr), ctypes.byref(width), ctypes.byref(intensity),
-    ))
-    return {"width": int(width.value), "intensity": float(intensity.value)}
-
-
-def calculate_baseline(
-    y: Sequence,
-    lambda_: int = 0,
-    max_iterations: int = 0,
-) -> np.ndarray:
-    """Estimate a signal baseline.
-
-    Args:
-        y: Numeric signal sequence.
-        lambda_: Smoothness parameter for the asymmetric least-squares baseline. 0 uses a default.
-        max_iterations: Maximum ALS iterations. 0 uses a default.
-
-    Returns:
-        Numpy array, same length as y, with the estimated baseline values.
-    """
-    abi = _get_abi()
-    y_array = _to_f64_array(y)
-    buf = _Buf()
-    _check("calculate_baseline", abi.calculate_baseline(
-        _as_f64_ptr(y_array), c_size_t(len(y_array)),
-        c_int32(int(lambda_)), c_int32(int(max_iterations)),
-        ctypes.byref(buf),
-    ))
-    return buf_to_f64(abi, buf)
-
-
-_QUERY_RT_RANGE   = 0
-_QUERY_CLOSEST_RT = 1
-_QUERY_MZ_RANGE   = 2
-_QUERY_CLOSEST_MZ = 3
-
-
-def get_scans(
-    file: SampleFile,
-    *,
-    rt_range: Optional[tuple] = None,
-    rt: Optional[float] = None,
-    mz_range: Optional[tuple] = None,
-    mz: Optional[float] = None,
-    level: int = 1,
-) -> "List[Dict] | Optional[Dict]":
-    """Get scans by RT or m/z query.
-
-    Fetches scans from a loaded file. Exactly one query mode must be provided.
-
-    Args:
-        file: SampleFile from parse_mzml() or parse_ion().
-        rt_range: Tuple (from, to) in minutes — all scans in RT window.
-        rt: Target RT in minutes — returns the single closest scan.
-        mz_range: Tuple (from, to) in Da — all scans with precursor m/z in window.
-        mz: Target precursor m/z in Da — returns the single closest scan.
-        level: MS level to query (0–255). Default 1.
-
-    Returns:
-        Range query: list of scan dicts, each with rt, mz, intensity, metadata.
-        Point query: single scan dict, or None if no scan was found.
-    """
-    abi = _get_abi()
-    if not (0 <= level <= 255):
-        raise ValueError("get_scans: level must be in [0, 255]")
-
-    provided = sum(x is not None for x in (rt_range, rt, mz_range, mz))
-    if provided != 1:
-        raise ValueError("get_scans: exactly one of rt_range, rt, mz_range, mz must be provided")
-
-    if rt_range is not None:
-        a, b = float(rt_range[0]), float(rt_range[1])
-        if not math.isfinite(a) or not math.isfinite(b):
-            raise ValueError("get_scans: rt_range values must be finite")
-        query_type = _QUERY_RT_RANGE
-    elif rt is not None:
-        a = float(rt)
-        if not math.isfinite(a):
-            raise ValueError("get_scans: rt must be finite")
-        query_type, b = _QUERY_CLOSEST_RT, math.nan
-    elif mz_range is not None:
-        a, b = float(mz_range[0]), float(mz_range[1])
-        if not math.isfinite(a) or not math.isfinite(b):
-            raise ValueError("get_scans: mz_range values must be finite")
-        query_type = _QUERY_MZ_RANGE
-    else:
-        a = float(mz)  # type: ignore[arg-type]
-        if not math.isfinite(a) or a <= 0:
-            raise ValueError("get_scans: mz must be a positive finite number")
-        query_type, b = _QUERY_CLOSEST_MZ, math.nan
-
-    source = getattr(file, "_remote_source", None)
-    if source is not None and abi.plan_scans is not None:
-        source.prefetch(_plan_scans(file, query_type, a, b, level))
-
-    buf = _Buf()
-    _check("get_scans", abi.get_scans(
-        file.handle,
-        c_uint8(query_type), c_double(a), c_double(b), c_uint8(level),
-        ctypes.byref(buf),
-    ))
-    scans = buf_to_scans(abi, buf)
-    if query_type in (_QUERY_CLOSEST_RT, _QUERY_CLOSEST_MZ):
-        return scans[0] if scans else None
-    return scans
-
-
-def get_peaks_from_eic(
-    file: SampleFile,
-    targets: Sequence[Dict[str, Any]],
-    from_rt: float = 0.5,
-    to_rt: float   = 5.0,
-    options: Optional[Dict[str, Any]] = None,
-    cores: int = 1,
-) -> List[Dict]:
-    """Find peaks for many targets using EICs.
-
-    Builds an EIC for each target and finds the best peak near the given RT.
-    Use this for batch targeted peak extraction from one file.
-
-    Args:
-        file: SampleFile from parse_mzml() or parse_ion().
-        targets: List of dicts, each with keys: id (str), rt (float),
-            mz (float), range (float, RT half-window).
-        from_rt: EIC extraction start time (minutes). Default 0.5.
-        to_rt: EIC extraction end time (minutes). Default 5.0.
-        options: Optional dict of peak filter settings (same keys as find_peaks).
-        cores: Number of CPU cores to use. Default 1.
-
-    Returns:
-        List of dicts, one per target. Each dict has keys: id, mz, rt,
-        from, to, intensity, integral.
-    """
-    abi = _get_abi()
-    rts, mzs, ranges, ids = unpack_targets(targets)
-    offsets, lengths, id_buf = encode_target_ids(ids)
-    peak_options = pack_peak_options(options)
-    buf = _Buf()
-
-    if id_buf:
-        id_ptr, id_arr = _as_u8_ptr(id_buf)
-        rc = abi.get_peaks_from_eic(
-            file.handle,
-            _as_f64_ptr(rts), _as_f64_ptr(mzs), _as_f64_ptr(ranges),
-            _as_u32_ptr(offsets), _as_u32_ptr(lengths),
-            id_ptr, c_size_t(len(id_buf)),
-            c_size_t(len(targets)), c_double(from_rt), c_double(to_rt),
-            _as_opts_ptr(peak_options), c_size_t(to_cores(cores)),
-            ctypes.byref(buf),
-        )
-    else:
-        rc = abi.get_peaks_from_eic(
-            file.handle,
-            _as_f64_ptr(rts), _as_f64_ptr(mzs), _as_f64_ptr(ranges),
-            None, None, None, c_size_t(0),
-            c_size_t(len(targets)), c_double(from_rt), c_double(to_rt),
-            _as_opts_ptr(peak_options), c_size_t(to_cores(cores)),
-            ctypes.byref(buf),
-        )
-    _check("get_peaks_from_eic", rc)
-    return buf_to_records(abi, buf)
-
-
-def get_peaks_from_chrom(
-    file: SampleFile,
-    items: Sequence[Dict[str, Any]],
-    options: Optional[Dict[str, Any]] = None,
-    cores: int = 1,
-) -> List[Dict]:
-    """Find peaks from stored chromatograms.
-
-    Finds peaks from file-stored chromatograms using index, RT, and RT window.
-    Use this when you already know which chromatogram index to read.
-
-    Args:
-        file: SampleFile from parse_mzml() or parse_ion().
-        items: List of dicts with keys: idx (int, chromatogram index),
-            rt (float, target retention time), window or range (float, RT half-window).
-        options: Optional dict of peak filter settings (same keys as find_peaks).
-        cores: Number of CPU cores to use. Default 1.
-
-    Returns:
-        List of dicts, one per input item. Each dict has keys: index, rt,
-        from, to, intensity, integral.
-    """
-    abi = _get_abi()
-    n = len(items)
-    indices = np.empty(n, dtype=np.uint32)
-    rts     = np.empty(n, dtype=np.float64)
-    windows = np.empty(n, dtype=np.float64)
-    for i, item in enumerate(items):
-        raw_idx = item.get("idx", item.get("index"))
-        if raw_idx is None or int(raw_idx) < 0:
-            raise ValueError(f"get_peaks_from_chrom: item {i} needs a non-negative integer idx")
-        indices[i] = int(raw_idx)
-        rts[i]     = float(item.get("rt", 0.0))
-        windows[i] = float(item.get("window", item.get("range", 0.0)))
-    peak_options = pack_peak_options(options)
-    buf = _Buf()
-    _check("get_peaks_from_chrom", abi.get_peaks_from_chrom(
-        file.handle,
-        _as_u32_ptr(indices), _as_f64_ptr(rts), _as_f64_ptr(windows),
-        c_size_t(n), _as_opts_ptr(peak_options), c_size_t(to_cores(cores)),
-        ctypes.byref(buf),
-    ))
-    return buf_to_records(abi, buf)
-
-
-def find_features(
-    file: SampleFile,
-    from_rt: float,
-    to_rt: float,
-    *,
-    eic: Optional[Dict[str, float]] = None,
-    grid: Optional[Dict[str, float]] = None,
-    options: Optional[Dict[str, Any]] = None,
-    cores: int = 1,
-) -> List[Dict]:
-    """Find all features in one file.
-
-    Scans the full m/z grid and finds all chromatographic features.
-    No target list is needed.
-
-    Args:
-        file: SampleFile from parse_mzml() or parse_ion().
-        from_rt: Start retention time (minutes).
-        to_rt: End retention time (minutes).
-        eic: Optional dict with EIC extraction settings. Keys:
-            ppm_tolerance (float, default 10.0), mz_tolerance (float, default 0.005).
-        grid: Optional dict with m/z grid settings. Keys:
-            start (float, default 40.0), end (float, default 1000.0),
-            step_size (float, default 0.005).
-        options: Optional dict of peak filter settings (same keys as find_peaks).
-        cores: Number of CPU cores to use. Default 1.
-
-    Returns:
-        List of dicts, one per detected feature. Each dict has keys: mz, rt,
-        from, to, intensity, integral, n_points.
-    """
-    abi = _get_abi()
-
-    eic_ppm  = _get_float(eic,  "ppm_tolerance", _EicDefaults.ppm_tolerance)
-    eic_mz   = _get_float(eic,  "mz_tolerance",  _EicDefaults.mz_tolerance)
-    g_start  = _get_float(grid, "start",          _GridDefaults.start)
-    g_end    = _get_float(grid, "end",            _GridDefaults.end)
-    g_step   = _get_float(grid, "step_size",      _GridDefaults.step_size)
-    if g_step <= 0:
-        g_step = math.nan
-
-    peak_defaults = {
-        "min_intensity":        _FindPeakDefaults.min_intensity,
-        "min_peak_width_points": _FindPeakDefaults.min_peak_width_points,
-        "auto_noise":           _FindPeakDefaults.auto_noise,
-        "auto_baseline":        _FindPeakDefaults.auto_baseline,
-        "min_snr":              _FindPeakDefaults.min_snr,
-        "min_r2":               _FindPeakDefaults.min_r2,
-        "shape":                _FindPeakDefaults.shape,
+ANNOTATION_FEATURE_KEYS = ("mz", "rt")
+ANNOTATION_FEATURE_OPTIONAL_KEYS = ("from", "to", "intensity", "integral", "n_points", "frequency")
+
+
+def _read_annotation_features(function: str, features: Sequence[Feature]) -> Tuple[np.ndarray, np.ndarray]:
+    if not isinstance(features, (list, tuple)):
+        raise _invalid(function, "features", "must be a list of features")
+    mzs = np.empty(len(features), dtype=np.float64)
+    rts = np.empty(len(features), dtype=np.float64)
+    for index, feature in enumerate(features):
+        argument = f"features[{index}]"
+        record = _read_record(function, argument, feature, ANNOTATION_FEATURE_KEYS, ANNOTATION_FEATURE_OPTIONAL_KEYS)
+        mzs[index] = get_number(function, f"{argument}.mz", record["mz"])
+        rts[index] = get_number(function, f"{argument}.rt", record["rt"])
+    return mzs, rts
+
+
+def _read_annotation_files(function: str, files: Sequence[SampleFile]) -> List[SampleFile]:
+    if not isinstance(files, (list, tuple)):
+        raise _invalid(function, "files", "must be a list of samples")
+    for index, file in enumerate(files):
+        if not isinstance(file, SampleFile):
+            raise _invalid(function, f"files[{index}]", "must be a sample from parse_ion or parse_mzml")
+    return list(files)
+
+
+def _read_annotation_settings(function: str, settings: Mapping[str, Any]) -> list:
+    return [
+        c_size_t(get_count(function, "matches", settings["matches"])),
+        c_double(get_number(function, "ppm_tolerance", settings["ppm_tolerance"])),
+        c_double(get_number(function, "mz_tolerance", settings["mz_tolerance"])),
+        c_double(get_number(function, "rt_range", settings["rt_range"])),
+        c_double(get_number(function, "min_relative_intensity", settings["min_relative_intensity"])),
+    ]
+
+
+def _read_annotation_source(function: str, argument: str, value: Any) -> str:
+    if not isinstance(value, (str, os.PathLike)) or not os.fspath(value).strip():
+        raise _invalid(function, argument, "must be a path or a URL")
+    return os.fspath(value)
+
+
+def _get_compound_match(row: Mapping[str, Any]) -> CompoundMatch:
+    names = row["metadata_names"].split("\x1f") if row["metadata_names"] else []
+    values = row["metadata_values"].split("\x1f") if row["metadata_names"] else []
+    return {
+        "label": row["label"],
+        "id": row["id"],
+        "database": row["database"],
+        "score": row["score"],
+        "cosine": row["cosine"],
+        "mz": row["mz"],
+        "intensity": row["intensity"],
+        "metadata": dict(zip(names, values)),
     }
-    if options:
-        peak_defaults.update(options)
-    peak_options = pack_peak_options(peak_defaults)
-
-    buf = _Buf()
-    _check("find_features", abi.find_features(
-        file.handle,
-        c_double(from_rt), c_double(to_rt),
-        c_double(eic_ppm), c_double(eic_mz),
-        c_double(g_start), c_double(g_end), c_double(g_step),
-        _as_opts_ptr(peak_options), c_int32(to_cores(cores)),
-        ctypes.byref(buf),
-    ))
-    return buf_to_records(abi, buf)
 
 
-def find_feature(
-    file: SampleFile,
-    targets: Sequence[Dict[str, Any]],
-    *,
-    scan_eic: Optional[Dict[str, float]] = None,
-    eic: Optional[Dict[str, float]]      = None,
-    options: Optional[Dict[str, Any]]    = None,
-    cores: int = 1,
-) -> List[Dict]:
-    """Find targeted features by m/z and RT.
-
-    Extracts peaks for one or more targets defined by m/z and RT.
-    Use this when you already know what you are looking for.
-
-    Args:
-        file: SampleFile from parse_mzml() or parse_ion().
-        targets: List of dicts with keys: id (str, optional), rt (float),
-            mz (float), range (float, RT half-window).
-        scan_eic: Optional dict for spectrum scan tolerance. Keys:
-            ppm_tolerance (float), mz_tolerance (float).
-        eic: Optional dict for EIC extraction tolerance. Keys:
-            ppm_tolerance (float), mz_tolerance (float).
-        options: Optional dict of peak filter settings (same keys as find_peaks).
-        cores: Number of CPU cores to use. Default 1.
-
-    Returns:
-        List of dicts, one per target. Each dict has keys: id, mz, rt,
-        from, to, intensity, integral.
-    """
-    abi = _get_abi()
-
-    scan_ppm = _get_tolerance(scan_eic, "ppm_tolerance", 10.0)
-    scan_mz  = _get_tolerance(scan_eic, "mz_tolerance",  0.003)
-    eic_ppm  = _get_tolerance(eic,      "ppm_tolerance", 20.0)
-    eic_mz   = _get_tolerance(eic,      "mz_tolerance",  0.005)
-
-    peak_defaults = {
-        "min_intensity":        _FindPeakDefaults.min_intensity,
-        "min_peak_width_points": _FindPeakDefaults.min_peak_width_points,
-        "auto_noise":           _FindPeakDefaults.auto_noise,
-        "auto_baseline":        _FindPeakDefaults.auto_baseline,
-        "min_snr":              _FindPeakDefaults.min_snr,
-        "min_r2":               _FindPeakDefaults.min_r2,
-        "shape":                _FindPeakDefaults.shape,
-    }
-    if options:
-        peak_defaults.update(options)
-    peak_options = pack_peak_options(peak_defaults)
-
-    rts, mzs, ranges, ids = unpack_targets(targets, default_range=0.5)
-    offsets, lengths, id_buf = encode_target_ids(ids)
-    buf = _Buf()
-
-    if id_buf:
-        id_ptr, id_arr = _as_u8_ptr(id_buf)
-        rc = abi.find_feature(
-            file.handle,
-            _as_f64_ptr(rts), _as_f64_ptr(mzs), _as_f64_ptr(ranges),
-            _as_u32_ptr(offsets), _as_u32_ptr(lengths),
-            id_ptr, c_size_t(len(id_buf)),
-            c_size_t(len(targets)), c_size_t(to_cores(cores)),
-            c_double(scan_ppm), c_double(scan_mz),
-            c_double(eic_ppm),  c_double(eic_mz),
-            _as_opts_ptr(peak_options), ctypes.byref(buf),
-        )
-    else:
-        rc = abi.find_feature(
-            file.handle,
-            _as_f64_ptr(rts), _as_f64_ptr(mzs), _as_f64_ptr(ranges),
-            None, None, None, c_size_t(0),
-            c_size_t(len(targets)), c_size_t(to_cores(cores)),
-            c_double(scan_ppm), c_double(scan_mz),
-            c_double(eic_ppm),  c_double(eic_mz),
-            _as_opts_ptr(peak_options), ctypes.byref(buf),
-        )
-    _check("find_feature", rc)
-    return buf_to_records(abi, buf)
+def _get_number_or_none(value: float) -> Optional[float]:
+    return None if math.isnan(value) else value
 
 
-def get_features(
-    directory_path: str,
-    from_rt: float,
-    to_rt: float,
-    *,
-    eic: Optional[Dict[str, float]]      = None,
-    grid: Optional[Dict[str, float]]     = None,
-    grouping: Optional[Dict[str, Any]]   = None,
-    options: Optional[Dict[str, Any]]    = None,
-    cores: int = 1,
-) -> List[Dict]:
-    """Find and align features across many files.
+def _get_annotations(feature_rows: list, file_rows: list, match_rows: list) -> List[FeatureAnnotation]:
+    matches: Dict[Tuple[int, int], List[CompoundMatch]] = {}
+    for row in match_rows:
+        matches.setdefault((row["feature"], row["file"]), []).append(_get_compound_match(row))
+    files: Dict[int, List[FileAnnotation]] = {}
+    for row in file_rows:
+        files.setdefault(row["feature"], []).append({
+            "file": row["file"],
+            "scan_index": None if math.isnan(row["scan_index"]) else int(row["scan_index"]),
+            "matches": matches.get((row["feature"], row["file"]), []),
+        })
+    return [
+        {
+            "mz": row["mz"],
+            "rt": row["rt"],
+            "label": row["label"],
+            "id": row["id"],
+            "database": row["database"],
+            "frequency": row["frequency"],
+            "score": _get_number_or_none(row["score"]),
+            "cosine": _get_number_or_none(row["cosine"]),
+            "files": files.get(position, []),
+        }
+        for position, row in enumerate(feature_rows)
+    ]
 
-    Detects features in every file in a folder and groups them by m/z and RT.
-    Returns a consensus feature table aligned across all samples.
+
+def annotate_features(
+    files: Sequence[SampleFile],
+    features: Sequence[Feature],
+    options: Optional[AnnotateFeaturesOptions] = None,
+) -> List[FeatureAnnotation]:
+    """annotate_features · Untargeted
+
+    Annotate features by matching their MS2 spectra against a spectral library. For each feature and sample, the positive MS2 scan closest to the peak apex is used: its precursor must match the feature m/z within the tolerance, and its RT must be within rt_range. A spectrum encoder turns the scan into a vector, which is scored against the library spectra with the same precursor m/z. The library (an Ionic .ion file) and the encoder (an ONNX model) are read from a path or a URL; by default both come from the josoriom/cipher releases.
+
+    Warning:
+        This is an experimental feature.
 
     Args:
-        directory_path: Path to a folder with mzML or ion files.
-        from_rt: Start retention time (minutes).
-        to_rt: End retention time (minutes).
-        eic: Optional dict for EIC extraction settings. Keys:
-            ppm_tolerance (float, default 10.0), mz_tolerance (float, default 0.005).
-        grid: Optional dict for m/z grid settings. Keys:
-            start (float, default 40.0), end (float, default 1000.0),
-            step_size (float, default 0.005).
-        grouping: Optional dict for cross-sample alignment settings. Keys:
-            ppm_tolerance (float), mz_tolerance (float), rt_tolerance (float),
-            frequency (int, min samples a feature must appear in).
-        options: Optional dict of peak filter settings (same keys as find_peaks).
-        cores: Number of CPU cores to use. Default 1.
+        files: The samples, from parse_ion or parse_mzml. Must not be empty.
+        features: The features to name: mz and rt each. find_features and match_features output works as is. Empty gives an empty result.
+        options: Optional settings: library = "https://github.com/josoriom/cipher/releases/latest/download/library_positive.ion", model = "https://github.com/josoriom/cipher/releases/latest/download/model.onnx", matches = 3, ppm_tolerance = 20, mz_tolerance = 0.005, rt_range = 0.3, min_relative_intensity = 0.02. See AnnotateFeaturesOptions: https://phenological.github.io/quantion/?language=python#AnnotateFeaturesOptions
 
     Returns:
-        List of dicts, one per consensus feature. Each dict has the
-        following keys:
+        One FeatureAnnotation per feature, in the same order.
 
-        - ``mz`` (float): median m/z of the feature (Da).
-        - ``rt`` (float): median retention time (minutes).
-        - ``from`` (float): start of the retention-time window (minutes).
-        - ``to`` (float): end of the retention-time window (minutes).
-        - ``intensity`` (float): median apex intensity.
-        - ``integral`` (float): median peak area.
-        - ``frequency`` (float): fraction of input samples in which this
-          feature was detected (``n_samples / total_samples``, in
-          ``[0.0, 1.0]``).
+    Documentation: https://phenological.github.io/quantion/?language=python#annotate_features
     """
+    function = "annotate_features"
+    settings = read_options(function, options, ANNOTATE_FEATURES)
+    samples = _read_annotation_files(function, files)
+    mzs, rts = _read_annotation_features(function, features)
+    library_source = _read_annotation_source(function, "library", settings["library"])
+    model_source = _read_annotation_source(function, "model", settings["model"])
+    numbers = _read_annotation_settings(function, settings)
     abi = _get_abi()
+    handles = (ctypes.c_void_p * max(len(samples), 1))(*[sample.handle for sample in samples])
+    count = c_size_t(len(samples))
+    feature_count = c_size_t(len(mzs))
+    outputs = (_Buf(), _Buf(), _Buf())
+    if len(mzs) == 0:
+        _check(abi, function, abi.annotate_features(
+            None, None, handles, count, _as_f64_ptr(mzs), _as_f64_ptr(rts), feature_count, *numbers,
+            *[ctypes.byref(output) for output in outputs]))
+        for output in outputs:
+            buf_to_records(abi, output)
+        return []
+    library = parse_ion(library_source)
+    model = load_model(model_source)
+    try:
+        for sample in samples:
+            _prefetch(sample, function, lambda out, sample=sample: abi.plan_annotate_samples(
+                sample.handle, _as_f64_ptr(mzs), _as_f64_ptr(rts), feature_count, *numbers, out))
+        _prefetch(library, function, lambda out: abi.plan_annotate_library(
+            library.handle, model.handle, handles, count, _as_f64_ptr(mzs), _as_f64_ptr(rts), feature_count,
+            *numbers, out))
+        _check(abi, function, abi.annotate_features(
+            library.handle, model.handle, handles, count, _as_f64_ptr(mzs), _as_f64_ptr(rts), feature_count,
+            *numbers, *[ctypes.byref(output) for output in outputs]))
+        feature_rows, file_rows, match_rows = (buf_to_records(abi, output) for output in outputs)
+        return _get_annotations(feature_rows, file_rows, match_rows)
+    finally:
+        library.dispose()
+        model.dispose()
 
-    if not directory_path:
-        raise ValueError("get_features: directory_path is required")
-
-    eic_ppm    = _get_numeric(eic,      "ppm_tolerance", _EicDefaults.ppm_tolerance)
-    eic_mz     = _get_numeric(eic,      "mz_tolerance",  _EicDefaults.mz_tolerance)
-    grid_start = _get_numeric(grid,     "start",          _GridDefaults.start)
-    grid_end   = _get_numeric(grid,     "end",            _GridDefaults.end)
-    grid_step  = _get_numeric(grid,     "step_size",      _GridDefaults.step_size)
-    group_ppm  = _get_numeric(grouping, "ppm_tolerance",  _GroupingDefaults.ppm_tolerance)
-    group_mz   = _get_numeric(grouping, "mz_tolerance",   _GroupingDefaults.mz_tolerance)
-    group_rt   = _get_numeric(grouping, "rt_tolerance",   _GroupingDefaults.rt_tolerance)
-    prevalence = int((grouping or {}).get(
-        "frequency", (grouping or {}).get("prevalence", _GroupingDefaults.frequency)
-    ))
-
-    peak_defaults = {
-        "min_intensity":        _FindPeakDefaults.min_intensity,
-        "min_peak_width_points": _FindPeakDefaults.min_peak_width_points,
-        "auto_noise":           _FindPeakDefaults.auto_noise,
-        "auto_baseline":        _FindPeakDefaults.auto_baseline,
-        "min_snr":              _FindPeakDefaults.min_snr,
-        "min_r2":               _FindPeakDefaults.min_r2,
-        "shape":                _FindPeakDefaults.shape,
-    }
-    if options:
-        peak_defaults.update(options)
-    peak_options = pack_peak_options(peak_defaults)
-
-    buf = _Buf()
-    _check("get_features", abi.get_features(
-        directory_path.encode("utf-8"),
-        c_double(from_rt), c_double(to_rt),
-        c_double(eic_ppm), c_double(eic_mz),
-        c_double(grid_start), c_double(grid_end), c_double(grid_step),
-        c_double(group_ppm), c_double(group_mz), c_double(group_rt),
-        c_int32(prevalence),
-        _as_opts_ptr(peak_options), c_int32(to_cores(cores)),
-        ctypes.byref(buf),
-    ))
-    return buf_to_records(abi, buf)

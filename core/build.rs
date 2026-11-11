@@ -25,7 +25,11 @@ fn main() {
         root.join("wrappers/r/src/include/quantion.h"),
     ];
 
+    let is_repository = root.join("wrappers").is_dir();
     for copy in &copies {
+        if !is_repository {
+            break;
+        }
         let parent = copy.parent().unwrap();
         if std::fs::create_dir_all(parent).is_err() {
             continue;

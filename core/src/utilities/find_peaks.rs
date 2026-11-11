@@ -1,70 +1,22 @@
 use std::cmp::Ordering;
 
-use crate::utilities::{
-    calculate_baseline::{BaselineOptions, calculate_baseline},
-    cheminfo::sgg::{SggOptions, sgg},
-    closest_index,
-    find_noise_level::{find_noise_level, find_noise_level_san_plot},
-    fit_peak::PeakShape,
-    get_boundaries::{Boundaries, BoundariesOptions, get_boundaries},
-    math::xy_integration,
-    scan_for_peaks::scan_for_peaks,
-    shape_filter::{Candidate, ShapeFilter},
-    structs::{DataXY, Peak},
+use crate::{
+    traces::{CalculateBaselineOptions, FindPeaksOptions},
+    utilities::{
+        calculate_baseline::calculate_baseline,
+        cheminfo::sgg::{SggOptions, sgg},
+        closest_index,
+        find_noise_level::find_noise_level,
+        get_boundaries::{Boundaries, BoundariesOptions, SmoothedSignal, find_boundaries},
+        math::xy_integration,
+        resolve_apexes::resolve_apexes,
+        scan_for_peaks::scan_for_peaks,
+        shape_filter::{Candidate, ShapeFilter},
+        structs::{DataXY, Peak},
+    },
 };
 
-#[derive(Clone, Copy, Debug)]
-pub struct ArtifactFilter {
-    pub min_r2: f64,
-    pub shape: PeakShape,
-}
-
-impl Default for ArtifactFilter {
-    fn default() -> Self {
-        Self {
-            min_r2: 0.0,
-            shape: PeakShape::EMG,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum NoiseMethod {
-    #[default]
-    FindNoiseLevel,
-    SanPlot,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct PeakFilter {
-    pub min_integral: Option<f64>,
-    pub min_peak_width_points: Option<usize>,
-    pub min_intensity: Option<f64>,
-    pub noise: Option<f64>,
-    pub auto_noise: Option<bool>,
-    pub auto_baseline: Option<bool>,
-    pub allow_overlap: Option<bool>,
-    pub min_snr: Option<f64>,
-    pub noise_method: Option<NoiseMethod>,
-    pub kernel_size: Option<usize>,
-}
-
-impl Default for PeakFilter {
-    fn default() -> Self {
-        Self {
-            min_integral: None,
-            min_peak_width_points: Some(3),
-            min_intensity: Some(500.0),
-            noise: None,
-            auto_noise: Some(true),
-            auto_baseline: Some(true),
-            allow_overlap: Some(false),
-            min_snr: Some(2.0),
-            noise_method: None,
-            kernel_size: None,
-        }
-    }
-}
+const PEAK_EDGE_SLOPE_LEVEL: u8 = 0;
 
 #[derive(Clone, Debug)]
 struct PeakCandidate {
@@ -88,7 +40,7 @@ impl From<PeakCandidate> for Peak {
             rt: c.rt,
             integral: c.integral,
             intensity: c.intensity,
-            r2: if c.r2.is_finite() { Some(c.r2) } else { None },
+            r2: if c.r2.is_finite() { c.r2 } else { 0.0 },
             n_points: c.n_points,
             noise: c.noise,
         }
@@ -105,43 +57,47 @@ impl Candidate for PeakCandidate {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct FindPeaksOptions {
-    pub boundaries: Option<BoundariesOptions>,
-    pub filter: Option<PeakFilter>,
-    pub baseline: Option<BaselineOptions>,
-    pub artifact_filter: Option<ArtifactFilter>,
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Separation {
+    pub(crate) valley_drop: f64,
+    pub(crate) top_valley_drop: Option<f64>,
 }
 
-impl Default for FindPeaksOptions {
-    fn default() -> Self {
-        Self {
-            boundaries: Some(BoundariesOptions::default()),
-            filter: Some(PeakFilter::default()),
-            baseline: Some(BaselineOptions::default()),
-            artifact_filter: Some(ArtifactFilter::default()),
-        }
-    }
+impl Separation {
+    pub(crate) const ANY_PEAK: Self = Self {
+        valley_drop: 0.70,
+        top_valley_drop: None,
+    };
+    pub(crate) const EXPECTED_PEAK: Self = Self {
+        valley_drop: 0.50,
+        top_valley_drop: Some(0.50),
+    };
 }
 
-pub fn find_peaks(data: &DataXY, options: Option<FindPeaksOptions>) -> Vec<Peak> {
-    let o = options.unwrap_or_default();
-    let filter = o.filter.unwrap_or_default();
-    let base_opts = o.baseline.unwrap_or_default();
+pub fn find_peaks(data: &DataXY, options: &FindPeaksOptions) -> Vec<Peak> {
+    find_separated_peaks(data, options, Separation::ANY_PEAK)
+}
 
+pub(crate) fn find_separated_peaks(
+    data: &DataXY,
+    options: &FindPeaksOptions,
+    separation: Separation,
+) -> Vec<Peak> {
     let n = data.y.len();
     if n == 0 {
         return Vec::new();
     }
 
-    let auto_baseline = filter.auto_baseline.unwrap_or(true);
-    let auto_noise = filter.auto_noise.unwrap_or(true);
-    let allow_overlap = filter.allow_overlap.unwrap_or(false);
+    let auto_baseline = options.auto_baseline;
+    let auto_noise = options.auto_noise;
+    let allow_overlap = options.allow_overlap;
 
     let baseline: Vec<f64> = if auto_baseline {
-        let mut b = base_opts;
-        b.edge_slope_level = Some(0);
-        calculate_baseline(&data.y, b)
+        let baseline_options = CalculateBaselineOptions {
+            lambda: options.lambda,
+            max_iterations: options.max_iterations,
+        };
+        calculate_baseline(&data.y, baseline_options, PEAK_EDGE_SLOPE_LEVEL)
     } else {
         vec![0.0; n]
     };
@@ -154,12 +110,9 @@ pub fn find_peaks(data: &DataXY, options: Option<FindPeaksOptions>) -> Vec<Peak>
     };
 
     let noise: f64 = if auto_noise {
-        match filter.noise_method.unwrap_or_default() {
-            NoiseMethod::FindNoiseLevel => find_noise_level(&normalized_data.y).intensity,
-            NoiseMethod::SanPlot => find_noise_level_san_plot(&normalized_data.y).intensity,
-        }
+        find_noise_level(&normalized_data.y).intensity
     } else {
-        filter.noise.unwrap_or_default()
+        options.noise.unwrap_or(0.0)
     };
 
     let positions = scan_for_peaks(&normalized_data);
@@ -167,27 +120,45 @@ pub fn find_peaks(data: &DataXY, options: Option<FindPeaksOptions>) -> Vec<Peak>
         return Vec::new();
     }
 
-    let mut bopt = o.boundaries.unwrap_or_default();
-    bopt.noise = noise;
+    let bopt = BoundariesOptions::default();
 
-    let smoothed_signal = get_smoothed_signal(&normalized_data, filter.kernel_size);
+    let smoothed_signal = get_smoothed_signal(
+        &normalized_data,
+        (options.kernel_size > 0).then_some(options.kernel_size),
+    );
     let boundary_input = smoothed_signal.as_ref().unwrap_or(&normalized_data);
 
-    let mut candidates: Vec<PeakCandidate> = Vec::with_capacity(positions.len());
-    for seed_rt in positions {
-        let b = get_boundaries(boundary_input, seed_rt, Some(bopt));
-        let seed_idx = closest_index(&normalized_data.x, seed_rt);
-        let apex = apex_in_window(&normalized_data, &b);
-        let (rt, apex_y) = if let Some(t) = apex {
-            t
-        } else {
-            (normalized_data.x[seed_idx], normalized_data.y[seed_idx])
-        };
+    let smoothed = SmoothedSignal::new(boundary_input, &bopt);
+    let seeds: Vec<usize> = positions
+        .iter()
+        .map(|&seed_rt| closest_index(&normalized_data.x, seed_rt))
+        .filter(|&seed_index| normalized_data.y[seed_index] > noise)
+        .collect();
+    let tops = resolve_apexes(
+        &boundary_input.y,
+        &smoothed,
+        &seeds,
+        noise,
+        separation.top_valley_drop,
+    );
+
+    let mut candidates: Vec<PeakCandidate> = Vec::with_capacity(tops.len());
+    for (position, &top) in tops.iter().enumerate() {
+        let search_start = if position > 0 { tops[position - 1] } else { 0 };
+        let search_end = tops.get(position + 1).copied().unwrap_or(n - 1);
+        let boundaries = find_boundaries(&smoothed, top, search_start..=search_end, noise, &bopt);
+        let (rt, apex_y) = apex_in_window(&normalized_data, &boundaries)
+            .unwrap_or((normalized_data.x[top], normalized_data.y[top]));
         if apex_y <= noise {
             continue;
         }
 
-        match (b.from.index, b.from.value, b.to.index, b.to.value) {
+        match (
+            boundaries.from.index,
+            boundaries.from.value,
+            boundaries.to.index,
+            boundaries.to.value,
+        ) {
             (Some(fi), Some(fx), Some(ti), Some(tx)) if fi < ti => {
                 let (integral, intensity) = xy_integration(&data.x[fi..=ti], &data.y[fi..=ti]);
                 candidates.push(PeakCandidate {
@@ -211,20 +182,18 @@ pub fn find_peaks(data: &DataXY, options: Option<FindPeaksOptions>) -> Vec<Peak>
         return Vec::new();
     }
 
-    if let Some(artifact_opts) = o.artifact_filter {
-        ShapeFilter::new(artifact_opts.min_r2, artifact_opts.shape).retain(
-            &mut candidates,
-            &data.x,
-            &data.y,
-            &baseline,
-        );
-    }
+    ShapeFilter::new(options.min_r2, options.shape).retain(
+        &mut candidates,
+        &data.x,
+        &data.y,
+        &baseline,
+    );
 
     if candidates.is_empty() {
         return Vec::new();
     }
 
-    let mut peaks = filter_peak_candidates(candidates, filter);
+    let mut peaks = filter_peak_candidates(candidates, options);
 
     peaks.sort_by(|a, b| a.rt.partial_cmp(&b.rt).unwrap_or(Ordering::Equal));
     peaks = dedupe_near_identical(peaks);
@@ -232,13 +201,10 @@ pub fn find_peaks(data: &DataXY, options: Option<FindPeaksOptions>) -> Vec<Peak>
     if !peaks.is_empty() {
         let mut cutoff = 0.0_f64;
         if noise > 0.0 {
-            let sn_mult = filter.min_snr.unwrap_or(1.0);
-            cutoff = sn_mult * noise;
+            cutoff = options.min_snr * noise;
         }
-        if let Some(user_int) = filter.min_intensity
-            && user_int > cutoff
-        {
-            cutoff = user_int;
+        if options.min_intensity > cutoff {
+            cutoff = options.min_intensity;
         }
 
         if cutoff > 0.0 {
@@ -251,7 +217,13 @@ pub fn find_peaks(data: &DataXY, options: Option<FindPeaksOptions>) -> Vec<Peak>
     }
 
     if peaks.len() > 1 {
-        peaks = keep_prominent_peaks(data, &normalized_data.y, noise, peaks);
+        peaks = keep_prominent_peaks(
+            data,
+            &normalized_data.y,
+            noise,
+            separation.valley_drop,
+            peaks,
+        );
     }
 
     if !allow_overlap && peaks.len() > 1 {
@@ -334,32 +306,18 @@ pub fn apex_in_window(data: &DataXY, b: &Boundaries) -> Option<(f64, f64)> {
     Some((data.x[i], max_y))
 }
 
-fn filter_peak_candidates(peaks: Vec<PeakCandidate>, opt: PeakFilter) -> Vec<Peak> {
-    let mut out: Vec<Peak> = Vec::with_capacity(peaks.len());
-
-    let min_intensity = opt.min_intensity;
-    let min_width = opt.min_peak_width_points;
-
-    for p in peaks {
-        let mut pass = true;
-        if let Some(mi) = min_intensity
-            && p.intensity < mi
-        {
-            pass = false;
-        }
-
-        if pass
-            && let Some(w) = min_width
-            && p.n_points < w
-        {
-            pass = false;
-        }
-
-        if pass {
-            out.push(Peak::from(p));
-        }
-    }
-    out
+fn filter_peak_candidates(peaks: Vec<PeakCandidate>, options: &FindPeaksOptions) -> Vec<Peak> {
+    peaks
+        .into_iter()
+        .filter(|peak| peak.intensity >= options.min_intensity)
+        .filter(|peak| peak.n_points >= options.min_peak_width_points)
+        .filter(|peak| {
+            options
+                .min_integral
+                .is_none_or(|min_integral| peak.integral >= min_integral)
+        })
+        .map(Peak::from)
+        .collect()
 }
 
 fn dedupe_near_identical(peaks: Vec<Peak>) -> Vec<Peak> {
@@ -505,7 +463,6 @@ fn suppress_contained_peaks(
     out
 }
 
-const SEPARATE_VALLEY_DROP: f64 = 0.70;
 const COMPARABLE_HEIGHT_RATIO: f64 = 0.50;
 const COMPARABLE_MIN_VALLEY_DROP: f64 = 0.10;
 const SEPARATE_PROMINENCE_NOISE_MULT: f64 = 5.0;
@@ -514,6 +471,7 @@ fn keep_prominent_peaks(
     data: &DataXY,
     centered: &[f64],
     noise: f64,
+    valley_drop: f64,
     peaks: Vec<Peak>,
 ) -> Vec<Peak> {
     let mut kept: Vec<Peak> = Vec::with_capacity(peaks.len());
@@ -527,7 +485,7 @@ fn keep_prominent_peaks(
             let smaller = last_height.min(peak_height);
             let taller = last_height.max(peak_height);
             let prominence = (smaller - valley).max(0.0);
-            if !peaks_are_separate(prominence, smaller, taller, noise) {
+            if !are_peaks_resolved(prominence, smaller, taller, noise, valley_drop) {
                 let merged = merge_peaks(data, last, peak);
                 kept.pop();
                 kept.push(merged);
@@ -558,16 +516,17 @@ fn height_at(values: &[f64], index: usize) -> f64 {
     values.get(index).copied().unwrap_or(0.0)
 }
 
-fn peaks_are_separate(
+fn are_peaks_resolved(
     prominence: f64,
     smaller_height: f64,
     taller_height: f64,
     noise: f64,
+    valley_drop: f64,
 ) -> bool {
     if smaller_height <= 0.0 {
         return false;
     }
-    let well_resolved = prominence >= SEPARATE_VALLEY_DROP * smaller_height;
+    let well_resolved = prominence >= valley_drop * smaller_height;
     let comparable_pair = smaller_height >= COMPARABLE_HEIGHT_RATIO * taller_height
         && prominence >= COMPARABLE_MIN_VALLEY_DROP * smaller_height;
     let far_above_noise = noise > 0.0 && prominence > SEPARATE_PROMINENCE_NOISE_MULT * noise;

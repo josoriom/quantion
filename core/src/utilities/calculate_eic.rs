@@ -1,12 +1,16 @@
-use std::{cmp::Ordering, sync::Arc};
-
 use ionic::{
-    ScanSource, ScanSummary, coalesce_byte_ranges,
-    ion::{ByteRange, IonError, IonReader, Range},
+    ArrayKind, IonError, IonReader, Range,
     mzml::structs::{CvParam, MzML},
+    source::ByteRange,
 };
 
-use crate::utilities::structs::{DataXY, FromTo, Peak};
+use crate::{
+    files::CalculateEicOptions,
+    utilities::{
+        ion::{ScanSource, ScanSummary},
+        structs::{DataXY, FromTo, Peak},
+    },
+};
 
 pub(crate) const MS1_LEVEL: u8 = 1;
 
@@ -14,46 +18,39 @@ fn rt_to_minutes(rt: f64, unit: ionic::TimeUnit) -> f64 {
     match unit {
         ionic::TimeUnit::Second => rt / 60.0,
         ionic::TimeUnit::Millisecond => rt / 60_000.0,
-        ionic::TimeUnit::Minute | ionic::TimeUnit::Other => rt,
+        _ => rt,
     }
 }
 
-fn scan_in_minutes(mut summary: ScanSummary) -> ScanSummary {
+pub(crate) fn scan_in_minutes(mut summary: ScanSummary) -> ScanSummary {
     summary.rt = rt_to_minutes(summary.rt, summary.rt_unit);
     summary.rt_unit = ionic::TimeUnit::Minute;
     summary
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct EicOptions {
-    pub ppm_tolerance: f64,
-    pub mz_tolerance: f64,
-    pub time_unit: TimeUnit,
-}
-
-impl Default for EicOptions {
-    fn default() -> Self {
-        Self {
-            ppm_tolerance: 20.0,
-            mz_tolerance: 0.005,
-            time_unit: TimeUnit::Minutes,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default)]
+/// **TimeUnit** · Enums
+///
+/// Unit of the retention times you give to a function. Results are always in minutes.
+///
+/// Fields:
+/// - `MINUTES`: Minutes (default).
+/// - `SECONDS`: Seconds.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#TimeUnit)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum TimeUnit {
-    Seconds,
+    SECONDS,
     #[default]
-    Minutes,
+    MINUTES,
 }
 
 impl TimeUnit {
     #[inline]
     pub fn to_minutes(self, value: f64) -> f64 {
         match self {
-            TimeUnit::Seconds => value / 60.0,
-            TimeUnit::Minutes => value,
+            TimeUnit::SECONDS => value / 60.0,
+            TimeUnit::MINUTES => value,
         }
     }
 }
@@ -74,9 +71,9 @@ const PROFILE_ACCESSION: &str = "MS:1000128";
 
 pub fn get_spectrum_kind(reader: &mut EicReader) -> SpectrumKind {
     match reader {
-        EicReader::Ion(ion) => match ion.spectrum(0) {
-            Ok(Some(spectrum)) => kind_from_params(&spectrum.cv_params),
-            _ => SpectrumKind::Centroid,
+        EicReader::Ion(ion) => match ion.spectrum_metadata_at(0) {
+            Ok(spectrum) => kind_from_params(&spectrum.cv_params),
+            Err(_) => SpectrumKind::Centroid,
         },
         EicReader::Mzml(mzml) => match first_spectrum_params(mzml) {
             Some(params) => kind_from_params(params),
@@ -150,67 +147,11 @@ impl From<IonError> for FastError {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct SpectrumSummary {
-    pub rt_seconds: f64,
-    pub base_peak_mz: f64,
-    pub selected_ion_mz: f64,
-    pub base_peak_int: f64,
-    pub total_ion_current: f64,
-    pub ms_level: u8,
-    pub polarity: u8,
-    pub position_x: u32,
-    pub position_y: u32,
-    pub position_z: u32,
-}
-
-impl SpectrumSummary {
-    #[inline]
-    pub fn unknown() -> Self {
-        Self {
-            rt_seconds: f64::NAN,
-            base_peak_mz: f64::NAN,
-            selected_ion_mz: f64::NAN,
-            base_peak_int: f64::NAN,
-            total_ion_current: f64::NAN,
-            ms_level: 0,
-            polarity: 0,
-            position_x: 0,
-            position_y: 0,
-            position_z: 0,
-        }
-    }
-
-    #[inline]
-    pub fn from_summary(s: &ScanSummary) -> Self {
-        Self {
-            rt_seconds: s.rt * 60.0,
-            base_peak_mz: s.base_peak_mz,
-            selected_ion_mz: s.selected_ion_mz,
-            base_peak_int: s.base_peak_int,
-            total_ion_current: s.total_ion_current,
-            ms_level: s.ms_level,
-            polarity: s.polarity,
-            position_x: s.position_x,
-            position_y: s.position_y,
-            position_z: s.position_z,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct CentroidScan {
-    pub rt: f64,
-    pub mz: Arc<[f64]>,
-    pub intensity: Arc<[f64]>,
-    pub metadata: SpectrumSummary,
-}
-
 pub fn get_scan_times(
     reader: &mut EicReader,
     rt_from: f64,
     rt_to: f64,
-    ms_level: u8,
+    level: u8,
 ) -> Vec<ScanTime> {
     let mut result = Vec::new();
     let rt_min = rt_from.min(rt_to);
@@ -220,7 +161,7 @@ pub fn get_scan_times(
         EicReader::Ion(ion) => {
             ion.for_each_summary(&mut |idx, summary| {
                 let summary = scan_in_minutes(summary);
-                if summary.rt >= rt_min && summary.rt <= rt_max && summary.ms_level == ms_level {
+                if summary.rt >= rt_min && summary.rt <= rt_max && summary.ms_level == level {
                     result.push(ScanTime {
                         index: idx,
                         rt: summary.rt,
@@ -231,7 +172,7 @@ pub fn get_scan_times(
         EicReader::Mzml(mzml) => {
             mzml.for_each_summary(&mut |idx, summary| {
                 let summary = scan_in_minutes(summary);
-                if summary.rt >= rt_min && summary.rt <= rt_max && summary.ms_level == ms_level {
+                if summary.rt >= rt_min && summary.rt <= rt_max && summary.ms_level == level {
                     result.push(ScanTime {
                         index: idx,
                         rt: summary.rt,
@@ -257,8 +198,10 @@ pub fn read_mz_window(
     match reader {
         EicReader::Ion(ion) => {
             let window = ion
-                .read_window(
+                .spectrum_window(
                     scan_index,
+                    ArrayKind::Mz,
+                    ArrayKind::Intensity,
                     Range {
                         from: mz_from,
                         to: mz_to,
@@ -296,7 +239,7 @@ fn rt_from_minutes(minutes: f64, unit: ionic::TimeUnit) -> f64 {
     match unit {
         ionic::TimeUnit::Second => minutes * 60.0,
         ionic::TimeUnit::Millisecond => minutes * 60_000.0,
-        ionic::TimeUnit::Minute | ionic::TimeUnit::Other => minutes,
+        _ => minutes,
     }
 }
 
@@ -336,107 +279,50 @@ pub fn plan_window_ranges(
 
 pub fn plan_eic_ranges(
     ion: &mut IonReader,
-    target_mz: f64,
+    mz: f64,
     from: f64,
     to: f64,
-    ppm: f64,
-    mz_tol: f64,
+    ppm_tolerance: f64,
+    mz_tolerance: f64,
 ) -> Result<Vec<ByteRange>, FastError> {
-    if !target_mz.is_finite() || target_mz <= 0.0 {
+    if !mz.is_finite() || mz <= 0.0 {
         return Err(FastError::InvalidRequest);
     }
 
-    let options = EicOptions {
-        ppm_tolerance: ppm,
-        mz_tolerance: mz_tol,
+    let options = CalculateEicOptions {
+        ppm_tolerance,
+        mz_tolerance,
         ..Default::default()
     };
 
-    let tolerance = mz_tolerance_for(target_mz, options);
+    let tolerance = mz_tolerance_for(mz, options);
     if !tolerance.is_finite() || tolerance <= 0.0 {
         return Err(FastError::InvalidRequest);
     }
 
-    plan_window_ranges(ion, from, to, target_mz - tolerance, target_mz + tolerance)
-}
-
-fn whole_scan_mz_range() -> Range {
-    Range {
-        from: 0.0,
-        to: f64::MAX,
-    }
-}
-
-pub fn plan_scan_ranges(
-    ion: &mut IonReader,
-    query: ScanQuery,
-    time_unit: TimeUnit,
-    ms_level: u8,
-) -> Result<Vec<ByteRange>, FastError> {
-    ion.require_bounds().map_err(FastError::from)?;
-
-    let wanted = find_wanted_scans(ion, query, time_unit, ms_level);
-    if wanted.only_first {
-        return ranges_for_first_scan_with_data(ion, &wanted.scans);
-    }
-    ranges_for_scans(ion, &wanted.scans)
-}
-
-fn ranges_for_scans(
-    ion: &mut IonReader,
-    scans: &[(usize, ScanSummary)],
-) -> Result<Vec<ByteRange>, FastError> {
-    let mut ranges = Vec::with_capacity(scans.len());
-    for (index, _) in scans {
-        let scan_ranges = ion
-            .byte_ranges(*index, whole_scan_mz_range())
-            .map_err(FastError::from)?;
-        ranges.extend(scan_ranges);
-    }
-    coalesce_byte_ranges(&mut ranges, 0);
-    Ok(ranges)
-}
-
-fn ranges_for_first_scan_with_data(
-    ion: &mut IonReader,
-    scans: &[(usize, ScanSummary)],
-) -> Result<Vec<ByteRange>, FastError> {
-    for (index, _) in scans {
-        let mut ranges = ion
-            .byte_ranges(*index, whole_scan_mz_range())
-            .map_err(FastError::from)?;
-        if !ranges.is_empty() {
-            coalesce_byte_ranges(&mut ranges, 0);
-            return Ok(ranges);
-        }
-    }
-    Ok(Vec::new())
+    plan_window_ranges(ion, from, to, mz - tolerance, mz + tolerance)
 }
 
 pub fn calculate_eic(
     reader: &mut EicReader,
-    target_mz: f64,
-    time_range: FromTo,
-    options: EicOptions,
+    mz: f64,
+    window: FromTo,
+    options: CalculateEicOptions,
 ) -> Result<DataXY, FastError> {
-    if !target_mz.is_finite() || target_mz <= 0.0 {
+    if !mz.is_finite() || mz <= 0.0 {
         return Err(FastError::InvalidRequest);
     }
 
-    let tolerance = mz_tolerance_for(target_mz, options);
+    let tolerance = mz_tolerance_for(mz, options);
     if !tolerance.is_finite() || tolerance <= 0.0 {
         return Err(FastError::InvalidRequest);
     }
 
-    let mz_lower = target_mz - tolerance;
-    let mz_upper = target_mz + tolerance;
+    let mz_lower = mz - tolerance;
+    let mz_upper = mz + tolerance;
 
-    let rt_min = options
-        .time_unit
-        .to_minutes(time_range.from.min(time_range.to));
-    let rt_max = options
-        .time_unit
-        .to_minutes(time_range.from.max(time_range.to));
+    let rt_min = options.time_unit.to_minutes(window.from.min(window.to));
+    let rt_max = options.time_unit.to_minutes(window.from.max(window.to));
 
     let scan_times = get_scan_times(reader, rt_min, rt_max, MS1_LEVEL);
 
@@ -465,222 +351,6 @@ pub fn calculate_eic(
     }
 
     Ok(DataXY { x, y })
-}
-
-pub fn get_eic_for_mz(
-    scans: &[CentroidScan],
-    scan_count: usize,
-    target_mz: f64,
-    options: EicOptions,
-) -> Vec<f64> {
-    if !target_mz.is_finite() || target_mz <= 0.0 {
-        return vec![0.0; scan_count];
-    }
-    let tolerance = mz_tolerance_for(target_mz, options);
-    if !tolerance.is_finite() || tolerance <= 0.0 {
-        return vec![0.0; scan_count];
-    }
-    let mz_lower = target_mz - tolerance;
-    let mz_upper = target_mz + tolerance;
-    let mut intensities = vec![0.0f64; scan_count];
-    for (index, scan) in scans.iter().take(scan_count).enumerate() {
-        intensities[index] =
-            summed_intensity_in_window(&scan.mz, &scan.intensity, mz_lower, mz_upper);
-    }
-    intensities
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ScanQuery {
-    RtRange(FromTo),
-    ClosestRt(f64),
-    MzRange(FromTo),
-    ClosestMz(f64),
-}
-
-pub struct WantedScans {
-    pub scans: Vec<(usize, ScanSummary)>,
-    pub only_first: bool,
-}
-
-pub fn get_scans(
-    source: &mut impl ScanSource,
-    query: ScanQuery,
-    time_unit: TimeUnit,
-    ms_level: u8,
-) -> (Vec<f64>, Vec<CentroidScan>) {
-    let wanted = find_wanted_scans(source, query, time_unit, ms_level);
-    if wanted.only_first {
-        return load_first(source, wanted.scans.into_iter());
-    }
-    load_selected(source, wanted.scans)
-}
-
-pub fn find_wanted_scans(
-    source: &mut impl ScanSource,
-    query: ScanQuery,
-    time_unit: TimeUnit,
-    ms_level: u8,
-) -> WantedScans {
-    match query {
-        ScanQuery::RtRange(range) => find_by_rt_range(source, range, time_unit, ms_level),
-        ScanQuery::ClosestRt(rt) => find_closest_by_rt(source, time_unit.to_minutes(rt), ms_level),
-        ScanQuery::MzRange(range) => find_by_mz_range(source, range, ms_level),
-        ScanQuery::ClosestMz(mz) => find_closest_by_mz(source, mz, ms_level),
-    }
-}
-
-fn find_by_rt_range(
-    source: &mut impl ScanSource,
-    range: FromTo,
-    time_unit: TimeUnit,
-    ms_level: u8,
-) -> WantedScans {
-    let rt_min = time_unit.to_minutes(range.from.min(range.to));
-    let rt_max = time_unit.to_minutes(range.from.max(range.to));
-    let mut scans: Vec<(usize, ScanSummary)> = Vec::new();
-    source.for_each_summary(&mut |index, summary| {
-        let summary = scan_in_minutes(summary);
-        if ms_level != 0 && summary.ms_level != ms_level {
-            return;
-        }
-        if !summary.rt.is_finite() || summary.rt < rt_min || summary.rt > rt_max {
-            return;
-        }
-        scans.push((index, summary));
-    });
-    sort_by_rt(&mut scans);
-    WantedScans {
-        scans,
-        only_first: false,
-    }
-}
-
-fn find_closest_by_rt(source: &mut impl ScanSource, target_rt: f64, ms_level: u8) -> WantedScans {
-    let mut by_distance: Vec<(f64, usize, ScanSummary)> = Vec::new();
-    source.for_each_summary(&mut |index, summary| {
-        let summary = scan_in_minutes(summary);
-        if ms_level != 0 && summary.ms_level != ms_level {
-            return;
-        }
-        if !summary.rt.is_finite() {
-            return;
-        }
-        by_distance.push(((summary.rt - target_rt).abs(), index, summary));
-    });
-    WantedScans {
-        scans: sort_by_distance(by_distance),
-        only_first: true,
-    }
-}
-
-fn find_by_mz_range(source: &mut impl ScanSource, range: FromTo, ms_level: u8) -> WantedScans {
-    let mz_min = range.from.min(range.to);
-    let mz_max = range.from.max(range.to);
-    let mut scans: Vec<(usize, ScanSummary)> = Vec::new();
-    source.for_each_summary(&mut |index, summary| {
-        let summary = scan_in_minutes(summary);
-        if ms_level != 0 && summary.ms_level != ms_level {
-            return;
-        }
-        let mz = summary.selected_ion_mz;
-        if !mz.is_finite() || mz < mz_min || mz > mz_max {
-            return;
-        }
-        scans.push((index, summary));
-    });
-    sort_by_rt(&mut scans);
-    WantedScans {
-        scans,
-        only_first: false,
-    }
-}
-
-fn find_closest_by_mz(source: &mut impl ScanSource, target_mz: f64, ms_level: u8) -> WantedScans {
-    let mut by_distance: Vec<(f64, usize, ScanSummary)> = Vec::new();
-    source.for_each_summary(&mut |index, summary| {
-        let summary = scan_in_minutes(summary);
-        if ms_level != 0 && summary.ms_level != ms_level {
-            return;
-        }
-        if !summary.selected_ion_mz.is_finite() {
-            return;
-        }
-        by_distance.push(((summary.selected_ion_mz - target_mz).abs(), index, summary));
-    });
-    WantedScans {
-        scans: sort_by_distance(by_distance),
-        only_first: true,
-    }
-}
-
-fn sort_by_rt(scans: &mut [(usize, ScanSummary)]) {
-    scans.sort_unstable_by(|a, b| {
-        a.1.rt
-            .partial_cmp(&b.1.rt)
-            .unwrap_or(Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
-}
-
-fn sort_by_distance(mut by_distance: Vec<(f64, usize, ScanSummary)>) -> Vec<(usize, ScanSummary)> {
-    by_distance.sort_unstable_by(|a, b| {
-        a.0.partial_cmp(&b.0)
-            .unwrap_or(Ordering::Equal)
-            .then(a.1.cmp(&b.1))
-    });
-    by_distance
-        .into_iter()
-        .map(|(_, index, summary)| (index, summary))
-        .collect()
-}
-
-fn load_first(
-    source: &mut impl ScanSource,
-    candidates: impl Iterator<Item = (usize, ScanSummary)>,
-) -> (Vec<f64>, Vec<CentroidScan>) {
-    let mut mz_buf = Vec::new();
-    let mut int_buf = Vec::new();
-    for (index, summary) in candidates {
-        if !source.load_scan(index, &mut mz_buf, &mut int_buf) {
-            continue;
-        }
-        let len = mz_buf.len().min(int_buf.len());
-        return (
-            vec![summary.rt],
-            vec![CentroidScan {
-                rt: summary.rt,
-                mz: Arc::from(&mz_buf[..len]),
-                intensity: Arc::from(&int_buf[..len]),
-                metadata: SpectrumSummary::from_summary(&summary),
-            }],
-        );
-    }
-    (Vec::new(), Vec::new())
-}
-
-fn load_selected(
-    source: &mut impl ScanSource,
-    candidates: Vec<(usize, ScanSummary)>,
-) -> (Vec<f64>, Vec<CentroidScan>) {
-    let mut mz_buf = Vec::new();
-    let mut int_buf = Vec::new();
-    let mut rts = Vec::with_capacity(candidates.len());
-    let mut scans = Vec::with_capacity(candidates.len());
-    for (index, summary) in candidates {
-        if !source.load_scan(index, &mut mz_buf, &mut int_buf) {
-            continue;
-        }
-        let len = mz_buf.len().min(int_buf.len());
-        rts.push(summary.rt);
-        scans.push(CentroidScan {
-            rt: summary.rt,
-            mz: Arc::from(&mz_buf[..len]),
-            intensity: Arc::from(&int_buf[..len]),
-            metadata: SpectrumSummary::from_summary(&summary),
-        });
-    }
-    (rts, scans)
 }
 
 pub fn with_eic_apex_intensity(rt: &[f64], y: &[f64], mut p: Peak) -> Peak {
@@ -722,9 +392,9 @@ pub fn upper_bound(values: &[f64], target: f64) -> usize {
 }
 
 #[inline]
-pub fn mz_tolerance_for(target_mz: f64, options: EicOptions) -> f64 {
+pub fn mz_tolerance_for(mz: f64, options: CalculateEicOptions) -> f64 {
     let ppm_window = if options.ppm_tolerance > 0.0 {
-        (options.ppm_tolerance * 1e-6) * target_mz.abs()
+        (options.ppm_tolerance * 1e-6) * mz.abs()
     } else {
         0.0
     };
@@ -766,62 +436,7 @@ fn max_in_range(retention_times: &[f64], intensities: &[f64], from_rt: f64, to_r
 
 #[cfg(test)]
 mod tests {
-    use ionic::ScanSummary;
-
     use super::*;
-
-    struct MockSource {
-        scans: Vec<(ScanSummary, Vec<f64>, Vec<f64>)>,
-    }
-
-    impl MockSource {
-        fn new(scans: Vec<(ScanSummary, Vec<f64>, Vec<f64>)>) -> Self {
-            Self { scans }
-        }
-    }
-
-    impl ScanSource for MockSource {
-        fn for_each_summary(&mut self, cb: &mut dyn FnMut(usize, ScanSummary)) {
-            for (i, (summary, _, _)) in self.scans.iter().enumerate() {
-                cb(i, *summary);
-            }
-        }
-
-        fn load_scan(&mut self, index: usize, mz: &mut Vec<f64>, intensity: &mut Vec<f64>) -> bool {
-            let Some((_, m, i)) = self.scans.get(index) else {
-                return false;
-            };
-            *mz = m.clone();
-            *intensity = i.clone();
-            !m.is_empty()
-        }
-    }
-
-    fn make_scan(
-        rt: f64,
-        ms_level: u8,
-        selected_ion_mz: f64,
-        mz: Vec<f64>,
-        intensity: Vec<f64>,
-    ) -> (ScanSummary, Vec<f64>, Vec<f64>) {
-        (
-            ScanSummary {
-                rt,
-                rt_unit: ionic::TimeUnit::Minute,
-                ms_level,
-                polarity: 0,
-                selected_ion_mz,
-                base_peak_mz: f64::NAN,
-                base_peak_int: f64::NAN,
-                total_ion_current: f64::NAN,
-                position_x: 0,
-                position_y: 0,
-                position_z: 0,
-            },
-            mz,
-            intensity,
-        )
-    }
 
     #[test]
     fn lower_bound_empty() {
@@ -886,7 +501,7 @@ mod tests {
 
     #[test]
     fn mz_tolerance_ppm_dominates() {
-        let opts = EicOptions {
+        let opts = CalculateEicOptions {
             ppm_tolerance: 10.0,
             mz_tolerance: 0.001,
             ..Default::default()
@@ -897,193 +512,12 @@ mod tests {
 
     #[test]
     fn mz_tolerance_abs_dominates() {
-        let opts = EicOptions {
+        let opts = CalculateEicOptions {
             ppm_tolerance: 1.0,
             mz_tolerance: 0.1,
             ..Default::default()
         };
         let tol = mz_tolerance_for(500.0, opts);
         assert!((tol - 0.1).abs() < 1e-9);
-    }
-
-    #[test]
-    fn get_by_rt_range_returns_matching_scans() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 1, f64::NAN, vec![100.0], vec![10.0]),
-            make_scan(2.0, 1, f64::NAN, vec![200.0], vec![20.0]),
-            make_scan(3.0, 1, f64::NAN, vec![300.0], vec![30.0]),
-        ]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::RtRange(FromTo { from: 1.0, to: 2.5 }),
-            TimeUnit::Minutes,
-            1,
-        );
-        assert_eq!(rts, vec![1.0, 2.0]);
-        assert_eq!(scans.len(), 2);
-    }
-
-    #[test]
-    fn get_by_rt_range_filters_wrong_ms_level() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 1, f64::NAN, vec![100.0], vec![10.0]),
-            make_scan(2.0, 2, f64::NAN, vec![200.0], vec![20.0]),
-        ]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::RtRange(FromTo { from: 0.0, to: 5.0 }),
-            TimeUnit::Minutes,
-            1,
-        );
-        assert_eq!(rts, vec![1.0]);
-        assert_eq!(scans.len(), 1);
-    }
-
-    #[test]
-    fn get_by_rt_range_empty_when_no_match() {
-        let mut source =
-            MockSource::new(vec![make_scan(5.0, 1, f64::NAN, vec![100.0], vec![10.0])]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::RtRange(FromTo { from: 0.0, to: 2.0 }),
-            TimeUnit::Minutes,
-            1,
-        );
-        assert!(rts.is_empty());
-        assert!(scans.is_empty());
-    }
-
-    #[test]
-    fn get_closest_rt_picks_nearest_scan() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 1, f64::NAN, vec![100.0], vec![10.0]),
-            make_scan(3.0, 1, f64::NAN, vec![300.0], vec![30.0]),
-            make_scan(5.0, 1, f64::NAN, vec![500.0], vec![50.0]),
-        ]);
-        let (rts, scans) = get_scans(&mut source, ScanQuery::ClosestRt(2.8), TimeUnit::Minutes, 1);
-        assert_eq!(rts, vec![3.0]);
-        assert_eq!(scans.len(), 1);
-    }
-
-    #[test]
-    fn get_closest_rt_falls_back_when_best_fails_to_load() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 1, f64::NAN, vec![], vec![]),
-            make_scan(2.0, 1, f64::NAN, vec![200.0], vec![20.0]),
-        ]);
-        let (rts, scans) = get_scans(&mut source, ScanQuery::ClosestRt(1.0), TimeUnit::Minutes, 1);
-        assert_eq!(rts, vec![2.0]);
-        assert_eq!(scans.len(), 1);
-    }
-
-    #[test]
-    fn get_closest_rt_empty_when_source_empty() {
-        let mut source = MockSource::new(vec![]);
-        let (rts, scans) = get_scans(&mut source, ScanQuery::ClosestRt(1.0), TimeUnit::Minutes, 1);
-        assert!(rts.is_empty());
-        assert!(scans.is_empty());
-    }
-
-    #[test]
-    fn get_by_mz_range_returns_matching_scans() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 2, 500.0, vec![500.0], vec![100.0]),
-            make_scan(2.0, 2, 600.0, vec![600.0], vec![200.0]),
-            make_scan(3.0, 2, 700.0, vec![700.0], vec![300.0]),
-        ]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::MzRange(FromTo {
-                from: 490.0,
-                to: 650.0,
-            }),
-            TimeUnit::Minutes,
-            2,
-        );
-        assert_eq!(rts.len(), 2);
-        assert!(rts.contains(&1.0) && rts.contains(&2.0));
-        assert_eq!(scans.len(), 2);
-    }
-
-    #[test]
-    fn get_by_mz_range_skips_nan_selected_ion_mz() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 2, f64::NAN, vec![100.0], vec![10.0]),
-            make_scan(2.0, 2, 600.0, vec![600.0], vec![200.0]),
-        ]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::MzRange(FromTo {
-                from: 0.0,
-                to: 1000.0,
-            }),
-            TimeUnit::Minutes,
-            2,
-        );
-        assert_eq!(rts, vec![2.0]);
-        assert_eq!(scans.len(), 1);
-    }
-
-    #[test]
-    fn get_closest_mz_picks_nearest_selected_ion() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 2, 500.0, vec![500.0], vec![100.0]),
-            make_scan(2.0, 2, 600.0, vec![600.0], vec![200.0]),
-            make_scan(3.0, 2, 700.0, vec![700.0], vec![300.0]),
-        ]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::ClosestMz(610.0),
-            TimeUnit::Minutes,
-            2,
-        );
-        assert_eq!(rts, vec![2.0]);
-        assert_eq!(scans[0].metadata.selected_ion_mz, 600.0);
-    }
-
-    #[test]
-    fn get_closest_mz_falls_back_when_best_fails_to_load() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 2, 500.0, vec![], vec![]),
-            make_scan(2.0, 2, 510.0, vec![510.0], vec![200.0]),
-        ]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::ClosestMz(500.0),
-            TimeUnit::Minutes,
-            2,
-        );
-        assert_eq!(rts, vec![2.0]);
-        assert_eq!(scans.len(), 1);
-    }
-
-    #[test]
-    fn get_closest_mz_empty_when_no_finite_selected_ion_mz() {
-        let mut source =
-            MockSource::new(vec![make_scan(1.0, 2, f64::NAN, vec![100.0], vec![10.0])]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::ClosestMz(500.0),
-            TimeUnit::Minutes,
-            2,
-        );
-        assert!(rts.is_empty());
-        assert!(scans.is_empty());
-    }
-
-    #[test]
-    fn ms_level_zero_allows_all_levels() {
-        let mut source = MockSource::new(vec![
-            make_scan(1.0, 1, f64::NAN, vec![100.0], vec![10.0]),
-            make_scan(2.0, 2, f64::NAN, vec![200.0], vec![20.0]),
-        ]);
-        let (rts, scans) = get_scans(
-            &mut source,
-            ScanQuery::RtRange(FromTo { from: 0.0, to: 5.0 }),
-            TimeUnit::Minutes,
-            0,
-        );
-        assert_eq!(rts.len(), 2);
-        assert_eq!(scans.len(), 2);
     }
 }

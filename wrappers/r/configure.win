@@ -1,3 +1,9 @@
 #!/bin/sh
 set -e
-"${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" tools/copy-artifacts.R
+
+if [ -f ../../core/Cargo.toml ] && [ -f ../../scripts/stage-r-rust.sh ]; then
+  sh ../../scripts/stage-r-rust.sh .
+elif [ ! -f src/rust/Cargo.toml ]; then
+  echo "quantion: src/rust is missing; run scripts/stage-r-rust.sh on this package first"
+  exit 1
+fi

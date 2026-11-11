@@ -21,3 +21,9 @@ wrappers/r/src/*.o
 wrappers/r/src/*.so
 *.Rcheck/
 wrappers/r/src/symbols.rds
+wrappers/r/src/rust/
+wrappers/r/src/*.dll
+
+playground/
+.claude/
+.venv-check-api/

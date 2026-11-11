@@ -1,77 +1,53 @@
 \name{find_features}
 \alias{find_features}
-\title{Find all features in one file}
+\title{Find every feature in one file}
 \description{
-Scans the full m/z grid and finds all chromatographic features in one file.
-No target list is needed.
+Untargeted: find every feature in one file by scanning an m/z grid.
 }
 \usage{
-find_features(
-  data,
-  from = 0,
-  to = 10,
-  ppm_tolerance = .DEFAULTS$eic_ppm_tol,
-  mz_tolerance = .DEFAULTS$eic_mz_tol,
-  grid_start = .DEFAULTS$grid_start,
-  grid_end = .DEFAULTS$grid_end,
-  grid_step_ppm = .DEFAULTS$grid_step,
-  cores = 1L,
-  min_integral = NaN,
-  min_intensity = .DEFAULTS$min_intensity,
-  min_peak_width_points = .DEFAULTS$min_peak_width_points,
-  noise = NaN,
-  auto_noise = .DEFAULTS$auto_noise,
-  auto_baseline = .DEFAULTS$auto_baseline,
-  lambda = 0L,
-  max_iterations = 0L,
-  allow_overlap = FALSE,
-  min_snr = .DEFAULTS$min_snr,
-  min_r2 = .DEFAULTS$min_r2,
-  shape = .DEFAULTS$shape
-)
+find_features(file, options = find_features_options())
 }
 \arguments{
-  \item{data}{Sample file from \code{\link{parse_mzml}()} or \code{\link{parse_ion}()}.}
-  \item{from}{Start retention time (minutes). Default 0.}
-  \item{to}{End retention time (minutes). Default 10.}
-  \item{ppm_tolerance}{PPM tolerance for EIC extraction.}
-  \item{mz_tolerance}{Absolute m/z tolerance (Da) for EIC extraction.}
-  \item{grid_start}{Lower m/z bound of the search grid (Da). Default 40.}
-  \item{grid_end}{Upper m/z bound of the search grid (Da). Default 1000.}
-  \item{grid_step_ppm}{Grid step size (ppm). Default 0.005.}
-  \item{cores}{Number of CPU cores to use. Default 1.}
-  \item{min_integral}{Minimum peak area. \code{NaN} disables.}
-  \item{min_intensity}{Minimum apex intensity. Default 1000.}
-  \item{min_peak_width_points}{Minimum peak width in points. Default 5.}
-  \item{noise}{Fixed noise level. \code{NaN} disables.}
-  \item{auto_noise}{Estimate noise automatically. Default \code{TRUE}.}
-  \item{auto_baseline}{Subtract baseline before detection. Default \code{TRUE}.}
-  \item{lambda}{airPLS smoothing parameter for baseline estimation. \code{0} uses a default.}
-  \item{max_iterations}{Maximum airPLS iterations. \code{0} uses a default.}
-  \item{allow_overlap}{Allow overlapping peak boundaries. Default \code{FALSE}.}
-  \item{min_snr}{Minimum signal-to-noise ratio. Default 1.}
-  \item{shape}{Peak shape used when fitting.}
-
-  \item{min_r2}{Minimum fit R-squared (Gaussian or EMG) for the artifact filter; \code{0} disables it (keep peaks regardless of shape). Default 0.3.}
+  \item{file}{The sample to read, from parse_ion or parse_mzml. Type: \code{SampleFile}.}
+  \item{options}{Settings from \code{\link{find_features_options}()}: \code{eic}, \code{grid}, \code{find_peaks}, \code{threads = 1L}.
+    \href{https://phenological.github.io/quantion/?language=r#FindFeaturesOptions}{FindFeaturesOptions documentation}
+  }
 }
 \value{
-A data frame with one row per detected feature. Columns include \code{mz},
-\code{rt}, \code{from}, \code{to}, \code{intensity}, \code{integral},
-\code{n_points}.
+Every feature found, without frequency. Type: \code{data.frame of Feature}. Columns: \code{mz}, \code{rt}, \code{from}, \code{to}, \code{intensity}, \code{integral}, \code{n_points}, \code{frequency}.
+}
+\section{Documentation}{
+\url{https://phenological.github.io/quantion/?language=r#find_features}
 }
 \examples{
 \donttest{
-features <- find_features(
-  file,
-  from = 0,
-  to = 10,
-  cores = 5L,
-  auto_noise = TRUE,
-  auto_baseline = TRUE,
-  min_intensity = 1000
-)
+if (curl::has_internet()) {
+  library(quantion)
+
+  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion"
+  options <- find_features_options(
+    eic     = calculate_eic_options(from = 2.3, to = 2.45),
+    grid    = grid_options(start = 255, end = 265),
+    threads = 2L
+  )
+
+  sample <- parse_ion(url)
+  features <- find_features(sample, options = options)
+
+  cat(sprintf("\%d features\\n", nrow(features)))
+  count <- 3
+  if (nrow(features) < count) {
+    count <- nrow(features)
+  }
+  for (index in seq_len(count)) {
+    feature <- features[index, ]
+    line <- sprintf("m/z \%.4f  rt \%.3f  intensity \%.0f",
+                    feature$mz, feature$rt, feature$intensity)
+    cat(line, "\\n", sep = "")
+  }
+}
 }
 }
 \seealso{
-\code{\link{find_feature}()}, \code{\link{get_features}()}
+\code{\link{find_features_options}()}, \code{\link{match_features}()}
 }

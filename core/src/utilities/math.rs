@@ -94,3 +94,30 @@ pub fn erfc_approx(x: f64) -> f64 {
     let ans = t * (-z * z - 1.265_512_23 + t * poly).exp();
     if x >= 0.0 { ans } else { 2.0 - ans }
 }
+
+#[inline]
+/// ## Scaled complementary error function
+/// erfcx(x) = exp(x^2) * erfc(x), for x >= 0, from the same Chebyshev fit as `erfc_approx`
+/// (Press et al., Numerical Recipes, section 6.2, erfcc). The fit has the form
+/// `t * exp(-x^2 - 1.26551223 + t * P(t))`, so multiplying by `exp(x^2)` cancels the `-x^2` term exactly
+/// and nothing can overflow for large x.
+pub fn erfcx_approx(x: f64) -> f64 {
+    const A: [f64; 9] = [
+        1.000_023_68,
+        0.374_091_96,
+        0.096_784_18,
+        -0.186_288_06,
+        0.278_868_07,
+        -1.135_203_98,
+        1.488_515_87,
+        -0.822_152_23,
+        0.170_872_77,
+    ];
+    let z = x.max(0.0);
+    let t = 1.0 / (1.0 + 0.5 * z);
+    let mut poly = 0.0;
+    for &a in A.iter().rev() {
+        poly = poly * t + a;
+    }
+    t * (-1.265_512_23 + t * poly).exp()
+}

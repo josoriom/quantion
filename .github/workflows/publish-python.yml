@@ -1,0 +1,59 @@
+name: Publish Python
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Released tag to publish to PyPI, for example v0.1.7"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build wheels
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build one wheel per platform from the release binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: scripts/build-python-wheels.sh "$TAG" dist
+
+      - name: Keep the wheels for the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels
+          path: dist/*.whl
+          if-no-files-found: error
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/quantion/
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Collect the wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels
+          path: dist
+
+      - name: Publish with trusted publishing and attestations
+        uses: pypa/gh-action-pypi-publish@release/v1

@@ -1,0 +1,26 @@
+{
+  "sure": [
+    "If I'm right, this is what you're asking for.",
+    "If I'm not wrong, this is what you need.",
+    "I think this is what you're looking for.",
+    "This should be what you need.",
+    "Looks like you want this.",
+    "If I understood you well, here it is.",
+    "I believe this is it.",
+    "This sounds like what you need.",
+    "Here's what I think you mean.",
+    "If I got it right, try this."
+  ],
+  "unsure": [
+    "I'm not following. Can you say a bit more?",
+    "I did not get it. Can you develop it a bit more, please?",
+    "Sorry, I'm not sure what you mean. Could you add more detail?",
+    "I'm not sure I understood. Is it one of these?",
+    "Can you tell me a bit more about what you want to do?",
+    "I didn't quite get that. Maybe it's one of these?",
+    "Hmm, I'm not sure. Could you say it in another way?",
+    "I need a bit more context. Is it one of these?",
+    "I'm not quite following. Did you mean one of these?",
+    "Could you explain a bit more? These are my best guesses."
+  ]
+}

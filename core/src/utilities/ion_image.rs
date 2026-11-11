@@ -1,12 +1,30 @@
 use std::collections::HashMap;
 
 use ionic::{
-    ScanSource, ScanSummary, coalesce_byte_ranges,
-    ion::{ByteRange, IonReader, Range},
+    ByteRangesOptions, IonReader, Range,
+    source::{ByteRange, merge_ranges},
 };
 
-use super::calculate_eic::{EicReader, FastError, read_mz_window, summed_intensity_in_window};
+use super::{
+    calculate_eic::{EicReader, FastError, read_mz_window, summed_intensity_in_window},
+    ion::{ScanSource, ScanSummary},
+};
 
+/// **IonImage** · Results
+///
+/// An imaging map of one m/z from get_ion_image.
+///
+/// Fields:
+/// - `width`: Pixels across.
+/// - `height`: Pixels down.
+/// - `min_x`: x position of the first column.
+/// - `min_y`: y position of the first row.
+/// - `min_z`: Lowest z position.
+/// - `max_z`: Highest z position.
+/// - `data`: Summed intensity per pixel, row by row (width × height).
+/// - `counts`: Scans per pixel.
+///
+/// [Documentation](https://phenological.github.io/quantion/?language=rust#IonImage)
 #[derive(Clone, Debug)]
 pub struct IonImage {
     pub width: u32,
@@ -122,11 +140,12 @@ fn ranges_for_candidates(
                     from: lower,
                     to: upper,
                 },
+                &ByteRangesOptions::default(),
             )
             .map_err(FastError::from)?;
         ranges.extend(scan_ranges);
     }
-    coalesce_byte_ranges(&mut ranges, 0);
+    merge_ranges(&mut ranges, 0);
     Ok(ranges)
 }
 
@@ -215,22 +234,6 @@ pub fn plan_ion_image_ranges(
     });
 
     ranges_for_candidates(ion, &candidates, lower, upper)
-}
-
-pub fn compute_ion_image(
-    reader: &mut EicReader,
-    target_mz: f64,
-    tolerance: f64,
-    ms_level: u8,
-) -> IonImage {
-    let lower = target_mz - tolerance;
-    let upper = target_mz + tolerance;
-
-    let candidates = collect_candidates(reader, ms_level);
-    let mut sums = PixelSums::new();
-    let mut bounds = PixelBounds::new();
-    fold_candidates(reader, &candidates, lower, upper, &mut sums, &mut bounds);
-    build_image(&sums, &bounds)
 }
 
 pub struct ImageSession {

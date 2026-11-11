@@ -1,1 +1,31 @@
-PKG_LIBS = -ldl
+RUST_DIR = $(CURDIR)/rust
+TARGET_DIR = $(RUST_DIR)/target
+LIBRARY_DIR = $(TARGET_DIR)/release
+
+PKG_LIBS = -L$(LIBRARY_DIR) -lquantion -lpthread -lm
+
+.PHONY: all rust_library clean_rust
+
+all: $(SHLIB) clean_rust
+
+$(SHLIB): rust_library
+
+rust_library:
+	if [ -f $(RUST_DIR)/vendor.tar.xz ]; then \
+	  tar -xf $(RUST_DIR)/vendor.tar.xz -C $(RUST_DIR) && \
+	  mkdir -p $(RUST_DIR)/.cargo && \
+	  cp $(RUST_DIR)/vendor-config.toml $(RUST_DIR)/.cargo/config.toml; \
+	fi
+	export PATH="$(PATH):$(HOME)/.cargo/bin" && \
+	  rustc --version && cargo --version && \
+	  if [ -f $(RUST_DIR)/vendor.tar.xz ]; then \
+	    export CARGO_HOME=$(RUST_DIR)/.cargo-home && \
+	    cd $(RUST_DIR) && cargo build --release --offline -j 2 --target-dir $(TARGET_DIR); \
+	  else \
+	    cd $(RUST_DIR) && cargo build --release -j 2 --target-dir $(TARGET_DIR); \
+	  fi
+
+clean_rust: $(SHLIB)
+	if [ -f $(RUST_DIR)/vendor.tar.xz ]; then \
+	  rm -rf $(TARGET_DIR) $(RUST_DIR)/vendor $(RUST_DIR)/.cargo $(RUST_DIR)/.cargo-home; \
+	fi

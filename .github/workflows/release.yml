@@ -74,12 +74,23 @@ jobs:
       - name: Build the native library
         run: make native
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build the Node addon
+        working-directory: wrappers/js
+        run: |
+          npm install --ignore-scripts
+          npx node-gyp rebuild
+
       - name: Name the asset after its platform
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' core/Cargo.toml | head -1)"
           mkdir -p upload
           cp "artifacts/$version/${{ matrix.platform }}/libquantion${{ matrix.extension }}" \
              "upload/libquantion-${{ matrix.platform }}${{ matrix.extension }}"
+          cp wrappers/js/build/Release/quantion.node "upload/quantion-${{ matrix.platform }}.node"
 
       - name: Keep the asset for the publish job
         uses: actions/upload-artifact@v4
@@ -128,7 +139,7 @@ jobs:
           merge-multiple: true
 
       - name: Write checksums
-        run: cd upload && sha256sum libquantion-* quantion.wasm quantion.h > SHA256SUMS.txt
+        run: cd upload && sha256sum libquantion-* quantion-*.node quantion.wasm quantion.h > SHA256SUMS.txt
 
       - name: Create or update the GitHub release
         uses: softprops/action-gh-release@v2
@@ -137,3 +148,48 @@ jobs:
           files: upload/*
           fail_on_unmatched_files: true
           generate_release_notes: true
+
+  cran:
+    name: CRAN package
+    needs: publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Use the Rust that ships with the runner
+        run: rustup update stable && rustup default stable
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "release"
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - name: Install checkbashisms
+        run: sudo apt-get update && sudo apt-get install -y devscripts
+
+      - name: Install the R packages the wrapper declares
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: wrappers/r
+
+      - name: Build the package and run R CMD check --as-cran
+        run: scripts/build-r-package.sh dist
+
+      - name: Keep the check log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-check-log
+          path: dist/check.log
+          if-no-files-found: ignore
+
+      - name: Attach the CRAN package to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" dist/quantion_*.tar.gz --clobber

@@ -68,16 +68,27 @@ jobs:
       - name: Build the native library
         run: make native
 
+      - name: The Python tests pass, none skipped
+        env:
+          QUANTION_ARTIFACTS_ROOT: ${{ github.workspace }}/artifacts
+        run: |
+          python3 -m unittest discover -s wrappers/python/tests -t wrappers/python 2>&1 | tee python-tests.log
+          if grep -q "skipped=" python-tests.log; then
+            echo "Python tests were skipped: the library or a fixture was not found"
+            exit 1
+          fi
+
       - name: Rust, R, Python and JS return the same numbers
         run: make check-api
 
-      - name: The R package checks with no warnings
+      - uses: r-lib/actions/setup-pandoc@v2
+        if: runner.os == 'Linux'
+
+      - name: The CRAN package passes R CMD check --as-cran
+        if: runner.os == 'Linux'
         run: |
-          R CMD check wrappers/r --no-manual | tee r-check.log
-          if grep -qE "^Status:.*(WARNING|ERROR)" r-check.log; then
-            echo "R CMD check did not come back clean"
-            exit 1
-          fi
+          sudo apt-get update && sudo apt-get install -y devscripts
+          scripts/build-r-package.sh dist/r
 
   wasm:
     name: wasm

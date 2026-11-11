@@ -22,7 +22,7 @@ export class ContainmentCache {
   add(range: ByteRange, bytes: Uint8Array): void {
     if (BigInt(bytes.length) !== range.length) {
       throw new Error(
-        `cache add: byte length ${bytes.length} does not match range.length ${range.length}`
+        `cache add: byte length ${bytes.length} does not match range.length ${range.length}`,
       );
     }
 

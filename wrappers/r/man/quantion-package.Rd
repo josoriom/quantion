@@ -6,48 +6,42 @@
 R wrappers for the \code{quantion} library for LC-MS data processing.
 }
 \details{
-\code{quantion} allows to load mzML or ion files, extract EICs, pick peaks, and detect features across one or many samples.
+\code{quantion} loads mzML or .ion files, extracts EICs, picks peaks, and detects features across one or many samples.
 
-A \emph{sample file} is a pointer to a parsed mzML held in memory, or to an ion file decoded on demand. The memory is freed automatically when the sample is no longer in use. Optionally call \code{\link{dispose}()} to free it manually if needed during processing.
+A \emph{sample} is a pointer to a parsed mzML held in memory, or to an .ion file read on demand. Its memory is freed by the garbage collector; \code{\link{dispose}()} frees it at once.
 
-\emph{XY data} is a pair of numeric vectors, where \code{x} is retention time and \code{y} is intensity.
+Every function with settings takes one \code{options} argument built by a helper named after it, such as \code{\link{find_targets_options}()}. Groups of settings nest through their own helpers: \code{\link{calculate_eic_options}()}, \code{\link{grid_options}()}, \code{\link{grouping_options}()} and \code{\link{find_peaks_options}()}.
+
+Errors are conditions of class \code{quantion_error} with the fields \code{kind}, \code{code}, \code{function}, \code{argument} and \code{message}, the same in every quantion language.
 }
-\section{Install}{
-\code{remotes::install_github("phenological/quantion", subdir = "wrappers/r")}
+\section{Files}{
+\code{\link{parse_ion}()}, \code{\link{parse_mzml}()} - open a file.
+
+\code{\link{write_ion}()}, \code{\link{write_mzml}()} - write a sample.
+
+\code{\link{get_scans}()} - read scans by retention time or m/z.
+
+\code{\link{calculate_eic}()} - extract an ion chromatogram.
+
+\code{\link{get_ion_image}()} - build an ion image.
+
+\code{\link{dispose}()} - free a sample, a model or a warp model.
 }
-\section{Load a file}{
-\code{\link{parse_mzml}()} — load an mzML into a sample file.
+\section{Traces}{
+\code{\link{find_peaks}()} - find every peak in a trace.
 
-\code{\link{parse_ion}()} — load an ion binary into a sample file.
+\code{\link{get_peak}()} - find the one peak near a retention time.
 
-\code{\link{mzml_to_ion}()} — convert a mzML to compressed ion bytes.
+\code{\link{fit_peak}()}, \code{\link{draw_peaks}()} - fit and draw peak curves.
 
-\code{\link{dispose}()} — free a sample file immediately.
+\code{\link{find_noise_level}()}, \code{\link{calculate_baseline}()} - noise and baseline.
 }
-\section{Convert}{
-\code{\link{ion_to_mzml}()} — get mzML text from a sample file.
+\section{Targets and features}{
+\code{\link{find_targets}()}, \code{\link{find_transitions}()} - targeted peaks.
+
+\code{\link{find_features}()}, \code{\link{match_features}()} - untargeted features.
 }
-\section{Extract}{
-\code{\link{calculate_eic}()} — get an EIC from a sample file for one m/z.
-
-\code{\link{get_scans}()} — get scans from a sample file by RT or m/z query.
-
-\code{\link{calculate_baseline}()} — estimate a baseline for XY data.
-}
-\section{Find peaks}{
-\code{\link{find_peaks}()} — find all peaks in XY data.
-
-\code{\link{get_peak}()} — find one peak near a target RT in XY data.
-
-\code{\link{get_peaks_from_eic}()} — find peaks for many targets from a sample file.
-
-\code{\link{get_peaks_from_chrom}()} — find peaks from stored chromatograms in a sample file.
-}
-\section{Find features}{
-\code{\link{find_feature}()} — find targeted features by m/z and RT from a sample file.
-
-\code{\link{find_features}()} — find all features in a sample file.
-
-\code{\link{get_features}()} — find and align features across many sample files.
+\section{Models}{
+\code{\link{load_model}()}, \code{\link{load_warp}()}, \code{\link{predict_rts}()}, \code{\link{calibrate}()}, \code{\link{get_keys}()}.
 }
 \keyword{package}

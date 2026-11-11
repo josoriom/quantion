@@ -13,26 +13,8 @@ class RenamedClass(unittest.TestCase):
     def test_the_new_name_is_advertised(self):
         self.assertIn("Quantion", support.quantion.__all__)
 
-    def test_the_old_name_still_resolves(self):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            old_name = support.quantion.MsUtils
-        self.assertIs(old_name, support.quantion.Quantion)
-
-    def test_the_old_name_warns(self):
-        with warnings.catch_warnings(record=True) as seen:
-            warnings.simplefilter("always")
-            support.quantion.MsUtils
-        self.assertEqual(len(seen), 1)
-        self.assertTrue(issubclass(seen[0].category, DeprecationWarning))
-
-    def test_the_warning_names_both_names(self):
-        with warnings.catch_warnings(record=True) as seen:
-            warnings.simplefilter("always")
-            support.quantion.MsUtils
-        message = str(seen[0].message)
-        self.assertIn("MsUtils", message)
-        self.assertIn("Quantion", message)
+    def test_the_old_name_is_gone(self):
+        self.assertFalse(hasattr(support.quantion, "MsUtils"))
 
     def test_the_new_name_does_not_warn(self):
         with warnings.catch_warnings(record=True) as seen:
@@ -69,10 +51,16 @@ class PublicSurface(unittest.TestCase):
         for name in support.quantion.__all__:
             self.assertTrue(hasattr(support.quantion, name), name)
 
-    def test_the_remote_reader_replaces_the_url_reader(self):
-        self.assertTrue(hasattr(support.quantion, "parse_ion_remote"))
-        self.assertFalse(hasattr(support.quantion, "parse_ion_url"))
+    def test_the_old_conversions_are_gone(self):
+        for name in ("mzml_to_ion", "mzml_to_ion_file", "ion_to_mzml", "draw_peak"):
+            self.assertFalse(hasattr(support.quantion, name), name)
 
-    def test_the_class_offers_the_remote_reader(self):
-        self.assertTrue(hasattr(support.quantion.Quantion, "parse_ion_remote"))
-        self.assertTrue(hasattr(support.quantion.Quantion, "parse_ion_raw"))
+    def test_every_option_type_and_enum_is_exported(self):
+        for name in ("QuantionError", "TimeUnit", "PeakShape", "FindPeaksOptions", "CalculateEicOptions",
+                     "WriteIonOptions", "Scan", "IonImage", "PeakParameters"):
+            self.assertIn(name, support.quantion.__all__)
+
+    def test_parse_ion_is_the_only_ion_reader(self):
+        for name in ("parse_ion_path", "parse_ion_raw", "parse_ion_remote", "parse_ion_url"):
+            self.assertFalse(hasattr(support.quantion, name), name)
+            self.assertFalse(hasattr(support.quantion.Quantion, name), name)

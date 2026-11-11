@@ -4,12 +4,42 @@ declare const __INLINE__: boolean;
 declare const __WASM_DATA_URL__: string | undefined;
 declare var require: any;
 
-import type { Backend, FileHandle, ByteRangeResult } from "./backend";
-import type { NoiseLevel, PeakOptions } from "../types/types";
-import { toUint8 } from "./shared";
+import { getAnnotationValues } from "./backend";
+import type {
+  AnnotationSettings,
+  AnnotationTables,
+  Backend,
+  ByteRangeResult,
+  EicSettings,
+  FileHandle,
+  GridSettings,
+  ModelHandle,
+  PeakColumns,
+  PeakSettings,
+  ScanQuerySettings,
+  TargetColumns,
+  TransitionColumns,
+  WarpModelHandle,
+} from "./backend";
+import { getScanQueryValues } from "./backend";
+import type {
+  DataXY,
+  Feature,
+  IonImage,
+  NoiseLevel,
+  Peak,
+  PeakParameters,
+  Scan,
+  ScanParam,
+  Target,
+} from "../types/types";
+import type { ModelEntry } from "../types/internal";
 import { readIonImage } from "./imageBridge";
-import { readRecords } from "./recordBridge";
-import { readScans } from "./scanBridge";
+import { readRecords, readScanMetadata } from "./recordBridge";
+import { encodeTargetIds } from "./pack";
+import { readScanArrays, readScans } from "./scanBridge";
+import { QuantionError, invalidArgument, readNativeError } from "./errors";
+import { TAG_SEPARATOR, getShapeCode } from "./options";
 import {
   fetchHeader,
   newRemoteSource,
@@ -22,17 +52,10 @@ const OUTPUT_BUFFER_PAIR_BYTES = 8;
 const NOISE_LEVEL_SLOT_BYTES = 16;
 const NOISE_LEVEL_INTENSITY_OFFSET = 8;
 const PEAK_OPTIONS_STRUCT_BYTES = 80;
-const QUANTION_ABI_VERSION = 1;
-const ERR_FAST_PATH = 6;
-
-function rcError(name: string, rc: number): Error {
-  if (rc === ERR_FAST_PATH) {
-    return new Error(
-      `${name}: fast EIC path unavailable: this .ion file has no usable spectrum bounds (A3); re-encode it with the current Ionic to use the fast EIC path`,
-    );
-  }
-  return new Error(`${name} failed with code ${rc}`);
-}
+const QUANTION_ABI_VERSION = 3;
+const IMAGE_BATCH_SCANS = 256;
+const LARGEST_WASM_SIZE = 4294967295;
+const IMAGE_BATCH_BUDGET_BYTES = 192 * 1024 * 1024;
 
 class RangeSourceRegistry {
   private sources = new Map<number, RemoteSource>();
@@ -62,59 +85,1332 @@ function resolveTextDecoder(): TextDecoder {
     : new (require("node:util").TextDecoder)("utf-8");
 }
 
-function writeF64(view: DataView, offset: number, value: unknown): void {
-  view.setFloat64(
-    offset,
-    Number.isFinite(value as number) ? Number(value) : NaN,
-    true,
-  );
+function writeF64(view: DataView, offset: number, value: number): void {
+  view.setFloat64(offset, value, true);
 }
 
-function writeI32(view: DataView, offset: number, value: unknown): void {
+function writeI32(
+  view: DataView,
+  offset: number,
+  value: number | boolean,
+): void {
   view.setInt32(
     offset,
-    typeof value === "boolean"
-      ? value
-        ? 1
-        : 0
-      : Number.isFinite(value as number)
-        ? (value as number) | 0
-        : 0,
+    typeof value === "boolean" ? (value ? 1 : 0) : value | 0,
     true,
   );
 }
 
-const SHAPE_CODES: Record<string, number> = { gaussian: 0, emg: 1 };
-const DEFAULT_SHAPE_CODE = 1;
-
-function shapeCode(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const code = SHAPE_CODES[value.trim().toLowerCase()];
-    return code === undefined ? DEFAULT_SHAPE_CODE : code;
-  }
-  return DEFAULT_SHAPE_CODE;
+function packPeakOptions(options: PeakSettings): Uint8Array {
+  const view = new DataView(new ArrayBuffer(PEAK_OPTIONS_STRUCT_BYTES));
+  writeF64(view, 0, options.minIntegral);
+  writeF64(view, 8, options.minIntensity);
+  writeI32(view, 16, options.minPeakWidthPoints);
+  writeI32(view, 20, getShapeCode(options.shape));
+  writeF64(view, 24, options.noise);
+  writeI32(view, 32, options.autoNoise);
+  writeI32(view, 36, options.autoBaseline);
+  writeI32(view, 40, options.maxIterations);
+  writeI32(view, 44, options.allowOverlap);
+  writeF64(view, 48, options.lambda);
+  writeF64(view, 56, options.minSnr);
+  writeF64(view, 64, options.minR2);
+  writeI32(view, 72, options.kernelSize);
+  return new Uint8Array(view.buffer);
 }
 
-function packPeakOptions(opts: PeakOptions): Uint8Array {
-  const view = new DataView(new ArrayBuffer(PEAK_OPTIONS_STRUCT_BYTES));
-  writeF64(view, 0, opts.minIntegral);
-  writeF64(view, 8, opts.minIntensity);
-  writeI32(view, 16, opts.minPeakWidthPoints);
-  view.setInt32(20, shapeCode(opts.shape), true);
-  writeF64(view, 24, opts.noise);
-  writeI32(view, 32, opts.autoNoise);
-  writeI32(view, 36, opts.autoBaseline);
-  writeI32(view, 40, opts.lambda);
-  writeI32(view, 44, opts.maxIterations);
-  writeI32(view, 48, opts.allowOverlap);
-  view.setInt32(52, 0, true);
-  writeF64(view, 56, opts.minSnr);
-  writeF64(view, 64, opts.minR2);
-  writeI32(view, 72, opts.kernelSize);
-  return new Uint8Array(view.buffer);
+function total_range_bytes(ranges: ByteRangeResult[]): bigint {
+  let total = 0n;
+  for (const range of ranges) total += range.length;
+  return total;
+}
+
+type ExportFunction = (...values: number[]) => number;
+
+class TrapGuard {
+  private trapped = false;
+
+  get isTrapped(): boolean {
+    return this.trapped;
+  }
+
+  watch<T extends Function>(call: T): T {
+    const guard = this;
+    return function (this: unknown, ...args: unknown[]) {
+      if (guard.trapped) {
+        throw new Error(
+          "quantion: this WASM instance trapped earlier and cannot be used; load it again",
+        );
+      }
+      try {
+        return (call as unknown as (...rest: unknown[]) => unknown).apply(
+          this,
+          args,
+        );
+      } catch (reason) {
+        if (reason instanceof WebAssembly.RuntimeError) guard.trapped = true;
+        throw reason;
+      }
+    } as unknown as T;
+  }
+}
+
+class WasmExports {
+  readonly memory: WebAssembly.Memory;
+  readonly alloc: (size: number) => number;
+  readonly free: (ptr: number, size: number) => void;
+  readonly guard = new TrapGuard();
+  private readonly functions = new Map<string, ExportFunction>();
+
+  constructor(instance: WebAssembly.Instance) {
+    const exports = instance.exports;
+    this.memory = exports.memory as WebAssembly.Memory;
+    for (const [name, value] of Object.entries(exports)) {
+      if (typeof value === "function") {
+        this.functions.set(
+          name,
+          this.guard.watch(value as unknown as ExportFunction),
+        );
+      }
+    }
+    const alloc = this.get("alloc");
+    this.alloc = (size: number) => alloc(size) >>> 0;
+    this.free = this.get("free_");
+  }
+
+  has(name: string): boolean {
+    return this.functions.has(name);
+  }
+
+  get(name: string): ExportFunction {
+    const found = this.functions.get(name);
+    if (!found) {
+      throw new QuantionError(
+        "internal",
+        name,
+        "is not in this WASM build; rebuild it",
+      );
+    }
+    return found;
+  }
+
+  call(name: string, ...values: number[]): number {
+    return this.get(name)(...values);
+  }
+}
+
+class WasmApi {
+  private readonly heap: WasmHeap;
+  readonly fn: WasmExports;
+  private readonly firstSlot: number;
+  private readonly secondSlot: number;
+  private readonly thirdSlot: number;
+  private readonly errorSlot: number;
+  private readonly peakOptionsSlot: number;
+  private readonly handleSlot: number;
+  private readonly noiseLevelSlot: number;
+  private readonly sourceIdByHandle = new Map<number, number>();
+
+  constructor(instance: WebAssembly.Instance) {
+    this.fn = new WasmExports(instance);
+    const version = this.fn.call("quantion_abi_version");
+    if (version !== QUANTION_ABI_VERSION) {
+      throw new QuantionError(
+        "internal",
+        "quantion",
+        `the WASM module has ABI ${version}, the wrapper needs ${QUANTION_ABI_VERSION}; rebuild it`,
+      );
+    }
+    const size = this.fn.call("quantion_sizeof_peak_options");
+    if (size !== PEAK_OPTIONS_STRUCT_BYTES) {
+      throw new QuantionError(
+        "internal",
+        "quantion",
+        `the WASM module peak options are ${size} bytes, the wrapper needs ${PEAK_OPTIONS_STRUCT_BYTES}; rebuild it`,
+      );
+    }
+    this.heap = new WasmHeap(this.fn.memory, this.fn.alloc, this.fn.free);
+    this.firstSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
+    this.secondSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
+    this.thirdSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
+    this.errorSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
+    this.peakOptionsSlot = this.heap.allocPermanent(PEAK_OPTIONS_STRUCT_BYTES);
+    this.handleSlot = this.heap.allocPermanent(4);
+    this.noiseLevelSlot = this.heap.allocPermanent(NOISE_LEVEL_SLOT_BYTES);
+  }
+
+  private fail(name: string, code: number): QuantionError {
+    if (this.fn.call("quantion_last_error", this.errorSlot) === 0) {
+      const { ptr, len } = this.heap.readOutputSlot(this.errorSlot);
+      const text = this.heap.decoder.decode(this.heap.copyOutAndFree(ptr, len));
+      if (text) return readNativeError(text);
+    }
+    return new QuantionError(
+      "internal",
+      name,
+      `the call failed with code ${code} (this is a bug in quantion, please report it)`,
+    );
+  }
+
+  private run(name: string, ...values: number[]): void {
+    const code = this.fn.call(name, ...values);
+    if (code !== 0) throw this.fail(name, code);
+  }
+
+  private withMemory<T>(
+    data: Uint8Array[],
+    work: (pointers: number[]) => T,
+  ): T {
+    const allocations = data.map((bytes) => this.heap.allocAndWrite(bytes));
+    try {
+      return work(allocations.map(([pointer]) => pointer));
+    } finally {
+      this.heap.freeMany(allocations);
+    }
+  }
+
+  private takeBytes(slot: number): Uint8Array {
+    const { ptr, len } = this.heap.readOutputSlot(slot);
+    return this.heap.copyOutAndFree(ptr, len);
+  }
+
+  private takeNumbers(slot: number): Float64Array {
+    const bytes = this.takeBytes(slot);
+    return new Float64Array(
+      bytes.buffer,
+      bytes.byteOffset,
+      bytes.byteLength / 8,
+    );
+  }
+
+  private takeRanges(slot: number): ByteRangeResult[] {
+    const bytes = this.takeBytes(slot);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const ranges: ByteRangeResult[] = [];
+    for (let offset = 0; offset + 16 <= bytes.length; offset += 16) {
+      ranges.push({
+        offset: view.getBigUint64(offset, true),
+        length: view.getBigUint64(offset + 8, true),
+      });
+    }
+    return ranges;
+  }
+
+  private takeRecords<T>(slot: number): T[] {
+    return readRecords(this.heap.readBridgeFromSlot(slot)) as unknown as T[];
+  }
+
+  private peakOptionsPointer(options: PeakSettings): number {
+    this.heap.writeBytesAt(this.peakOptionsSlot, packPeakOptions(options));
+    return this.peakOptionsSlot;
+  }
+
+  private remoteSource(handle: number): RemoteSource | undefined {
+    const sourceId = this.sourceIdByHandle.get(handle);
+    return sourceId === undefined ? undefined : range_sources.get(sourceId);
+  }
+
+  private async prefetch(handle: number, plan: () => void): Promise<void> {
+    const source = this.remoteSource(handle);
+    if (!source) return;
+    plan();
+    await prefetchRangesForSource(source, this.takeRanges(this.firstSlot));
+  }
+
+  private openHandle(name: string, ...values: number[]): number {
+    this.run(name, ...values, this.handleSlot);
+    return this.heap.readU32(this.handleSlot);
+  }
+
+  parseMzml(data: Uint8Array): number {
+    return this.withMemory([data], ([pointer]) =>
+      this.openHandle("parse_mzml", pointer, data.length),
+    );
+  }
+
+  parseBin(data: Uint8Array, cacheSize: number): number {
+    return this.withMemory([data], ([pointer]) =>
+      this.openHandle("parse_bin", pointer, data.length, cacheSize),
+    );
+  }
+
+  async parseIonUrl(url: string, cacheSize: number): Promise<number> {
+    const source = newRemoteSource(url);
+    const sourceId = range_sources.add(source);
+    try {
+      const header = await fetchHeader(source);
+      this.withMemory([header], ([pointer]) =>
+        this.run("plan_open", pointer, header.length, this.firstSlot),
+      );
+      await prefetchRangesForSource(source, this.takeRanges(this.firstSlot));
+      const handle = this.openHandle("parse_ion_url", sourceId, cacheSize);
+      this.sourceIdByHandle.set(handle, sourceId);
+      return handle;
+    } catch (error) {
+      range_sources.remove(sourceId);
+      throw error;
+    }
+  }
+
+  freeFile(handle: number): void {
+    try {
+      this.fn.call("free_mzml", handle);
+    } finally {
+      const sourceId = this.sourceIdByHandle.get(handle);
+      if (sourceId !== undefined) {
+        range_sources.remove(sourceId);
+        this.sourceIdByHandle.delete(handle);
+      }
+    }
+  }
+
+  writeIon(
+    handle: number,
+    out: string | null,
+    overwrite: boolean,
+    level: number,
+    f32Compress: boolean,
+    blockSize: number,
+    mzWindow: number,
+    headers: Uint8Array,
+  ): Uint8Array | undefined {
+    const text =
+      out === null ? new Uint8Array(0) : new TextEncoder().encode(`${out}\0`);
+    return this.withMemory([text, headers], ([outPointer, headersPointer]) => {
+      this.run(
+        "write_ion",
+        handle,
+        out === null ? 0 : outPointer,
+        overwrite ? 1 : 0,
+        level,
+        f32Compress ? 1 : 0,
+        blockSize,
+        mzWindow,
+        headers.length ? headersPointer : 0,
+        headers.length,
+        this.firstSlot,
+      );
+      const bytes = this.takeBytes(this.firstSlot);
+      return bytes.length || out === null ? bytes : undefined;
+    });
+  }
+
+  writeMzml(handle: number): Uint8Array {
+    this.run("write_mzml", handle, 0, 0, this.firstSlot);
+    return this.takeBytes(this.firstSlot);
+  }
+
+  loadModel(bytes: Uint8Array): number {
+    return this.withMemory([bytes], ([pointer]) => {
+      this.run(
+        "model_load_bytes",
+        pointer,
+        bytes.length,
+        this.handleSlot,
+        this.secondSlot,
+      );
+      return this.heap.readU32(this.handleSlot);
+    });
+  }
+
+  freeModel(model: number): void {
+    this.fn.call("model_free", model);
+  }
+
+  modelMetadata(model: number): ModelEntry[] {
+    this.run("model_metadata", model, this.firstSlot);
+    return this.takeRecords<ModelEntry>(this.firstSlot);
+  }
+
+  loadWarp(model: number): number {
+    this.run("warp_model_load", model, this.handleSlot, this.secondSlot);
+    return this.heap.readU32(this.handleSlot);
+  }
+
+  freeWarp(warp: number): void {
+    this.fn.call("warp_model_free", warp);
+  }
+
+  async prefetchRts(
+    warp: number,
+    handle: number,
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Promise<void> {
+    await this.prefetch(handle, () =>
+      this.withMemory(
+        [toUint8View(mzs), toUint8View(rts)],
+        ([mzPointer, rtPointer]) =>
+          this.run(
+            "plan_predict_rts",
+            warp,
+            handle,
+            mzPointer,
+            rtPointer,
+            mzs.length,
+            this.firstSlot,
+          ),
+      ),
+    );
+  }
+
+  predictRts(
+    warp: number,
+    handle: number,
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Float64Array {
+    this.withMemory(
+      [toUint8View(mzs), toUint8View(rts)],
+      ([mzPointer, rtPointer]) =>
+        this.run(
+          "predict_rts_from_file",
+          warp,
+          handle,
+          mzPointer,
+          rtPointer,
+          mzs.length,
+          this.firstSlot,
+        ),
+    );
+    return this.takeNumbers(this.firstSlot);
+  }
+
+  async annotateFeatures(
+    library: number | null,
+    model: number | null,
+    files: number[],
+    mzs: Float64Array,
+    rts: Float64Array,
+    settings: AnnotationSettings,
+  ): Promise<AnnotationTables> {
+    const values = getAnnotationValues(settings);
+    const memory = [
+      toUint8View(Uint32Array.from(files)),
+      toUint8View(mzs),
+      toUint8View(rts),
+    ];
+    if (library !== null && model !== null) {
+      for (const file of files) {
+        await this.prefetch(file, () =>
+          this.withMemory(memory, ([, mzPointer, rtPointer]) =>
+            this.run("plan_annotate_samples", file, mzPointer, rtPointer, mzs.length, ...values, this.firstSlot),
+          ),
+        );
+      }
+      await this.prefetch(library, () =>
+        this.withMemory(memory, ([filePointer, mzPointer, rtPointer]) =>
+          this.run(
+            "plan_annotate_library",
+            library,
+            model,
+            filePointer,
+            files.length,
+            mzPointer,
+            rtPointer,
+            mzs.length,
+            ...values,
+            this.firstSlot,
+          ),
+        ),
+      );
+    }
+    this.withMemory(memory, ([filePointer, mzPointer, rtPointer]) =>
+      this.run(
+        "annotate_features",
+        library ?? 0,
+        model ?? 0,
+        filePointer,
+        files.length,
+        mzPointer,
+        rtPointer,
+        mzs.length,
+        ...values,
+        this.firstSlot,
+        this.secondSlot,
+        this.thirdSlot,
+      ),
+    );
+    return {
+      features: this.takeRecords(this.firstSlot),
+      files: this.takeRecords(this.secondSlot),
+      matches: this.takeRecords(this.thirdSlot),
+    };
+  }
+
+  calibrateRts(
+    warp: number,
+    handles: number[],
+    listLengths: number[],
+    ids: string[],
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Target[] {
+    const { packedBytes, offsets, lengths } = encodeTargetIds(ids);
+    this.withMemory(
+      [
+        toUint8View(Uint32Array.from(handles)),
+        toUint8View(Uint32Array.from(listLengths)),
+        toUint8View(offsets),
+        toUint8View(lengths),
+        packedBytes,
+        toUint8View(mzs),
+        toUint8View(rts),
+      ],
+      ([files, counts, idOffsets, idLengths, idText, mzPointer, rtPointer]) =>
+        this.run(
+          "calibrate_rts",
+          warp,
+          files,
+          handles.length,
+          counts,
+          listLengths.length,
+          idOffsets,
+          idLengths,
+          idText,
+          packedBytes.length,
+          mzPointer,
+          rtPointer,
+          mzs.length,
+          this.firstSlot,
+        ),
+    );
+    return this.takeRecords<Target>(this.firstSlot);
+  }
+
+  async calculateEic(
+    handle: number,
+    mz: number,
+    eic: EicSettings,
+  ): Promise<DataXY> {
+    const values = [
+      mz,
+      eic.from,
+      eic.to,
+      eic.ppmTolerance,
+      eic.mzTolerance,
+      eic.timeUnit,
+    ];
+    await this.prefetch(handle, () =>
+      this.run("plan_eic", handle, ...values, this.firstSlot),
+    );
+    this.run(
+      "calculate_eic",
+      handle,
+      ...values,
+      this.firstSlot,
+      this.secondSlot,
+    );
+    return {
+      x: this.takeNumbers(this.firstSlot),
+      y: this.takeNumbers(this.secondSlot),
+    };
+  }
+
+  async getScans(
+    handle: number,
+    query: ScanQuerySettings,
+    level: number,
+    timeUnit: number,
+  ): Promise<Scan[]> {
+    const values = [...getScanQueryValues(query), level, timeUnit];
+    await this.prefetch(handle, () =>
+      this.run("plan_scans", handle, ...values, this.firstSlot),
+    );
+    this.run("get_scans", handle, ...values, this.firstSlot);
+    return readScans(this.heap.readBridgeFromSlot(this.firstSlot));
+  }
+
+  async getScansWithArrays(
+    handle: number,
+    query: ScanQuerySettings,
+    level: number,
+    timeUnit: number,
+    accessions: Uint32Array,
+    keys: string[],
+  ): Promise<Scan[]> {
+    const values = [...getScanQueryValues(query), level, timeUnit];
+    await this.prefetch(handle, () =>
+      this.withMemory([toUint8View(accessions)], ([pointer]) =>
+        this.run(
+          "plan_scans_with_arrays",
+          handle,
+          ...values,
+          pointer,
+          accessions.length,
+          this.firstSlot,
+        ),
+      ),
+    );
+    this.withMemory([toUint8View(accessions)], ([pointer]) =>
+      this.run(
+        "get_scans_with_arrays",
+        handle,
+        ...values,
+        pointer,
+        accessions.length,
+        this.firstSlot,
+      ),
+    );
+    return readScanArrays(this.heap.readBridgeFromSlot(this.firstSlot), keys);
+  }
+
+  private async computeImageStreaming(
+    source: RemoteSource,
+    handle: number,
+    mz: number,
+    tolerance: number,
+    level: number,
+    onProgress: (fetched: number, total: number, heldBytes: number) => void,
+  ): Promise<IonImage> {
+    const session = this.openHandle(
+      "image_begin",
+      handle,
+      mz,
+      tolerance,
+      level,
+    );
+    try {
+      this.run("image_scan_count", session, this.handleSlot);
+      const total = this.heap.readU32(this.handleSlot);
+      onProgress(0, total, source.cache.bytes());
+      source.cache.pin();
+      const planBatch = (from: number, count: number) => {
+        this.run("image_ranges", handle, session, from, count, this.firstSlot);
+        return this.takeRanges(this.firstSlot);
+      };
+      let done = 0;
+      while (done < total) {
+        let count = Math.min(IMAGE_BATCH_SCANS, total - done);
+        let ranges = planBatch(done, count);
+        while (
+          count > 1 &&
+          total_range_bytes(ranges) > BigInt(IMAGE_BATCH_BUDGET_BYTES)
+        ) {
+          count = Math.floor(count / 2);
+          ranges = planBatch(done, count);
+        }
+        await prefetchRangesForSource(source, ranges);
+        this.run("image_fold", handle, session, done, count);
+        source.cache.dropUnpinned();
+        done += count;
+        onProgress(done, total, source.cache.bytes());
+      }
+      this.run("image_finish", session, this.firstSlot);
+      return readIonImage(this.heap.readBridgeFromSlot(this.firstSlot));
+    } finally {
+      this.fn.call("image_free", session);
+    }
+  }
+
+  async getScanMetadata(
+    handle: number,
+    index: number,
+    tags: string[],
+  ): Promise<ScanParam[]> {
+    if (index > LARGEST_WASM_SIZE) {
+      throw invalidArgument(
+        "getScanMetadata",
+        "index",
+        `must be at most ${LARGEST_WASM_SIZE} in the WebAssembly build, got ${index}`,
+      );
+    }
+    await this.prefetch(handle, () =>
+      this.run("plan_scan_metadata", handle, index, this.firstSlot),
+    );
+    const text = new TextEncoder().encode(`${tags.join(TAG_SEPARATOR)}\0`);
+    this.withMemory([text], ([tagsPointer]) => {
+      this.run("get_scan_metadata", handle, index, tagsPointer, this.firstSlot);
+    });
+    return readScanMetadata(this.heap.readBridgeFromSlot(this.firstSlot));
+  }
+
+  async getIonImage(
+    handle: number,
+    mz: number,
+    tolerance: number,
+    level: number,
+    onProgress: (fetched: number, total: number, heldBytes: number) => void,
+  ): Promise<IonImage> {
+    const source = this.remoteSource(handle);
+    if (source) {
+      return this.computeImageStreaming(
+        source,
+        handle,
+        mz,
+        tolerance,
+        level,
+        onProgress,
+      );
+    }
+    this.run("get_ion_image", handle, mz, tolerance, level, this.firstSlot);
+    return readIonImage(this.heap.readBridgeFromSlot(this.firstSlot));
+  }
+
+  findPeaks(x: Float64Array, y: Float64Array, options: PeakSettings): Peak[] {
+    this.withMemory([toUint8View(x), toUint8View(y)], ([xPointer, yPointer]) =>
+      this.run(
+        "find_peaks",
+        xPointer,
+        yPointer,
+        x.length,
+        this.peakOptionsPointer(options),
+        this.firstSlot,
+      ),
+    );
+    return this.takeRecords<Peak>(this.firstSlot);
+  }
+
+  getPeak(
+    x: Float64Array,
+    y: Float64Array,
+    rt: number,
+    range: number,
+    options: PeakSettings,
+  ): Peak {
+    this.withMemory([toUint8View(x), toUint8View(y)], ([xPointer, yPointer]) =>
+      this.run(
+        "get_peak",
+        xPointer,
+        yPointer,
+        x.length,
+        rt,
+        range,
+        this.peakOptionsPointer(options),
+        this.firstSlot,
+      ),
+    );
+    return this.takeRecords<Peak>(this.firstSlot)[0];
+  }
+
+  fitPeak(
+    x: Float64Array,
+    y: Float64Array,
+    rt: number,
+    shape: number,
+    intensity: number,
+  ): PeakParameters | null {
+    this.withMemory([toUint8View(x), toUint8View(y)], ([xPointer, yPointer]) =>
+      this.run(
+        "fit_peak",
+        xPointer,
+        yPointer,
+        x.length,
+        rt,
+        shape,
+        intensity,
+        this.firstSlot,
+      ),
+    );
+    const rows = this.takeRecords<PeakParameters>(this.firstSlot);
+    return rows.length ? rows[0] : null;
+  }
+
+  drawPeaks(
+    peaks: PeakColumns,
+    from: number,
+    to: number,
+    points: number,
+  ): DataXY {
+    this.withMemory(
+      [
+        toUint8View(peaks.heights),
+        toUint8View(peaks.centers),
+        toUint8View(peaks.fwhms),
+        toUint8View(peaks.tails),
+      ],
+      ([heights, centers, fwhms, tails]) =>
+        this.run(
+          "draw_peaks",
+          heights,
+          centers,
+          fwhms,
+          tails,
+          peaks.heights.length,
+          from,
+          to,
+          points,
+          this.firstSlot,
+          this.secondSlot,
+        ),
+    );
+    return {
+      x: this.takeNumbers(this.firstSlot),
+      y: this.takeNumbers(this.secondSlot),
+    };
+  }
+
+  findNoiseLevel(y: Float32Array): NoiseLevel {
+    this.withMemory([toUint8View(y)], ([yPointer]) =>
+      this.run(
+        "find_noise_level",
+        yPointer,
+        y.length,
+        this.noiseLevelSlot,
+        this.noiseLevelSlot + NOISE_LEVEL_INTENSITY_OFFSET,
+      ),
+    );
+    return {
+      width: this.heap.readU32(this.noiseLevelSlot),
+      intensity: this.heap.readF64(
+        this.noiseLevelSlot + NOISE_LEVEL_INTENSITY_OFFSET,
+      ),
+    };
+  }
+
+  calculateBaseline(
+    y: Float64Array,
+    lambda: number,
+    maxIterations: number,
+  ): Float64Array {
+    this.withMemory([toUint8View(y)], ([yPointer]) =>
+      this.run(
+        "calculate_baseline",
+        yPointer,
+        y.length,
+        lambda,
+        maxIterations,
+        this.firstSlot,
+      ),
+    );
+    return this.takeNumbers(this.firstSlot);
+  }
+
+  deisotopeFeatures(
+    values: Float64Array,
+    count: number,
+    rtTolerance: number,
+    mzTolerance: number,
+  ): Feature[] {
+    this.withMemory([toUint8View(values)], ([valuesPointer]) =>
+      this.run(
+        "deisotope_features",
+        valuesPointer,
+        count,
+        rtTolerance,
+        mzTolerance,
+        this.firstSlot,
+      ),
+    );
+    return this.takeRecords<Feature>(this.firstSlot);
+  }
+
+  async findTargets(
+    handle: number,
+    targets: TargetColumns,
+    eic: EicSettings,
+    options: PeakSettings,
+    threads: number,
+  ): Promise<Peak[]> {
+    const window = [
+      eic.from,
+      eic.to,
+      eic.ppmTolerance,
+      eic.mzTolerance,
+      eic.timeUnit,
+    ];
+    await this.prefetch(handle, () =>
+      this.withMemory([toUint8View(targets.mzs)], ([mzPointer]) =>
+        this.run(
+          "plan_find_targets",
+          handle,
+          mzPointer,
+          targets.mzs.length,
+          ...window,
+          this.firstSlot,
+        ),
+      ),
+    );
+    const { packedBytes, offsets, lengths } = encodeTargetIds(targets.ids);
+    this.withMemory(
+      [
+        toUint8View(targets.rts),
+        toUint8View(targets.mzs),
+        toUint8View(targets.ranges),
+        toUint8View(offsets),
+        toUint8View(lengths),
+        packedBytes,
+      ],
+      ([rts, mzs, ranges, idOffsets, idLengths, idText]) =>
+        this.run(
+          "find_targets",
+          handle,
+          rts,
+          mzs,
+          ranges,
+          idOffsets,
+          idLengths,
+          idText,
+          packedBytes.length,
+          targets.rts.length,
+          ...window,
+          this.peakOptionsPointer(options),
+          threads,
+          this.firstSlot,
+        ),
+    );
+    return this.takeRecords<Peak>(this.firstSlot);
+  }
+
+  findTransitions(
+    handle: number,
+    targets: TransitionColumns,
+    options: PeakSettings,
+    threads: number,
+  ): Peak[] {
+    const { packedBytes, offsets, lengths } = encodeTargetIds(targets.ids);
+    this.withMemory(
+      [
+        toUint8View(targets.precursors),
+        toUint8View(targets.products),
+        toUint8View(targets.rts),
+        toUint8View(targets.ranges),
+        toUint8View(offsets),
+        toUint8View(lengths),
+        packedBytes,
+      ],
+      ([precursors, products, rts, ranges, idOffsets, idLengths, idText]) =>
+        this.run(
+          "find_transitions",
+          handle,
+          precursors,
+          products,
+          rts,
+          ranges,
+          idOffsets,
+          idLengths,
+          idText,
+          packedBytes.length,
+          targets.rts.length,
+          this.peakOptionsPointer(options),
+          threads,
+          this.firstSlot,
+        ),
+    );
+    return this.takeRecords<Peak>(this.firstSlot);
+  }
+
+  async findFeatures(
+    handle: number,
+    eic: EicSettings,
+    grid: GridSettings,
+    options: PeakSettings,
+    threads: number,
+  ): Promise<Feature[]> {
+    const values = [
+      eic.from,
+      eic.to,
+      eic.ppmTolerance,
+      eic.mzTolerance,
+      eic.timeUnit,
+      grid.start,
+      grid.end,
+      grid.stepSize,
+    ];
+    await this.prefetch(handle, () =>
+      this.run("plan_find_features", handle, ...values, this.firstSlot),
+    );
+    this.run(
+      "find_features",
+      handle,
+      ...values,
+      this.peakOptionsPointer(options),
+      threads,
+      this.firstSlot,
+    );
+    return this.takeRecords<Feature>(this.firstSlot);
+  }
+}
+
+function make_range_read_import(): (
+  source_id: number,
+  offset_lo: number,
+  offset_hi: number,
+  len: number,
+  dest_ptr: number,
+) => number {
+  return (
+    source_id: number,
+    offset_lo: number,
+    offset_hi: number,
+    len: number,
+    dest_ptr: number,
+  ): number => {
+    if (!wasm_memory) return -1;
+
+    const source = range_sources.get(source_id >>> 0);
+    if (!source) return -1;
+
+    const offset = BigInt(offset_lo >>> 0) + (BigInt(offset_hi >>> 0) << 32n);
+    const length = BigInt(len >>> 0);
+
+    const bytes = source.cache.read(offset, length);
+    if (!bytes) return -1;
+
+    new Uint8Array(wasm_memory.buffer, dest_ptr >>> 0, len >>> 0).set(bytes);
+    return 0;
+  };
+}
+
+async function load_and_instantiate(
+  bytes: ArrayBuffer | Uint8Array,
+): Promise<WasmApi> {
+  const imports = {
+    env: {
+      js_log: (_ptr: number, _len: number) => {},
+      range_read: make_range_read_import(),
+    },
+  };
+  const result = await WebAssembly.instantiate(bytes, imports);
+  const instance = (result as any).instance as WebAssembly.Instance;
+  wasm_memory = (instance.exports as any).memory as WebAssembly.Memory;
+  return new WasmApi(instance);
+}
+
+async function loadWasm(): Promise<WasmApi> {
+  if (IS_INLINE_BUILD) {
+    if (!__WASM_DATA_URL__)
+      throw new Error("Inline build is missing __WASM_DATA_URL__");
+    const bytes = await fetch(__WASM_DATA_URL__).then((r) => r.arrayBuffer());
+    return load_and_instantiate(bytes);
+  }
+
+  throw new Error(
+    "quantion: the WASM build must be loaded from the bundle (quantion.js)",
+  );
+}
+
+export class WasmBackend implements Backend {
+  private api: WasmApi | null = null;
+  ready = false;
+  readonly handlesAreGcFinalized = false;
+  readonly canReadPaths = false;
+
+  async init(): Promise<void> {
+    if (this.api) return;
+    this.api = await loadWasm();
+    this.ready = true;
+  }
+
+  private getApi(): WasmApi {
+    if (!this.api) {
+      throw new QuantionError(
+        "internal",
+        "quantion",
+        "the WASM module is not loaded; call init() first",
+      );
+    }
+    return this.api;
+  }
+
+  parseMzmlBytes(data: Uint8Array): FileHandle {
+    return this.getApi().parseMzml(data);
+  }
+
+  parseMzmlPath(): FileHandle {
+    throw invalidArgument(
+      "parseMzml",
+      "source",
+      "must be bytes in the browser; paths need Node",
+    );
+  }
+
+  parseIonPath(): FileHandle {
+    throw invalidArgument(
+      "parseIon",
+      "source",
+      "must be a URL or bytes in the browser; paths need Node",
+    );
+  }
+
+  async parseIonRemote(url: URL, cacheSize: number): Promise<FileHandle> {
+    return this.getApi().parseIonUrl(url.href, cacheSize);
+  }
+
+  parseIonBuffer(bytes: Uint8Array, cacheSize: number): FileHandle {
+    return this.getApi().parseBin(bytes, cacheSize);
+  }
+
+  freeFile(handle: FileHandle): void {
+    this.getApi().freeFile(handle as number);
+  }
+
+  writeIon(
+    handle: FileHandle,
+    out: string | null,
+    overwrite: boolean,
+    level: number,
+    f32Compress: boolean,
+    blockSize: number,
+    mzWindow: number,
+    headers: Uint8Array,
+  ): Uint8Array | undefined {
+    return this.getApi().writeIon(
+      handle as number,
+      out,
+      overwrite,
+      level,
+      f32Compress,
+      blockSize,
+      mzWindow,
+      headers,
+    );
+  }
+
+  writeMzml(handle: FileHandle): Uint8Array | undefined {
+    return this.getApi().writeMzml(handle as number);
+  }
+
+  loadModelPath(): ModelHandle {
+    throw invalidArgument(
+      "loadModel",
+      "source",
+      "must be a URL or bytes in the browser; paths need Node",
+    );
+  }
+
+  loadModelBytes(bytes: Uint8Array): ModelHandle {
+    return this.getApi().loadModel(bytes);
+  }
+
+  freeModel(model: ModelHandle): void {
+    this.getApi().freeModel(model as number);
+  }
+
+  modelMetadata(model: ModelHandle): ModelEntry[] {
+    return this.getApi().modelMetadata(model as number);
+  }
+
+  loadWarp(model: ModelHandle): WarpModelHandle {
+    return this.getApi().loadWarp(model as number);
+  }
+
+  freeWarpModel(warp: WarpModelHandle): void {
+    this.getApi().freeWarp(warp as number);
+  }
+
+  prefetchRts(
+    warp: WarpModelHandle,
+    handle: FileHandle,
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Promise<void> {
+    return this.getApi().prefetchRts(
+      warp as number,
+      handle as number,
+      mzs,
+      rts,
+    );
+  }
+
+  predictRts(
+    warp: WarpModelHandle,
+    handle: FileHandle,
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Float64Array {
+    return this.getApi().predictRts(warp as number, handle as number, mzs, rts);
+  }
+
+  annotateFeatures(
+    library: FileHandle | null,
+    model: ModelHandle | null,
+    files: FileHandle[],
+    mzs: Float64Array,
+    rts: Float64Array,
+    settings: AnnotationSettings,
+  ): Promise<AnnotationTables> {
+    return this.getApi().annotateFeatures(
+      library as number | null,
+      model as number | null,
+      files as number[],
+      mzs,
+      rts,
+      settings,
+    );
+  }
+
+  calibrateRts(
+    warp: WarpModelHandle,
+    handles: FileHandle[],
+    listLengths: number[],
+    ids: string[],
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Target[] {
+    return this.getApi().calibrateRts(
+      warp as number,
+      handles as number[],
+      listLengths,
+      ids,
+      mzs,
+      rts,
+    );
+  }
+
+  calculateEic(
+    handle: FileHandle,
+    mz: number,
+    eic: EicSettings,
+  ): Promise<DataXY> {
+    return this.getApi().calculateEic(handle as number, mz, eic);
+  }
+
+  getScans(
+    handle: FileHandle,
+    query: ScanQuerySettings,
+    level: number,
+    timeUnit: number,
+  ): Promise<Scan[]> {
+    return this.getApi().getScans(handle as number, query, level, timeUnit);
+  }
+
+  getScansWithArrays(
+    handle: FileHandle,
+    query: ScanQuerySettings,
+    level: number,
+    timeUnit: number,
+    accessions: Uint32Array,
+    keys: string[],
+  ): Promise<Scan[]> {
+    return this.getApi().getScansWithArrays(
+      handle as number,
+      query,
+      level,
+      timeUnit,
+      accessions,
+      keys,
+    );
+  }
+
+  getScanMetadata(
+    handle: FileHandle,
+    index: number,
+    tags: string[],
+  ): Promise<ScanParam[]> {
+    return this.getApi().getScanMetadata(handle as number, index, tags);
+  }
+
+  getIonImage(
+    handle: FileHandle,
+    mz: number,
+    tolerance: number,
+    level: number,
+    onProgress: (fetched: number, total: number, heldBytes: number) => void,
+  ): Promise<IonImage> {
+    return this.getApi().getIonImage(
+      handle as number,
+      mz,
+      tolerance,
+      level,
+      onProgress,
+    );
+  }
+
+  findPeaks(x: Float64Array, y: Float64Array, options: PeakSettings): Peak[] {
+    return this.getApi().findPeaks(x, y, options);
+  }
+
+  getPeak(
+    x: Float64Array,
+    y: Float64Array,
+    rt: number,
+    range: number,
+    options: PeakSettings,
+  ): Peak {
+    return this.getApi().getPeak(x, y, rt, range, options);
+  }
+
+  fitPeak(
+    x: Float64Array,
+    y: Float64Array,
+    rt: number,
+    shape: number,
+    intensity: number,
+  ): PeakParameters | null {
+    return this.getApi().fitPeak(x, y, rt, shape, intensity);
+  }
+
+  drawPeaks(
+    peaks: PeakColumns,
+    from: number,
+    to: number,
+    points: number,
+  ): DataXY {
+    return this.getApi().drawPeaks(peaks, from, to, points);
+  }
+
+  findNoiseLevel(y: Float32Array): NoiseLevel {
+    return this.getApi().findNoiseLevel(y);
+  }
+
+  calculateBaseline(
+    y: Float64Array,
+    lambda: number,
+    maxIterations: number,
+  ): Float64Array {
+    return this.getApi().calculateBaseline(y, lambda, maxIterations);
+  }
+
+  deisotopeFeatures(
+    values: Float64Array,
+    count: number,
+    rtTolerance: number,
+    mzTolerance: number,
+  ): Feature[] {
+    return this.getApi().deisotopeFeatures(
+      values,
+      count,
+      rtTolerance,
+      mzTolerance,
+    );
+  }
+
+  findTargets(
+    handle: FileHandle,
+    targets: TargetColumns,
+    eic: EicSettings,
+    options: PeakSettings,
+    threads: number,
+  ): Promise<Peak[]> {
+    return this.getApi().findTargets(
+      handle as number,
+      targets,
+      eic,
+      options,
+      threads,
+    );
+  }
+
+  findTransitions(
+    handle: FileHandle,
+    targets: TransitionColumns,
+    options: PeakSettings,
+    threads: number,
+  ): Peak[] {
+    return this.getApi().findTransitions(
+      handle as number,
+      targets,
+      options,
+      threads,
+    );
+  }
+
+  findFeatures(
+    handle: FileHandle,
+    eic: EicSettings,
+    grid: GridSettings,
+    options: PeakSettings,
+    threads: number,
+  ): Promise<Feature[]> {
+    return this.getApi().findFeatures(
+      handle as number,
+      eic,
+      grid,
+      options,
+      threads,
+    );
+  }
 }
 
 function toUint8View(typed: {
@@ -212,1412 +1508,5 @@ class WasmHeap {
 
   allocPermanent(size: number): number {
     return this.alloc(size);
-  }
-}
-
-class TrapGuard {
-  private trapped = false;
-
-  get isTrapped(): boolean {
-    return this.trapped;
-  }
-
-  watch<T extends Function>(call: T): T {
-    const guard = this;
-    return function (this: unknown, ...args: unknown[]) {
-      if (guard.trapped) {
-        throw new Error(
-          "quantion: this WASM instance trapped earlier and cannot be used; load it again",
-        );
-      }
-      try {
-        return (call as unknown as (...rest: unknown[]) => unknown).apply(
-          this,
-          args,
-        );
-      } catch (reason) {
-        if (reason instanceof WebAssembly.RuntimeError) guard.trapped = true;
-        throw reason;
-      }
-    } as unknown as T;
-  }
-}
-
-class WasmExports {
-  readonly memory: WebAssembly.Memory;
-  readonly alloc: (size: number) => number;
-  readonly free: (ptr: number, size: number) => void;
-  readonly quantionAbiVersion: () => number;
-  readonly quantionSizeofPeakOptions: () => number;
-  readonly parseMzml: (
-    dataPtr: number,
-    dataLen: number,
-    outPtr: number,
-  ) => number;
-  readonly parseBin: (
-    dataPtr: number,
-    dataLen: number,
-    maxCacheSize: number,
-    outPtr: number,
-  ) => number;
-  readonly freeMzml: (handle: number) => void;
-  readonly binToMzml: (handle: number, outBuf: number) => number;
-  readonly mzmlToBin: (
-    handle: number,
-    outBuf: number,
-    level: number,
-    compress: number,
-  ) => number;
-  readonly calculateEic: (
-    handle: number,
-    target: number,
-    from: number,
-    to: number,
-    ppm: number,
-    mz: number,
-    outX: number,
-    outY: number,
-  ) => number;
-  readonly findPeaks: (
-    xPtr: number,
-    yPtr: number,
-    len: number,
-    optsPtr: number,
-    outBuf: number,
-  ) => number;
-  readonly getPeak: (
-    xPtr: number,
-    yPtr: number,
-    len: number,
-    rt: number,
-    range: number,
-    optsPtr: number,
-    outBuf: number,
-  ) => number;
-  readonly getPeaksFromChrom: (
-    handle: number,
-    idxPtr: number,
-    rtPtr: number,
-    winPtr: number,
-    count: number,
-    optsPtr: number,
-    cores: number,
-    outBuf: number,
-  ) => number;
-  readonly getPeaksFromEic: (
-    handle: number,
-    rtPtr: number,
-    mzPtr: number,
-    rangePtr: number,
-    offPtr: number,
-    lenPtr: number,
-    idBytesPtr: number,
-    idBytesLen: number,
-    count: number,
-    from: number,
-    to: number,
-    optsPtr: number,
-    cores: number,
-    outBuf: number,
-  ) => number;
-  readonly findNoiseLevel: (
-    yPtr: number,
-    len: number,
-    outWidth: number,
-    outIntensity: number,
-  ) => number;
-  readonly calculateBaseline: (
-    yPtr: number,
-    len: number,
-    lambda: number,
-    maxIterations: number,
-    outBuf: number,
-  ) => number;
-  readonly findFeature: (
-    handle: number,
-    rtPtr: number,
-    mzPtr: number,
-    rangePtr: number,
-    offPtr: number,
-    lenPtr: number,
-    idBytesPtr: number,
-    idBytesLen: number,
-    count: number,
-    cores: number,
-    scanPpm: number,
-    scanMz: number,
-    eicPpm: number,
-    eicMz: number,
-    optsPtr: number,
-    outBuf: number,
-  ) => number;
-  readonly getScans: (
-    handle: number,
-    queryType: number,
-    a: number,
-    b: number,
-    level: number,
-    outBuf: number,
-  ) => number;
-  readonly getIonImage: (
-    handle: number,
-    mz: number,
-    tolerance: number,
-    level: number,
-    outBuf: number,
-  ) => number;
-  readonly parseIonUrl:
-    | ((sourceId: number, cacheBytes: number, outHandle: number) => number)
-    | null;
-  readonly planOpen:
-    ((headerPtr: number, headerLen: number, outBuf: number) => number) | null;
-  readonly planEic:
-    | ((
-        handle: number,
-        target: number,
-        from: number,
-        to: number,
-        ppm: number,
-        mzTol: number,
-        outBuf: number,
-      ) => number)
-    | null;
-  readonly planScans:
-    | ((
-        handle: number,
-        queryType: number,
-        from: number,
-        to: number,
-        level: number,
-        outBuf: number,
-      ) => number)
-    | null;
-  readonly imageBegin:
-    | ((
-        handle: number,
-        mz: number,
-        tolerance: number,
-        level: number,
-        outSession: number,
-      ) => number)
-    | null;
-  readonly imageScanCount:
-    ((session: number, outCount: number) => number) | null;
-  readonly imageRanges:
-    | ((
-        handle: number,
-        session: number,
-        from: number,
-        count: number,
-        outBuf: number,
-      ) => number)
-    | null;
-  readonly imageFold:
-    | ((handle: number, session: number, from: number, count: number) => number)
-    | null;
-  readonly imageFinish: ((session: number, outBuf: number) => number) | null;
-  readonly imageFree: ((session: number) => void) | null;
-
-  readonly guard = new TrapGuard();
-
-  constructor(instance: WebAssembly.Instance) {
-    const ex = instance.exports;
-    this.memory = ex.memory as WebAssembly.Memory;
-    this.alloc = this.resolve(ex, ["alloc"]);
-    this.free = this.resolve(ex, ["free_", "free"]);
-    this.quantionAbiVersion = this.resolve(ex, ["quantion_abi_version"]);
-    this.quantionSizeofPeakOptions = this.resolve(ex, [
-      "quantion_sizeof_peak_options",
-    ]);
-    this.parseMzml = this.resolve(ex, ["parse_mzml"]);
-    this.parseBin = this.resolve(ex, ["parse_bin"]);
-    this.freeMzml = this.resolve(ex, ["free_mzml"]);
-    this.binToMzml = this.resolve(ex, ["bin_to_mzml"]);
-    this.mzmlToBin = this.resolve(ex, ["mzml_to_bin"]);
-    this.calculateEic = this.resolve(ex, ["calculate_eic"]);
-    this.findPeaks = this.resolve(ex, ["find_peaks"]);
-    this.getPeak = this.resolve(ex, ["get_peak"]);
-    this.getPeaksFromChrom = this.resolve(ex, ["get_peaks_from_chrom"]);
-    this.getPeaksFromEic = this.resolve(ex, ["get_peaks_from_eic"]);
-    this.findNoiseLevel = this.resolve(ex, ["find_noise_level"]);
-    this.calculateBaseline = this.resolve(ex, ["calculate_baseline"]);
-    this.findFeature = this.resolve(ex, ["find_feature"]);
-    this.getScans = this.resolve(ex, ["get_scans"]);
-    this.getIonImage = this.resolve(ex, ["get_ion_image"]);
-    this.parseIonUrl =
-      typeof ex["parse_ion_url"] === "function"
-        ? this.guard.watch(
-            ex["parse_ion_url"] as unknown as (
-              sourceId: number,
-              cacheBytes: number,
-              outHandle: number,
-            ) => number,
-          )
-        : null;
-    this.planOpen =
-      typeof ex["plan_open"] === "function"
-        ? this.guard.watch(
-            ex["plan_open"] as unknown as (
-              headerPtr: number,
-              headerLen: number,
-              outBuf: number,
-            ) => number,
-          )
-        : null;
-    this.planEic =
-      typeof ex["plan_eic"] === "function"
-        ? this.guard.watch(
-            ex["plan_eic"] as unknown as (
-              handle: number,
-              target: number,
-              from: number,
-              to: number,
-              ppm: number,
-              mzTol: number,
-              outBuf: number,
-            ) => number,
-          )
-        : null;
-    this.planScans =
-      typeof ex["plan_scans"] === "function"
-        ? this.guard.watch(
-            ex["plan_scans"] as unknown as (
-              handle: number,
-              queryType: number,
-              from: number,
-              to: number,
-              level: number,
-              outBuf: number,
-            ) => number,
-          )
-        : null;
-    this.imageBegin =
-      typeof ex["image_begin"] === "function"
-        ? this.guard.watch(
-            ex["image_begin"] as unknown as (
-              handle: number,
-              mz: number,
-              tolerance: number,
-              level: number,
-              outSession: number,
-            ) => number,
-          )
-        : null;
-    this.imageScanCount =
-      typeof ex["image_scan_count"] === "function"
-        ? this.guard.watch(
-            ex["image_scan_count"] as unknown as (
-              session: number,
-              outCount: number,
-            ) => number,
-          )
-        : null;
-    this.imageRanges =
-      typeof ex["image_ranges"] === "function"
-        ? this.guard.watch(
-            ex["image_ranges"] as unknown as (
-              handle: number,
-              session: number,
-              from: number,
-              count: number,
-              outBuf: number,
-            ) => number,
-          )
-        : null;
-    this.imageFold =
-      typeof ex["image_fold"] === "function"
-        ? this.guard.watch(
-            ex["image_fold"] as unknown as (
-              handle: number,
-              session: number,
-              from: number,
-              count: number,
-            ) => number,
-          )
-        : null;
-    this.imageFinish =
-      typeof ex["image_finish"] === "function"
-        ? this.guard.watch(
-            ex["image_finish"] as unknown as (
-              session: number,
-              outBuf: number,
-            ) => number,
-          )
-        : null;
-    this.imageFree =
-      typeof ex["image_free"] === "function"
-        ? this.guard.watch(
-            ex["image_free"] as unknown as (session: number) => void,
-          )
-        : null;
-  }
-
-  private resolve<T extends Function>(
-    exports: WebAssembly.Exports,
-    names: string[],
-  ): T {
-    for (const name of names)
-      if (typeof exports[name] === "function")
-        return this.guard.watch(exports[name] as unknown as T);
-    throw new Error(
-      `WasmExports: none of [${names.join(", ")}] found in WASM exports`,
-    );
-  }
-}
-
-const IMAGE_BATCH_SCANS = 256;
-const IMAGE_BATCH_BUDGET_BYTES = 192 * 1024 * 1024;
-
-function total_range_bytes(ranges: ByteRangeResult[]): bigint {
-  let total = 0n;
-  for (const range of ranges) total += range.length;
-  return total;
-}
-
-class WasmApi {
-  private readonly heap: WasmHeap;
-  readonly fn: WasmExports;
-
-  private readonly textOutputSlot: number;
-  private readonly bridgeOutputSlot: number;
-  private readonly jsonScratchSlot: number;
-  private readonly blobScratchSlot: number;
-  private readonly baselineScratchSlot: number;
-  private readonly peakOptionsSlot: number;
-  private readonly handleScratchSlot: number;
-  private readonly noiseLevelSlot: number;
-  private readonly source_id_by_handle = new Map<number, number>();
-
-  constructor(instance: WebAssembly.Instance) {
-    this.fn = new WasmExports(instance);
-
-    const abi = this.fn.quantionAbiVersion();
-    if (abi !== QUANTION_ABI_VERSION) {
-      throw new Error(
-        `quantion WASM ABI version mismatch: binary=${abi}, ` +
-          `wrapper=${QUANTION_ABI_VERSION}. Rebuild the WASM module.`,
-      );
-    }
-    const size = this.fn.quantionSizeofPeakOptions();
-    if (size !== PEAK_OPTIONS_STRUCT_BYTES) {
-      throw new Error(
-        `quantion WASM PeakOptions size mismatch: binary=${size} bytes, ` +
-          `wrapper=${PEAK_OPTIONS_STRUCT_BYTES} bytes. ` +
-          `Native binary and JS wrapper are out of sync — rebuild.`,
-      );
-    }
-
-    this.heap = new WasmHeap(this.fn.memory, this.fn.alloc, this.fn.free);
-
-    this.textOutputSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
-    this.bridgeOutputSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
-    this.jsonScratchSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
-    this.blobScratchSlot = this.heap.allocPermanent(OUTPUT_BUFFER_PAIR_BYTES);
-    this.baselineScratchSlot = this.heap.allocPermanent(
-      OUTPUT_BUFFER_PAIR_BYTES,
-    );
-    this.peakOptionsSlot = this.heap.allocPermanent(PEAK_OPTIONS_STRUCT_BYTES);
-    this.handleScratchSlot = this.heap.allocPermanent(4);
-    this.noiseLevelSlot = this.heap.allocPermanent(NOISE_LEVEL_SLOT_BYTES);
-  }
-
-  private assertLocalHandle(handle: number, functionName: string): void {
-    if (this.source_id_by_handle.has(handle)) {
-      throw new Error(
-        `${functionName}: remote browser Ion handles need plan_peaks_from_eic; use Node, Python, R, or a local/in-memory file`,
-      );
-    }
-  }
-
-  parseMzMLRaw(data: Uint8Array): number {
-    const [ptr, len] = this.heap.allocAndWrite(data);
-    try {
-      const rc = this.fn.parseMzml(ptr, len, this.handleScratchSlot);
-      if (rc !== 0) throw new Error("parse_mzml failed with code " + rc);
-      return this.heap.readU32(this.handleScratchSlot);
-    } finally {
-      this.fn.free(ptr, len);
-    }
-  }
-
-  parseBinRaw(data: Uint8Array, maxCacheSize = 0): number {
-    const [ptr, len] = this.heap.allocAndWrite(data);
-    try {
-      const rc = this.fn.parseBin(
-        ptr,
-        len,
-        maxCacheSize,
-        this.handleScratchSlot,
-      );
-      if (rc !== 0) throw new Error("parse_bin failed with code " + rc);
-      return this.heap.readU32(this.handleScratchSlot);
-    } finally {
-      this.fn.free(ptr, len);
-    }
-  }
-
-  private readRangesFromSlot(slotPtr: number): ByteRangeResult[] {
-    const { ptr, len } = this.heap.readOutputSlot(slotPtr);
-    const bytes = this.heap.copyOutAndFree(ptr, len);
-
-    if (bytes.length % 16 !== 0) {
-      throw new Error(
-        `planned range buffer length must be divisible by 16, got ${bytes.length}`,
-      );
-    }
-
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const ranges: ByteRangeResult[] = [];
-
-    for (let offset = 0; offset < bytes.length; offset += 16) {
-      ranges.push({
-        offset: view.getBigUint64(offset, true),
-        length: view.getBigUint64(offset + 8, true),
-      });
-    }
-
-    return ranges;
-  }
-
-  planOpen(header: Uint8Array): ByteRangeResult[] {
-    if (!this.fn.planOpen) {
-      throw new Error("planOpen not in WASM exports");
-    }
-
-    const [ptr, len] = this.heap.allocAndWrite(header);
-    try {
-      const rc = this.fn.planOpen(ptr, len, this.blobScratchSlot);
-      if (rc !== 0) throw new Error(`plan_open failed with code ${rc}`);
-      return this.readRangesFromSlot(this.blobScratchSlot);
-    } finally {
-      this.fn.free(ptr, len);
-    }
-  }
-
-  planEic(
-    handle: number,
-    targetMz: number,
-    from: number,
-    to: number,
-    ppmTol: number,
-    mzTol: number,
-  ): ByteRangeResult[] {
-    if (!this.fn.planEic) {
-      throw new Error("planEic not in WASM exports");
-    }
-
-    const rc = this.fn.planEic(
-      handle,
-      targetMz,
-      from,
-      to,
-      ppmTol,
-      mzTol,
-      this.blobScratchSlot,
-    );
-    if (rc !== 0) throw new Error(`plan_eic failed with code ${rc}`);
-    return this.readRangesFromSlot(this.blobScratchSlot);
-  }
-
-  planScans(
-    handle: number,
-    queryType: number,
-    a: number,
-    b: number,
-    level: number,
-  ): ByteRangeResult[] {
-    if (!this.fn.planScans) {
-      throw new Error("planScans not in WASM exports");
-    }
-
-    const rc = this.fn.planScans(
-      handle,
-      queryType,
-      a,
-      b,
-      level,
-      this.blobScratchSlot,
-    );
-    if (rc !== 0) throw new Error(`plan_scans failed with code ${rc}`);
-    return this.readRangesFromSlot(this.blobScratchSlot);
-  }
-
-  private imageBegin(
-    handle: number,
-    mz: number,
-    tolerance: number,
-    level: number,
-  ): number {
-    if (!this.fn.imageBegin) throw new Error("imageBegin not in WASM exports");
-    const rc = this.fn.imageBegin(
-      handle,
-      mz,
-      tolerance,
-      level,
-      this.handleScratchSlot,
-    );
-    if (rc !== 0) throw new Error(`image_begin failed with code ${rc}`);
-    return this.heap.readU32(this.handleScratchSlot);
-  }
-
-  private imageScanCount(session: number): number {
-    if (!this.fn.imageScanCount)
-      throw new Error("imageScanCount not in WASM exports");
-    const rc = this.fn.imageScanCount(session, this.handleScratchSlot);
-    if (rc !== 0) throw new Error(`image_scan_count failed with code ${rc}`);
-    return this.heap.readU32(this.handleScratchSlot);
-  }
-
-  private imageRanges(
-    handle: number,
-    session: number,
-    from: number,
-    count: number,
-  ): ByteRangeResult[] {
-    if (!this.fn.imageRanges)
-      throw new Error("imageRanges not in WASM exports");
-    const rc = this.fn.imageRanges(
-      handle,
-      session,
-      from,
-      count,
-      this.blobScratchSlot,
-    );
-    if (rc !== 0) throw new Error(`image_ranges failed with code ${rc}`);
-    return this.readRangesFromSlot(this.blobScratchSlot);
-  }
-
-  private imageFold(
-    handle: number,
-    session: number,
-    from: number,
-    count: number,
-  ): void {
-    if (!this.fn.imageFold) throw new Error("imageFold not in WASM exports");
-    const rc = this.fn.imageFold(handle, session, from, count);
-    if (rc !== 0) throw new Error(`image_fold failed with code ${rc}`);
-  }
-
-  private imageFinish(session: number): any {
-    if (!this.fn.imageFinish)
-      throw new Error("imageFinish not in WASM exports");
-    const rc = this.fn.imageFinish(session, this.bridgeOutputSlot);
-    if (rc !== 0) throw new Error(`image_finish failed with code ${rc}`);
-    return readIonImage(this.heap.readBridgeFromSlot(this.bridgeOutputSlot));
-  }
-
-  private imageFree(session: number): void {
-    if (this.fn.imageFree) this.fn.imageFree(session);
-  }
-
-  private async computeImageStreaming(
-    source: RemoteSource,
-    handle: number,
-    mz: number,
-    tolerance: number,
-    level: number,
-    onProgress?: (fetched: number, total: number, heldBytes: number) => void,
-  ): Promise<any> {
-    const session = this.imageBegin(handle, mz, tolerance, level);
-    try {
-      const total = this.imageScanCount(session);
-      onProgress?.(0, total, source.cache.bytes());
-      source.cache.pin();
-
-      let done = 0;
-      while (done < total) {
-        let count = Math.min(IMAGE_BATCH_SCANS, total - done);
-        let ranges = this.imageRanges(handle, session, done, count);
-        while (
-          count > 1 &&
-          total_range_bytes(ranges) > BigInt(IMAGE_BATCH_BUDGET_BYTES)
-        ) {
-          count = Math.floor(count / 2);
-          ranges = this.imageRanges(handle, session, done, count);
-        }
-        await prefetchRangesForSource(source, ranges);
-        this.imageFold(handle, session, done, count);
-        source.cache.dropUnpinned();
-        done += count;
-        onProgress?.(done, total, source.cache.bytes());
-      }
-
-      return this.imageFinish(session);
-    } finally {
-      this.imageFree(session);
-    }
-  }
-
-  async parseIonUrl(url: string, cacheSize: number): Promise<number> {
-    if (!this.fn.parseIonUrl) {
-      throw new Error("parse_ion_url not in WASM exports");
-    }
-
-    const source = newRemoteSource(url);
-    const sourceId = range_sources.add(source);
-
-    try {
-      const headerBytes = await fetchHeader(source);
-      await prefetchRangesForSource(source, this.planOpen(headerBytes));
-
-      const rc = this.fn.parseIonUrl(
-        sourceId,
-        cacheSize,
-        this.handleScratchSlot,
-      );
-      if (rc !== 0) {
-        throw new Error(`parse_ion_url failed with code ${rc}`);
-      }
-
-      const handle = this.heap.readU32(this.handleScratchSlot);
-      if (handle === 0) {
-        throw new Error("parse_ion_url returned a null handle");
-      }
-
-      this.source_id_by_handle.set(handle, sourceId);
-      return handle;
-    } catch (error) {
-      range_sources.remove(sourceId);
-      throw error;
-    }
-  }
-
-  freeRaw(handle: number): void {
-    try {
-      this.fn.freeMzml(handle);
-    } finally {
-      const source_id = this.source_id_by_handle.get(handle);
-      if (source_id !== undefined) {
-        range_sources.remove(source_id);
-        this.source_id_by_handle.delete(handle);
-      }
-    }
-  }
-
-  fileToMzml(handle: number): string {
-    const rc = this.fn.binToMzml(handle, this.textOutputSlot);
-    if (rc !== 0) throw new Error("bin_to_mzml failed with code " + rc);
-    const { ptr, len } = this.heap.readOutputSlot(this.textOutputSlot);
-    return this.heap.decoder.decode(this.heap.copyOutAndFree(ptr, len));
-  }
-
-  fileToBin(
-    handle: number,
-    compressionLevel: number,
-    f32Compress: number,
-  ): Uint8Array {
-    const rc = this.fn.mzmlToBin(
-      handle,
-      this.blobScratchSlot,
-      compressionLevel,
-      f32Compress,
-    );
-    if (rc !== 0) throw new Error("mzml_to_bin failed with code " + rc);
-    const { ptr, len } = this.heap.readOutputSlot(this.blobScratchSlot);
-    return this.heap.copyOutAndFree(ptr, len);
-  }
-
-  private calculateEicNow(
-    handle: number,
-    targetMz: number,
-    from: number,
-    to: number,
-    ppmTolerance: number,
-    mzTolerance: number,
-  ): { x: Float64Array; y: Float64Array } {
-    const rc = this.fn.calculateEic(
-      handle,
-      targetMz,
-      from,
-      to,
-      ppmTolerance,
-      mzTolerance,
-      this.jsonScratchSlot,
-      this.blobScratchSlot,
-    );
-    if (rc !== 0) throw rcError("calculate_eic", rc);
-    const xSlot = this.heap.readOutputSlot(this.jsonScratchSlot);
-    const ySlot = this.heap.readOutputSlot(this.blobScratchSlot);
-    const x = new Float64Array(
-      this.heap.copyOutAndFree(xSlot.ptr, xSlot.len).buffer,
-    );
-    const y = new Float64Array(
-      this.heap.copyOutAndFree(ySlot.ptr, ySlot.len).buffer,
-    );
-    return { x, y };
-  }
-
-  async calculateEic(
-    handle: number,
-    targetMz: number,
-    from: number,
-    to: number,
-    ppmTolerance: number,
-    mzTolerance: number,
-  ): Promise<{ x: Float64Array; y: Float64Array }> {
-    const sourceId = this.source_id_by_handle.get(handle);
-
-    if (sourceId !== undefined) {
-      const source = range_sources.get(sourceId);
-      if (!source) {
-        throw new Error("calculateEic: remote source is missing");
-      }
-
-      const ranges = this.planEic(
-        handle,
-        targetMz,
-        from,
-        to,
-        ppmTolerance,
-        mzTolerance,
-      );
-      await prefetchRangesForSource(source, ranges);
-    }
-
-    return this.calculateEicNow(
-      handle,
-      targetMz,
-      from,
-      to,
-      ppmTolerance,
-      mzTolerance,
-    );
-  }
-
-  async getScans(
-    handle: number,
-    queryType: number,
-    a: number,
-    b: number,
-    level: number,
-  ): Promise<any> {
-    const sourceId = this.source_id_by_handle.get(handle);
-
-    if (sourceId !== undefined) {
-      const source = range_sources.get(sourceId);
-      if (!source) {
-        throw new Error("getScans: remote source is missing");
-      }
-
-      const ranges = this.planScans(handle, queryType, a, b, level);
-      await prefetchRangesForSource(source, ranges);
-    }
-
-    const rc = this.fn.getScans(
-      handle,
-      queryType,
-      a,
-      b,
-      level,
-      this.bridgeOutputSlot,
-    );
-    if (rc !== 0) throw new Error("get_scans failed with code " + rc);
-    return readScans(this.heap.readBridgeFromSlot(this.bridgeOutputSlot));
-  }
-
-  private getIonImageNow(
-    handle: number,
-    mz: number,
-    tolerance: number,
-    level: number,
-  ): any {
-    const rc = this.fn.getIonImage(
-      handle,
-      mz,
-      tolerance,
-      level,
-      this.bridgeOutputSlot,
-    );
-    if (rc !== 0) throw new Error("get_ion_image failed with code " + rc);
-    return readIonImage(this.heap.readBridgeFromSlot(this.bridgeOutputSlot));
-  }
-
-  async getIonImage(
-    handle: number,
-    mz: number,
-    tolerance: number,
-    level: number,
-    onProgress?: (fetched: number, total: number, heldBytes: number) => void,
-  ): Promise<any> {
-    const sourceId = this.source_id_by_handle.get(handle);
-
-    if (sourceId !== undefined) {
-      const source = range_sources.get(sourceId);
-      if (!source) {
-        throw new Error("getIonImage: remote source is missing");
-      }
-      return this.computeImageStreaming(
-        source,
-        handle,
-        mz,
-        tolerance,
-        level,
-        onProgress,
-      );
-    }
-
-    return this.getIonImageNow(handle, mz, tolerance, level);
-  }
-
-  findPeaks(
-    x: Float64Array,
-    y: Float64Array,
-    opts: PeakOptions | undefined,
-  ): any {
-    const [xPtr, xLen] = this.heap.allocAndWrite(toUint8View(x));
-    const [yPtr, yLen] = this.heap.allocAndWrite(toUint8View(y));
-    let rc: number;
-    try {
-      rc = this.fn.findPeaks(
-        xPtr,
-        yPtr,
-        x.length,
-        this.peakOptsPtr(opts),
-        this.bridgeOutputSlot,
-      );
-    } finally {
-      this.heap.freeMany([
-        [xPtr, xLen],
-        [yPtr, yLen],
-      ]);
-    }
-    if (rc !== 0) throw new Error("find_peaks failed with code " + rc);
-    return readRecords(this.heap.readBridgeFromSlot(this.bridgeOutputSlot));
-  }
-
-  getPeak(
-    x: Float64Array,
-    y: Float64Array,
-    rt: number,
-    range: number,
-    opts: PeakOptions | undefined,
-  ): any {
-    const [xPtr, xLen] = this.heap.allocAndWrite(toUint8View(x));
-    const [yPtr, yLen] = this.heap.allocAndWrite(toUint8View(y));
-    let rc: number;
-    try {
-      rc = this.fn.getPeak(
-        xPtr,
-        yPtr,
-        x.length,
-        rt,
-        range,
-        this.peakOptsPtr(opts),
-        this.bridgeOutputSlot,
-      );
-    } finally {
-      this.heap.freeMany([
-        [xPtr, xLen],
-        [yPtr, yLen],
-      ]);
-    }
-    if (rc !== 0) throw new Error("get_peak failed with code " + rc);
-    return readRecords(this.heap.readBridgeFromSlot(this.bridgeOutputSlot));
-  }
-
-  findNoiseLevel(y: Float32Array): NoiseLevel {
-    const [yPtr, yLen] = this.heap.allocAndWrite(toUint8View(y));
-    let rc: number;
-    try {
-      rc = this.fn.findNoiseLevel(
-        yPtr,
-        y.length,
-        this.noiseLevelSlot,
-        this.noiseLevelSlot + NOISE_LEVEL_INTENSITY_OFFSET,
-      );
-    } finally {
-      this.fn.free(yPtr, yLen);
-    }
-    if (rc !== 0) throw new Error("find_noise_level failed with code " + rc);
-    return {
-      width: this.heap.readU32(this.noiseLevelSlot),
-      intensity: this.heap.readF64(
-        this.noiseLevelSlot + NOISE_LEVEL_INTENSITY_OFFSET,
-      ),
-    };
-  }
-
-  calculateBaseline(
-    y: Float64Array,
-    lambda: number,
-    maxIterations: number,
-  ): Float64Array {
-    const [yPtr, yLen] = this.heap.allocAndWrite(toUint8View(y));
-    let rc: number;
-    try {
-      rc = this.fn.calculateBaseline(
-        yPtr,
-        y.length,
-        lambda,
-        maxIterations,
-        this.baselineScratchSlot,
-      );
-    } finally {
-      this.fn.free(yPtr, yLen);
-    }
-    if (rc !== 0) throw new Error("calculate_baseline failed with code " + rc);
-    const { ptr, len } = this.heap.readOutputSlot(this.baselineScratchSlot);
-    return new Float64Array(this.heap.copyOutAndFree(ptr, len).buffer);
-  }
-
-  getPeaksFromEic(
-    handle: number,
-    rts: Float64Array,
-    mzs: Float64Array,
-    ranges: Float64Array,
-    offsets: Uint32Array | null,
-    lengths: Uint32Array | null,
-    idBytes: Uint8Array | null,
-    idBytesLen: number,
-    count: number,
-    from: number,
-    to: number,
-    opts: PeakOptions | undefined,
-    cores: number,
-  ): any {
-    this.assertLocalHandle(handle, "getPeaksFromEic");
-    const emptyU32 = new Uint32Array(count);
-    const emptyBytes = new Uint8Array(0);
-    const [rtPtr, rtLen] = this.heap.allocAndWrite(toUint8View(rts));
-    const [mzPtr, mzLen] = this.heap.allocAndWrite(toUint8View(mzs));
-    const [rangePtr, rangeLen] = this.heap.allocAndWrite(toUint8View(ranges));
-    const [offPtr, offLen] = this.heap.allocAndWrite(
-      toUint8View(offsets ?? emptyU32),
-    );
-    const [lenPtr, lenLen] = this.heap.allocAndWrite(
-      toUint8View(lengths ?? emptyU32),
-    );
-    const [idPtr, idLen] = this.heap.allocAndWrite(idBytes ?? emptyBytes);
-    let rc: number;
-    try {
-      rc = this.fn.getPeaksFromEic(
-        handle,
-        rtPtr,
-        mzPtr,
-        rangePtr,
-        offPtr,
-        lenPtr,
-        idPtr,
-        idBytesLen,
-        count,
-        from,
-        to,
-        this.peakOptsPtr(opts),
-        cores,
-        this.bridgeOutputSlot,
-      );
-    } finally {
-      this.heap.freeMany([
-        [rtPtr, rtLen],
-        [mzPtr, mzLen],
-        [rangePtr, rangeLen],
-        [offPtr, offLen],
-        [lenPtr, lenLen],
-        [idPtr, idLen],
-      ]);
-    }
-    if (rc !== 0) throw rcError("get_peaks_from_eic", rc);
-    return readRecords(this.heap.readBridgeFromSlot(this.bridgeOutputSlot));
-  }
-
-  getPeaksFromChrom(
-    handle: number,
-    indices: Uint32Array,
-    rts: Float64Array,
-    windows: Float64Array,
-    count: number,
-    opts: PeakOptions | undefined,
-    cores: number,
-  ): any {
-    this.assertLocalHandle(handle, "getPeaksFromChrom");
-    const [idxPtr, idxLen] = this.heap.allocAndWrite(toUint8View(indices));
-    const [rtPtr, rtLen] = this.heap.allocAndWrite(toUint8View(rts));
-    const [winPtr, winLen] = this.heap.allocAndWrite(toUint8View(windows));
-    let rc: number;
-    try {
-      rc = this.fn.getPeaksFromChrom(
-        handle,
-        idxPtr,
-        rtPtr,
-        winPtr,
-        count,
-        this.peakOptsPtr(opts),
-        cores,
-        this.bridgeOutputSlot,
-      );
-    } finally {
-      this.heap.freeMany([
-        [idxPtr, idxLen],
-        [rtPtr, rtLen],
-        [winPtr, winLen],
-      ]);
-    }
-    if (rc !== 0)
-      throw new Error("get_peaks_from_chrom failed with code " + rc);
-    return readRecords(this.heap.readBridgeFromSlot(this.bridgeOutputSlot));
-  }
-
-  findFeature(
-    handle: number,
-    rts: Float64Array,
-    mzs: Float64Array,
-    ranges: Float64Array,
-    offsets: Uint32Array | null,
-    lengths: Uint32Array | null,
-    idBytes: Uint8Array | null,
-    idBytesLen: number,
-    count: number,
-    cores: number,
-    scanPpm: number,
-    scanMz: number,
-    eicPpm: number,
-    eicMz: number,
-    opts: PeakOptions | undefined,
-  ): any {
-    this.assertLocalHandle(handle, "findFeature");
-    const emptyU32 = new Uint32Array(count);
-    const emptyBytes = new Uint8Array(0);
-    const [rtPtr, rtLen] = this.heap.allocAndWrite(toUint8View(rts));
-    const [mzPtr, mzLen] = this.heap.allocAndWrite(toUint8View(mzs));
-    const [rangePtr, rangeLen] = this.heap.allocAndWrite(toUint8View(ranges));
-    const [offPtr, offLen] = this.heap.allocAndWrite(
-      toUint8View(offsets ?? emptyU32),
-    );
-    const [lenPtr, lenLen] = this.heap.allocAndWrite(
-      toUint8View(lengths ?? emptyU32),
-    );
-    const [idPtr, idLen] = this.heap.allocAndWrite(idBytes ?? emptyBytes);
-    let rc: number;
-    try {
-      rc = this.fn.findFeature(
-        handle,
-        rtPtr,
-        mzPtr,
-        rangePtr,
-        offPtr,
-        lenPtr,
-        idPtr,
-        idBytesLen,
-        count,
-        cores,
-        scanPpm,
-        scanMz,
-        eicPpm,
-        eicMz,
-        this.peakOptsPtr(opts),
-        this.bridgeOutputSlot,
-      );
-    } finally {
-      this.heap.freeMany([
-        [rtPtr, rtLen],
-        [mzPtr, mzLen],
-        [rangePtr, rangeLen],
-        [offPtr, offLen],
-        [lenPtr, lenLen],
-        [idPtr, idLen],
-      ]);
-    }
-    if (rc !== 0) throw new Error("find_feature failed with code " + rc);
-    return readRecords(this.heap.readBridgeFromSlot(this.bridgeOutputSlot));
-  }
-
-  private peakOptsPtr(opts: PeakOptions | undefined): number {
-    if (!opts) return 0;
-    const packed = packPeakOptions(opts);
-    this.heap.writeBytesAt(this.peakOptionsSlot, packed);
-    return this.peakOptionsSlot;
-  }
-}
-
-function make_range_read_import(): (
-  source_id: number,
-  offset_lo: number,
-  offset_hi: number,
-  len: number,
-  dest_ptr: number,
-) => number {
-  return (
-    source_id: number,
-    offset_lo: number,
-    offset_hi: number,
-    len: number,
-    dest_ptr: number,
-  ): number => {
-    if (!wasm_memory) return -1;
-
-    const source = range_sources.get(source_id >>> 0);
-    if (!source) return -1;
-
-    const offset = BigInt(offset_lo >>> 0) + (BigInt(offset_hi >>> 0) << 32n);
-    const length = BigInt(len >>> 0);
-
-    const bytes = source.cache.read(offset, length);
-    if (!bytes) return -1;
-
-    new Uint8Array(wasm_memory.buffer, dest_ptr >>> 0, len >>> 0).set(bytes);
-    return 0;
-  };
-}
-
-async function load_and_instantiate(
-  bytes: ArrayBuffer | Uint8Array,
-): Promise<WasmApi> {
-  const imports = {
-    env: {
-      js_log: (_ptr: number, _len: number) => {},
-      range_read: make_range_read_import(),
-    },
-  };
-  const result = await WebAssembly.instantiate(bytes, imports);
-  const instance = (result as any).instance as WebAssembly.Instance;
-  wasm_memory = (instance.exports as any).memory as WebAssembly.Memory;
-  return new WasmApi(instance);
-}
-
-async function loadWasm(): Promise<WasmApi> {
-  if (IS_INLINE_BUILD) {
-    if (!__WASM_DATA_URL__)
-      throw new Error("Inline build is missing __WASM_DATA_URL__");
-    const bytes = await fetch(__WASM_DATA_URL__).then((r) => r.arrayBuffer());
-    return load_and_instantiate(bytes);
-  }
-
-  if (typeof process !== "undefined" && (process as any).versions?.node) {
-    const nfs = require("node:fs");
-    const npath = require("node:path");
-    const nurl = require("node:url");
-    const dir =
-      typeof __dirname !== "undefined"
-        ? __dirname
-        : npath.dirname(nurl.fileURLToPath((0, eval)("import.meta").url));
-    const bytes = nfs.readFileSync(npath.join(dir, "quantion.wasm"));
-    return load_and_instantiate(bytes);
-  }
-
-  throw new Error(
-    "Browser ESM build requires the UMD inline bundle (quantion.js)",
-  );
-}
-
-export class WasmBackend implements Backend {
-  private api: WasmApi | null = null;
-  ready = false;
-  readonly handlesAreGcFinalized = false;
-
-  async init(): Promise<void> {
-    if (this.api) return;
-    this.api = await loadWasm();
-    this.ready = true;
-  }
-
-  private getApi(): WasmApi {
-    if (!this.api)
-      throw new Error("WasmBackend not initialized — call init() first");
-    return this.api;
-  }
-
-  parseMzML(data: Uint8Array): FileHandle {
-    return this.getApi().parseMzMLRaw(data);
-  }
-
-  parseBin(data: Uint8Array, maxCacheSize = 0): FileHandle {
-    return this.getApi().parseBinRaw(data, maxCacheSize);
-  }
-
-  parseIonPath(_path: string, _cacheSize = 0): FileHandle {
-    throw new Error(
-      "parseIon: file paths need the Node backend; pass a URL or a buffer in the browser",
-    );
-  }
-
-  async parseIonRemote(url: URL, cacheSize = 0): Promise<FileHandle> {
-    return this.getApi().parseIonUrl(url.href, cacheSize);
-  }
-
-  parseIonBuffer(bytes: Uint8Array, cacheSize = 0): FileHandle {
-    return this.getApi().parseBinRaw(bytes, cacheSize);
-  }
-
-  freeFile(handle: FileHandle): void {
-    this.getApi().freeRaw(handle as number);
-  }
-
-  fileToMzml(handle: FileHandle): string {
-    return this.getApi().fileToMzml(handle as number);
-  }
-
-  fileToBin(
-    handle: FileHandle,
-    level: number,
-    f32Compress: boolean,
-  ): Uint8Array {
-    return this.getApi().fileToBin(
-      handle as number,
-      level,
-      f32Compress ? 1 : 0,
-    );
-  }
-
-  async calculateEic(
-    handle: FileHandle,
-    targetMz: number,
-    from: number,
-    to: number,
-    ppmTol: number,
-    mzTol: number,
-  ): Promise<{ x: Float64Array; y: Float64Array }> {
-    return this.getApi().calculateEic(
-      handle as number,
-      targetMz,
-      from,
-      to,
-      ppmTol,
-      mzTol,
-    );
-  }
-
-  async getScans(
-    handle: FileHandle,
-    queryType: number,
-    a: number,
-    b: number,
-    level: number,
-  ): Promise<any> {
-    return this.getApi().getScans(handle as number, queryType, a, b, level);
-  }
-
-  async getIonImage(
-    handle: FileHandle,
-    mz: number,
-    tolerance: number,
-    level: number,
-    onProgress?: (fetched: number, total: number, heldBytes: number) => void,
-  ): Promise<any> {
-    return this.getApi().getIonImage(
-      handle as number,
-      mz,
-      tolerance,
-      level,
-      onProgress,
-    );
-  }
-
-  findPeaks(
-    x: Float64Array,
-    y: Float64Array,
-    opts: PeakOptions | undefined,
-  ): any {
-    return this.getApi().findPeaks(x, y, opts);
-  }
-
-  getPeak(
-    x: Float64Array,
-    y: Float64Array,
-    rt: number,
-    range: number,
-    opts: PeakOptions | undefined,
-  ): any {
-    return this.getApi().getPeak(x, y, rt, range, opts);
-  }
-
-  findNoiseLevel(y: Float32Array): NoiseLevel {
-    const y32 = y instanceof Float32Array ? y : new Float32Array(y);
-    return this.getApi().findNoiseLevel(y32);
-  }
-
-  calculateBaseline(
-    y: Float64Array,
-    lambda: number,
-    maxIterations: number,
-  ): Float64Array {
-    return this.getApi().calculateBaseline(y, lambda, maxIterations);
-  }
-
-  getPeaksFromEic(
-    handle: FileHandle,
-    rts: Float64Array,
-    mzs: Float64Array,
-    ranges: Float64Array,
-    offsets: Uint32Array | null,
-    lengths: Uint32Array | null,
-    idBytes: Uint8Array | null,
-    idBytesLen: number,
-    count: number,
-    from: number,
-    to: number,
-    opts: PeakOptions | undefined,
-    cores: number,
-  ): any {
-    return this.getApi().getPeaksFromEic(
-      handle as number,
-      rts,
-      mzs,
-      ranges,
-      offsets,
-      lengths,
-      idBytes,
-      idBytesLen,
-      count,
-      from,
-      to,
-      opts,
-      cores,
-    );
-  }
-
-  getPeaksFromChrom(
-    handle: FileHandle,
-    indices: Uint32Array,
-    rts: Float64Array,
-    windows: Float64Array,
-    count: number,
-    opts: PeakOptions | undefined,
-    cores: number,
-  ): any {
-    return this.getApi().getPeaksFromChrom(
-      handle as number,
-      indices,
-      rts,
-      windows,
-      count,
-      opts,
-      cores,
-    );
-  }
-
-  findFeature(
-    handle: FileHandle,
-    rts: Float64Array,
-    mzs: Float64Array,
-    ranges: Float64Array,
-    offsets: Uint32Array | null,
-    lengths: Uint32Array | null,
-    idBytes: Uint8Array | null,
-    idBytesLen: number,
-    count: number,
-    cores: number,
-    scanPpm: number,
-    scanMz: number,
-    eicPpm: number,
-    eicMz: number,
-    opts: PeakOptions | undefined,
-  ): any {
-    return this.getApi().findFeature(
-      handle as number,
-      rts,
-      mzs,
-      ranges,
-      offsets,
-      lengths,
-      idBytes,
-      idBytesLen,
-      count,
-      cores,
-      scanPpm,
-      scanMz,
-      eicPpm,
-      eicMz,
-      opts,
-    );
   }
 }

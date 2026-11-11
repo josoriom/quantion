@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from "@jest/globals";
 import {
   coalesceRanges,
+  fetchRange,
   fetchRangeParts,
   newRemoteSource,
   prefetchRanges,
@@ -194,6 +195,33 @@ describe("prefetchRanges", () => {
     expect(source.cache.read(7168n, 512n)).toEqual(data.subarray(7168, 7680));
   });
 
+  test("a refused multi-range request falls back to single ranges", async () => {
+    const data = sample(8192);
+    const { fetcher } = serve(data, "multipart");
+    globalThis.fetch = (async (url: string, init: any) => {
+      if ((init.headers.Range as string).includes(",")) throw new TypeError("Failed to fetch");
+      return fetcher(url, init);
+    }) as any;
+
+    const source = newRemoteSource("http://x/f.ion");
+    await prefetchRanges(source, spread(8));
+
+    expect(source.multipart).toBe(false);
+    expect(source.cache.read(0n, 512n)).toEqual(data.subarray(0, 512));
+    expect(source.cache.read(7168n, 512n)).toEqual(data.subarray(7168, 7680));
+  });
+
+  test("a request with no answer names the file and hides the query", async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as any;
+
+    const reading = fetchRange("https://x.test/files/f.ion?key=SECRET", { offset: 0n, length: 16n } as ByteRangeResult);
+
+    await expect(reading).rejects.toThrow("no answer from https://x.test/files/f.ion?… (Failed to fetch)");
+    await expect(reading).rejects.not.toThrow("SECRET");
+  });
+
   test("splitByteRanges reads parts by their own Content-Range", () => {
     const data = sample(4096);
     const parts = splitByteRanges(
@@ -225,7 +253,7 @@ describe("fetchRangeParts", () => {
 
     expect(calls.length).toBe(3);
     expect(bytes.length).toBe(size);
-    expect(bytes).toEqual(data);
+    expect(Buffer.compare(bytes, data)).toBe(0);
 
     globalThis.fetch = original;
   });
@@ -240,7 +268,9 @@ describe("fetchRangeParts", () => {
     await prefetchRanges(source, [{ offset: 0n, length: BigInt(size) }]);
 
     expect(calls.length).toBe(2);
-    expect(source.cache.read(0n, BigInt(size))).toEqual(data);
+    const cached = source.cache.read(0n, BigInt(size));
+    expect(cached).not.toBeNull();
+    expect(Buffer.compare(cached as Uint8Array, data)).toBe(0);
 
     globalThis.fetch = original;
   });

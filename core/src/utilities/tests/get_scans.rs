@@ -1,20 +1,19 @@
-use std::sync::Arc;
-
 use ionic::{
-    WriteOptions,
-    ion::{BytesSource, IonReader, ReadBytes, ReadOptions},
+    IonReader, ReadOptions, WriteOptions,
     mzml::structs::{
         BinaryDataArray, BinaryDataArrayList, CvParam, MzML, NumericArray, NumericType, Run, Scan,
         ScanList, Spectrum, SpectrumList,
     },
-    write_mzml_to_ion,
 };
 
 use crate::{
-    ffi::{FileSource, ParsedFile},
+    ffi::ParsedFile,
+    sample_file::FileSource,
     utilities::{
-        calculate_eic::{ScanQuery, TimeUnit, get_scans},
-        structs::FromTo,
+        calculate_eic::TimeUnit,
+        get_scans::get_scans,
+        ion::write_mzml_to_ion,
+        structs::{FromTo, Position, ScanQuery},
     },
 };
 
@@ -109,25 +108,23 @@ fn open_split_ion() -> ParsedFile {
         &mut bytes,
     )
     .expect("ion encode failed");
-    let bytes = Arc::from(bytes.into_boxed_slice());
-    let ion = IonReader::open_source(
-        Arc::new(BytesSource::new(bytes)) as Arc<dyn ReadBytes>,
-        ReadOptions::default(),
-    )
-    .expect("open ion failed");
+    let ion = IonReader::from_bytes(&bytes, &ReadOptions::default()).expect("open ion failed");
     ParsedFile::new(FileSource::Lazy(Box::new(ion)))
 }
 
 #[test]
 fn returns_every_segment_of_a_split_spectrum() {
     let mut file = open_split_ion();
-    let (_, scans) = get_scans(
+    let scans = get_scans(
         &mut file,
-        ScanQuery::RtRange(FromTo {
-            from: 0.0,
-            to: 10.0,
-        }),
-        TimeUnit::Minutes,
+        ScanQuery {
+            rt: Position::Range(FromTo {
+                from: 0.0,
+                to: 10.0,
+            }),
+            ..Default::default()
+        },
+        TimeUnit::MINUTES,
         1,
     );
 
@@ -141,10 +138,13 @@ fn returns_every_segment_of_a_split_spectrum() {
 #[test]
 fn rt_range_keeps_only_scans_in_window() {
     let mut file = open_split_ion();
-    let (_, scans) = get_scans(
+    let scans = get_scans(
         &mut file,
-        ScanQuery::RtRange(FromTo { from: 1.5, to: 2.5 }),
-        TimeUnit::Minutes,
+        ScanQuery {
+            rt: Position::Range(FromTo { from: 1.5, to: 2.5 }),
+            ..Default::default()
+        },
+        TimeUnit::MINUTES,
         1,
     );
 
@@ -156,7 +156,15 @@ fn rt_range_keeps_only_scans_in_window() {
 #[test]
 fn closest_rt_returns_the_nearest_full_scan() {
     let mut file = open_split_ion();
-    let (_, scans) = get_scans(&mut file, ScanQuery::ClosestRt(2.9), TimeUnit::Minutes, 1);
+    let scans = get_scans(
+        &mut file,
+        ScanQuery {
+            rt: Position::Closest(2.9),
+            ..Default::default()
+        },
+        TimeUnit::MINUTES,
+        1,
+    );
 
     assert_eq!(scans.len(), 1);
     assert_eq!(scans[0].rt, 3.0);
@@ -166,13 +174,16 @@ fn closest_rt_returns_the_nearest_full_scan() {
 #[test]
 fn ms_level_filter_excludes_other_levels() {
     let mut file = open_split_ion();
-    let (_, scans) = get_scans(
+    let scans = get_scans(
         &mut file,
-        ScanQuery::RtRange(FromTo {
-            from: 0.0,
-            to: 10.0,
-        }),
-        TimeUnit::Minutes,
+        ScanQuery {
+            rt: Position::Range(FromTo {
+                from: 0.0,
+                to: 10.0,
+            }),
+            ..Default::default()
+        },
+        TimeUnit::MINUTES,
         2,
     );
 

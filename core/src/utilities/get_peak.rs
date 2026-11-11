@@ -1,19 +1,19 @@
-use crate::utilities::{
-    find_peaks::{FindPeaksOptions, find_peaks},
-    structs::{DataXY, Peak, Roi},
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        find_peaks::{Separation, find_separated_peaks},
+        structs::{DataXY, Peak, Roi},
+    },
 };
 
 const LOCAL_WINDOW_MINUTES: f64 = 2.0;
-const DEFAULT_MAX_DRIFT: f64 = 0.5;
 
-pub fn get_peak(data: &DataXY, roi: &Roi, options: Option<FindPeaksOptions>) -> Peak {
-    let Roi::Peak { rt, range } = roi else {
-        return Peak::default();
-    };
-    let (rt, range) = (*rt, *range);
+pub fn get_peak(data: &DataXY, roi: &Roi, options: &FindPeaksOptions) -> Peak {
+    let Roi { rt, range } = *roi;
+    let search_whole_trace = !(range.is_finite() && range > 0.0);
 
     let local;
-    let section: &DataXY = if rt.is_finite() {
+    let section: &DataXY = if rt.is_finite() && !search_whole_trace {
         local = crop_around(data, rt, LOCAL_WINDOW_MINUTES);
         &local
     } else {
@@ -24,19 +24,25 @@ pub fn get_peak(data: &DataXY, roi: &Roi, options: Option<FindPeaksOptions>) -> 
         return Peak::default();
     }
 
-    let peaks = find_peaks(section, options);
-    let max_drift = if range.is_finite() && range > 0.0 {
-        range
+    let peaks = find_separated_peaks(section, options, Separation::EXPECTED_PEAK);
+    let max_drift = if search_whole_trace {
+        get_trace_length(section)
     } else {
-        DEFAULT_MAX_DRIFT
+        range
     };
 
     pick_peak(&peaks, rt, max_drift)
 }
 
+fn get_trace_length(data: &DataXY) -> f64 {
+    let first = data.x.iter().copied().fold(f64::INFINITY, f64::min);
+    let last = data.x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    (last - first).max(f64::MIN_POSITIVE)
+}
+
 fn position_weight(peak_rt: f64, target: f64, max_drift: f64) -> f64 {
     let drift = (peak_rt - target) / max_drift;
-    1.0 - drift.abs()
+    (1.0 - drift.abs()).max(0.0).powi(2)
 }
 
 fn pick_peak(peaks: &[Peak], target: f64, max_drift: f64) -> Peak {
@@ -82,11 +88,12 @@ fn crop_around(data: &DataXY, center: f64, range: f64) -> DataXY {
 
 #[cfg(test)]
 mod tests {
-    use crate::utilities::{
-        calculate_baseline::BaselineOptions,
-        find_peaks::{FindPeaksOptions, PeakFilter},
-        get_peak::get_peak,
-        structs::{DataXY, Roi},
+    use crate::{
+        traces::FindPeaksOptions,
+        utilities::{
+            get_peak::get_peak,
+            structs::{DataXY, Roi},
+        },
     };
 
     fn bell(rt: f64, center: f64, width: f64, height: f64) -> f64 {
@@ -94,27 +101,7 @@ mod tests {
     }
 
     fn default_options() -> FindPeaksOptions {
-        FindPeaksOptions {
-            boundaries: Some(Default::default()),
-            filter: Some(PeakFilter {
-                min_integral: None,
-                min_intensity: Some(500.0),
-                min_peak_width_points: Some(3),
-                noise: None,
-                auto_noise: Some(true),
-                auto_baseline: Some(true),
-                allow_overlap: Some(false),
-                min_snr: Some(2.0),
-                noise_method: None,
-                kernel_size: None,
-            }),
-            baseline: Some(BaselineOptions {
-                lambda: None,
-                max_iterations: None,
-                edge_slope_level: Some(1),
-            }),
-            artifact_filter: Some(Default::default()),
-        }
+        FindPeaksOptions::default()
     }
 
     fn build_eic(
@@ -144,8 +131,11 @@ mod tests {
             }
             height
         });
-        let roi = Roi::peak(center, 1.0);
-        let peak = get_peak(&eic, &roi, Some(default_options()));
+        let roi = Roi {
+            rt: center,
+            range: 1.0,
+        };
+        let peak = get_peak(&eic, &roi, &default_options());
         assert!(peak.intensity > 0.0, "strong peak should be found");
         assert!((peak.rt - center).abs() < 0.05);
         assert!(peak.intensity > 100_000.0);
@@ -155,8 +145,11 @@ mod tests {
     fn finds_isolated_peak_without_local_baseline_1() {
         let center = 28.6;
         let eic = build_eic(28.1, 29.1, 120, |rt| bell(rt, center, 0.05, 350_000.0));
-        let roi = Roi::peak(center, 1.0);
-        let peak = get_peak(&eic, &roi, Some(default_options()));
+        let roi = Roi {
+            rt: center,
+            range: 1.0,
+        };
+        let peak = get_peak(&eic, &roi, &default_options());
         assert!(
             peak.intensity > 0.0,
             "isolated peak on a flat baseline should be found"

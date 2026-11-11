@@ -1,14 +1,26 @@
 Package: quantion
 Type: Package
-Title: quantion
-Version: 0.1.1
-Authors@R: person("J", "Osorio", email = "josoriom93@gmail.com", role = c("aut","cre"))
-Author: J Osorio
+Title: Peak Detection and Quantification for Mass Spectrometry Data
+Version: 0.2.2
+Authors@R: c(
+    person("J", "Osorio", email = "josoriom93@gmail.com", role = c("aut", "cre", "cph")),
+    person("Julien", "Wist", role = "cph"),
+    person("Jorge", "Osorio M.", role = "cph"),
+    person("Authors of the dependency Rust crates", role = "ctb",
+           comment = "see inst/AUTHORS"))
+Author: J Osorio [aut, cre, cph], Julien Wist [cph], Jorge Osorio M. [cph],
+    Authors of the dependency Rust crates [ctb] (see inst/AUTHORS)
 Maintainer: J Osorio <josoriom93@gmail.com>
-Description: Base-R bindings to the quantion native library built in Rust.
+Description: Reads 'mzML' and 'ion' mass spectrometry files, extracts ion
+    chromatograms, finds and integrates chromatographic peaks, detects and
+    aligns features across samples, and predicts retention times with an
+    'ONNX' warp model. The computations run in a native library written in
+    'Rust'.
 Depends: R (>= 4.0)
-Imports: jsonlite, utils
+Imports: curl, utils
 Suggests: parallel, testthat, callr
-License: MIT
+SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88)
+License: MIT + file LICENSE
+URL: https://phenological.github.io/quantion/, https://github.com/phenological/quantion
+BugReports: https://github.com/phenological/quantion/issues
 Encoding: UTF-8
-LazyData: true

@@ -1,0 +1,669 @@
+entry src/index-node.ts
+
+function annotateFeatures(files: SampleFile[], features: Array<{ mz: number; rt: number; }>, options?: AnnotateFeaturesOptions): Promise<FeatureAnnotation[]>
+
+interface AnnotateFeaturesOptions
+    library?: string | undefined
+    matches?: number | undefined
+    minRelativeIntensity?: number | undefined
+    model?: string | undefined
+    mzTolerance?: number | undefined
+    ppmTolerance?: number | undefined
+    rtRange?: number | undefined
+
+type BinaryInput = BinaryInput
+
+function calculateBaseline(y: Float64Array, options?: CalculateBaselineOptions): Float64Array
+
+interface CalculateBaselineOptions
+    lambda?: number | undefined
+    maxIterations?: number | undefined
+
+function calculateEic(file: SampleFile, mz: number, options?: CalculateEicOptions): Promise<DataXY>
+
+interface CalculateEicOptions
+    from?: number | undefined
+    mzTolerance?: number | undefined
+    ppmTolerance?: number | undefined
+    timeUnit?: TimeUnit | undefined
+    to?: number | undefined
+
+interface CompoundMatch
+    cosine: number
+    database: string
+    id: string
+    intensity: Float64Array<ArrayBufferLike>
+    label: string
+    metadata: Record<string, string>
+    mz: Float64Array<ArrayBufferLike>
+    score: number
+
+interface DataXY
+    x: Float64Array<ArrayBufferLike>
+    y: Float64Array<ArrayBufferLike>
+
+function deisotopeFeatures(features: Feature[], options?: DeisotopeFeaturesOptions): Feature[]
+
+interface DeisotopeFeaturesOptions
+    mzTolerance?: number | undefined
+    rtTolerance?: number | undefined
+
+function drawPeaks(params: PeakParameters[], options?: DrawPeaksOptions): DataXY
+
+interface DrawPeaksOptions
+    from?: number | undefined
+    points?: number | undefined
+    to?: number | undefined
+
+const ERROR_CODES: { readonly invalid_argument: 1; readonly missing_argument: 2; readonly unknown_option: 3; readonly remote_file: 4; readonly file_not_found: 5; readonly parse_failed: 6; readonly model_mismatch: 7; readonly file_exists: 8; readonly upload_failed: 9; readonly internal: 99; }
+
+type ErrorKind = "invalid_argument" | "missing_argument" | "unknown_option" | "remote_file" | "file_not_found" | "parse_failed" | "model_mismatch" | "file_exists" | "upload_failed" | "internal"
+
+interface Feature
+    frequency?: number | undefined
+    from: number
+    integral: number
+    intensity: number
+    mz: number
+    nPoints: number
+    rt: number
+    to: number
+
+interface FeatureAnnotation
+    cosine: number | null
+    database: string | null
+    files: FileAnnotation[]
+    frequency: number
+    id: string | null
+    label: string | null
+    mz: number
+    rt: number
+    score: number | null
+
+interface FileAnnotation
+    file: number
+    matches: CompoundMatch[]
+    scanIndex: number | null
+
+function findFeatures(file: SampleFile, options?: FindFeaturesOptions): Promise<Feature[]>
+
+interface FindFeaturesOptions
+    eic?: CalculateEicOptions | undefined
+    findPeaks?: FindPeaksOptions | undefined
+    grid?: GridOptions | undefined
+    threads?: number | undefined
+
+function findNoiseLevel(y: Float64Array | Float32Array): NoiseLevel
+
+function findPeaks(x: Float64Array, y: Float64Array, options?: FindPeaksOptions): Peak[]
+
+interface FindPeaksOptions
+    allowOverlap?: boolean | undefined
+    autoBaseline?: boolean | undefined
+    autoNoise?: boolean | undefined
+    kernelSize?: number | undefined
+    lambda?: number | undefined
+    maxIterations?: number | undefined
+    minIntegral?: number | undefined
+    minIntensity?: number | undefined
+    minPeakWidthPoints?: number | undefined
+    minR2?: number | undefined
+    minSnr?: number | undefined
+    noise?: number | undefined
+    shape?: PeakShape | undefined
+
+function findTargets(file: SampleFile, targets: Target[], options?: FindTargetsOptions): Promise<Peak[]>
+
+interface FindTargetsOptions
+    eic?: CalculateEicOptions | undefined
+    findPeaks?: FindPeaksOptions | undefined
+    threads?: number | undefined
+
+function findTransitions(file: SampleFile, targets: Transition[], options?: FindTransitionsOptions): Peak[]
+
+interface FindTransitionsOptions
+    findPeaks?: FindPeaksOptions | undefined
+    threads?: number | undefined
+
+function fitPeak(x: Float64Array, y: Float64Array, rt: number, options?: FitPeakOptions): PeakParameters | null
+
+interface FitPeakOptions
+    intensity?: number | undefined
+    shape?: PeakShape | undefined
+
+interface FromTo
+    from: number
+    to: number
+
+function getIonImage(file: SampleFile, mz: number, options?: GetIonImageOptions): Promise<IonImage>
+
+interface GetIonImageOptions
+    level?: number | undefined
+    onProgress?: ((fetched: number, total: number, heldBytes: number) => void) | undefined
+    tolerance?: number | undefined
+
+function getPeak(x: Float64Array, y: Float64Array, rt: number, options?: GetPeakOptions): Peak
+
+interface GetPeakOptions
+    findPeaks?: FindPeaksOptions | undefined
+    range?: number | undefined
+
+function getScanMetadata(file: SampleFile, index: number, options?: GetScanMetadataOptions): Promise<ScanParam[]>
+
+interface GetScanMetadataOptions
+    tags?: string[] | undefined
+
+function getScans(file: SampleFile, query: ScanQuery, options?: GetScansOptions): Promise<Scan[]>
+
+interface GetScansOptions
+    arrays?: ScanArray[] | undefined
+    level?: number | undefined
+    timeUnit?: TimeUnit | undefined
+
+interface GridOptions
+    end?: number | undefined
+    start?: number | undefined
+    stepSize?: number | undefined
+
+interface GroupingOptions
+    minFrequency?: number | undefined
+    mzTolerance?: number | undefined
+    ppmTolerance?: number | undefined
+    rtTolerance?: number | undefined
+
+interface Header
+    name: string
+    value: string
+
+function init(): Promise<void>
+
+interface IonImage
+    counts: Uint32Array<ArrayBufferLike>
+    data: Float64Array<ArrayBufferLike>
+    height: number
+    maxZ: number
+    minX: number
+    minY: number
+    minZ: number
+    width: number
+
+type IonInput = IonInput
+
+function loadModel(source: IonInput): Promise<Model>
+
+function loadWarp(model: Model): WarpModel
+
+function matchFeatures(directory: string, options?: MatchFeaturesOptions): Feature[]
+
+interface MatchFeaturesOptions
+    eic?: CalculateEicOptions | undefined
+    findPeaks?: FindPeaksOptions | undefined
+    grid?: GridOptions | undefined
+    grouping?: GroupingOptions | undefined
+    threads?: number | undefined
+
+class Model
+    dispose: () => void
+    getKeys: () => string[]
+    getValue: (key: string) => string | undefined
+    getValues: () => string[]
+
+interface MzQuery
+    mz: number | FromTo
+
+interface NoiseLevel
+    intensity: number
+    width: number
+
+function parseIon(source: IonInput, options?: ParseIonOptions): Promise<SampleFile>
+
+interface ParseIonOptions
+    maxCacheSize?: number | undefined
+
+function parseMzml(source: string | BinaryInput): Promise<SampleFile>
+
+interface Peak
+    from: number
+    integral: number
+    intensity: number
+    nPoints: number
+    rt: number
+    to: number
+
+interface PeakParameters
+    center: number
+    fwhm: number
+    height: number
+    r2?: number | undefined
+    tail: number
+
+type PeakShape = PeakShape
+const PeakShape: { readonly GAUSSIAN: "GAUSSIAN"; readonly EMG: "EMG"; }
+
+interface PredictedRt
+    rt: number
+    uncertainty: number
+
+class QuantionError
+    argument: string | undefined
+    code: number
+    function: string
+    kind: "invalid_argument" | "missing_argument" | "unknown_option" | "remote_file" | "file_not_found" | "parse_failed" | "model_mismatch" | "file_exists" | "upload_failed" | "internal"
+    message: string
+    name: string
+    stack?: string | undefined
+
+interface RtQuery
+    rt: number | FromTo
+
+class SampleFile
+    dispose: () => void
+
+interface Scan
+    basePeakIntensity: number
+    basePeakMz: number
+    index: number
+    intensity: Float64Array<ArrayBufferLike>
+    level: number
+    mz: Float64Array<ArrayBufferLike>
+    polarity: number
+    precursorMz: number
+    rt: number
+    totalIonCurrent: number
+    x: number
+    y: number
+    z: number
+
+interface ScanArray
+    accession: string
+    key: string
+
+interface ScanParam
+    accession: string | null
+    kind: ScanParamKind
+    name: string
+    path: string
+    unit: string | null
+    unitAccession: string | null
+    value: string | null
+
+type ScanParamKind = ScanParamKind
+const ScanParamKind: { readonly ATTRIBUTE: "ATTRIBUTE"; readonly CV: "CV"; readonly USER: "USER"; }
+
+type ScanQuery = ScanQuery
+
+interface Target
+    id?: string | undefined
+    mz: number
+    range?: number | undefined
+    rt: number
+
+type TimeUnit = TimeUnit
+const TimeUnit: { readonly MINUTES: "MINUTES"; readonly SECONDS: "SECONDS"; }
+
+interface Transition
+    id?: string | undefined
+    precursor: number
+    product: number
+    range: number
+    rt: number
+
+class WarpModel
+    calibrate: (anchorSamples: SampleFile[], targetLists: Target[][]) => Promise<Target[]>
+    dispose: () => void
+    getKeys: () => string[]
+    getValue: (key: string) => string | undefined
+    getValues: () => string[]
+    predictRts: (file: SampleFile, targets: Target[]) => Promise<PredictedRt[]>
+
+function writeIon(file: SampleFile, options?: WriteIonOptions): Promise<Uint8Array | undefined>
+
+interface WriteIonOptions
+    blockSize?: number | undefined
+    f32Compress?: boolean | undefined
+    headers?: Header[] | undefined
+    level?: number | undefined
+    mzWindow?: number | undefined
+    out?: string | URL | undefined
+    overwrite?: boolean | undefined
+
+function writeMzml(file: SampleFile, options?: WriteMzmlOptions): Promise<Uint8Array | undefined>
+
+interface WriteMzmlOptions
+    out?: string | undefined
+    overwrite?: boolean | undefined
+
+entry src/index-wasm.ts
+
+function annotateFeatures(files: SampleFile[], features: Array<{ mz: number; rt: number; }>, options?: AnnotateFeaturesOptions): Promise<FeatureAnnotation[]>
+
+interface AnnotateFeaturesOptions
+    library?: string | undefined
+    matches?: number | undefined
+    minRelativeIntensity?: number | undefined
+    model?: string | undefined
+    mzTolerance?: number | undefined
+    ppmTolerance?: number | undefined
+    rtRange?: number | undefined
+
+type BinaryInput = BinaryInput
+
+function calculateBaseline(y: Float64Array, options?: CalculateBaselineOptions): Float64Array
+
+interface CalculateBaselineOptions
+    lambda?: number | undefined
+    maxIterations?: number | undefined
+
+function calculateEic(file: SampleFile, mz: number, options?: CalculateEicOptions): Promise<DataXY>
+
+interface CalculateEicOptions
+    from?: number | undefined
+    mzTolerance?: number | undefined
+    ppmTolerance?: number | undefined
+    timeUnit?: TimeUnit | undefined
+    to?: number | undefined
+
+interface CompoundMatch
+    cosine: number
+    database: string
+    id: string
+    intensity: Float64Array<ArrayBufferLike>
+    label: string
+    metadata: Record<string, string>
+    mz: Float64Array<ArrayBufferLike>
+    score: number
+
+interface DataXY
+    x: Float64Array<ArrayBufferLike>
+    y: Float64Array<ArrayBufferLike>
+
+function deisotopeFeatures(features: Feature[], options?: DeisotopeFeaturesOptions): Feature[]
+
+interface DeisotopeFeaturesOptions
+    mzTolerance?: number | undefined
+    rtTolerance?: number | undefined
+
+function drawPeaks(params: PeakParameters[], options?: DrawPeaksOptions): DataXY
+
+interface DrawPeaksOptions
+    from?: number | undefined
+    points?: number | undefined
+    to?: number | undefined
+
+const ERROR_CODES: { readonly invalid_argument: 1; readonly missing_argument: 2; readonly unknown_option: 3; readonly remote_file: 4; readonly file_not_found: 5; readonly parse_failed: 6; readonly model_mismatch: 7; readonly file_exists: 8; readonly upload_failed: 9; readonly internal: 99; }
+
+type ErrorKind = "invalid_argument" | "missing_argument" | "unknown_option" | "remote_file" | "file_not_found" | "parse_failed" | "model_mismatch" | "file_exists" | "upload_failed" | "internal"
+
+interface Feature
+    frequency?: number | undefined
+    from: number
+    integral: number
+    intensity: number
+    mz: number
+    nPoints: number
+    rt: number
+    to: number
+
+interface FeatureAnnotation
+    cosine: number | null
+    database: string | null
+    files: FileAnnotation[]
+    frequency: number
+    id: string | null
+    label: string | null
+    mz: number
+    rt: number
+    score: number | null
+
+interface FileAnnotation
+    file: number
+    matches: CompoundMatch[]
+    scanIndex: number | null
+
+function findFeatures(file: SampleFile, options?: FindFeaturesOptions): Promise<Feature[]>
+
+interface FindFeaturesOptions
+    eic?: CalculateEicOptions | undefined
+    findPeaks?: FindPeaksOptions | undefined
+    grid?: GridOptions | undefined
+    threads?: number | undefined
+
+function findNoiseLevel(y: Float64Array | Float32Array): NoiseLevel
+
+function findPeaks(x: Float64Array, y: Float64Array, options?: FindPeaksOptions): Peak[]
+
+interface FindPeaksOptions
+    allowOverlap?: boolean | undefined
+    autoBaseline?: boolean | undefined
+    autoNoise?: boolean | undefined
+    kernelSize?: number | undefined
+    lambda?: number | undefined
+    maxIterations?: number | undefined
+    minIntegral?: number | undefined
+    minIntensity?: number | undefined
+    minPeakWidthPoints?: number | undefined
+    minR2?: number | undefined
+    minSnr?: number | undefined
+    noise?: number | undefined
+    shape?: PeakShape | undefined
+
+function findTargets(file: SampleFile, targets: Target[], options?: FindTargetsOptions): Promise<Peak[]>
+
+interface FindTargetsOptions
+    eic?: CalculateEicOptions | undefined
+    findPeaks?: FindPeaksOptions | undefined
+    threads?: number | undefined
+
+function findTransitions(file: SampleFile, targets: Transition[], options?: FindTransitionsOptions): Peak[]
+
+interface FindTransitionsOptions
+    findPeaks?: FindPeaksOptions | undefined
+    threads?: number | undefined
+
+function fitPeak(x: Float64Array, y: Float64Array, rt: number, options?: FitPeakOptions): PeakParameters | null
+
+interface FitPeakOptions
+    intensity?: number | undefined
+    shape?: PeakShape | undefined
+
+interface FromTo
+    from: number
+    to: number
+
+function getIonImage(file: SampleFile, mz: number, options?: GetIonImageOptions): Promise<IonImage>
+
+interface GetIonImageOptions
+    level?: number | undefined
+    onProgress?: ((fetched: number, total: number, heldBytes: number) => void) | undefined
+    tolerance?: number | undefined
+
+function getPeak(x: Float64Array, y: Float64Array, rt: number, options?: GetPeakOptions): Peak
+
+interface GetPeakOptions
+    findPeaks?: FindPeaksOptions | undefined
+    range?: number | undefined
+
+function getScanMetadata(file: SampleFile, index: number, options?: GetScanMetadataOptions): Promise<ScanParam[]>
+
+interface GetScanMetadataOptions
+    tags?: string[] | undefined
+
+function getScans(file: SampleFile, query: ScanQuery, options?: GetScansOptions): Promise<Scan[]>
+
+interface GetScansOptions
+    arrays?: ScanArray[] | undefined
+    level?: number | undefined
+    timeUnit?: TimeUnit | undefined
+
+interface GridOptions
+    end?: number | undefined
+    start?: number | undefined
+    stepSize?: number | undefined
+
+interface GroupingOptions
+    minFrequency?: number | undefined
+    mzTolerance?: number | undefined
+    ppmTolerance?: number | undefined
+    rtTolerance?: number | undefined
+
+interface Header
+    name: string
+    value: string
+
+function init(): Promise<void>
+
+interface IonImage
+    counts: Uint32Array<ArrayBufferLike>
+    data: Float64Array<ArrayBufferLike>
+    height: number
+    maxZ: number
+    minX: number
+    minY: number
+    minZ: number
+    width: number
+
+type IonInput = IonInput
+
+function loadModel(source: IonInput): Promise<Model>
+
+function loadWarp(model: Model): WarpModel
+
+function matchFeatures(directory: string, options?: MatchFeaturesOptions): Feature[]
+
+interface MatchFeaturesOptions
+    eic?: CalculateEicOptions | undefined
+    findPeaks?: FindPeaksOptions | undefined
+    grid?: GridOptions | undefined
+    grouping?: GroupingOptions | undefined
+    threads?: number | undefined
+
+class Model
+    dispose: () => void
+    getKeys: () => string[]
+    getValue: (key: string) => string | undefined
+    getValues: () => string[]
+
+interface MzQuery
+    mz: number | FromTo
+
+interface NoiseLevel
+    intensity: number
+    width: number
+
+function parseIon(source: IonInput, options?: ParseIonOptions): Promise<SampleFile>
+
+interface ParseIonOptions
+    maxCacheSize?: number | undefined
+
+function parseMzml(source: string | BinaryInput): Promise<SampleFile>
+
+interface Peak
+    from: number
+    integral: number
+    intensity: number
+    nPoints: number
+    rt: number
+    to: number
+
+interface PeakParameters
+    center: number
+    fwhm: number
+    height: number
+    r2?: number | undefined
+    tail: number
+
+type PeakShape = PeakShape
+const PeakShape: { readonly GAUSSIAN: "GAUSSIAN"; readonly EMG: "EMG"; }
+
+interface PredictedRt
+    rt: number
+    uncertainty: number
+
+class QuantionError
+    argument: string | undefined
+    code: number
+    function: string
+    kind: "invalid_argument" | "missing_argument" | "unknown_option" | "remote_file" | "file_not_found" | "parse_failed" | "model_mismatch" | "file_exists" | "upload_failed" | "internal"
+    message: string
+    name: string
+    stack?: string | undefined
+
+interface RtQuery
+    rt: number | FromTo
+
+class SampleFile
+    dispose: () => void
+
+interface Scan
+    basePeakIntensity: number
+    basePeakMz: number
+    index: number
+    intensity: Float64Array<ArrayBufferLike>
+    level: number
+    mz: Float64Array<ArrayBufferLike>
+    polarity: number
+    precursorMz: number
+    rt: number
+    totalIonCurrent: number
+    x: number
+    y: number
+    z: number
+
+interface ScanArray
+    accession: string
+    key: string
+
+interface ScanParam
+    accession: string | null
+    kind: ScanParamKind
+    name: string
+    path: string
+    unit: string | null
+    unitAccession: string | null
+    value: string | null
+
+type ScanParamKind = ScanParamKind
+const ScanParamKind: { readonly ATTRIBUTE: "ATTRIBUTE"; readonly CV: "CV"; readonly USER: "USER"; }
+
+type ScanQuery = ScanQuery
+
+interface Target
+    id?: string | undefined
+    mz: number
+    range?: number | undefined
+    rt: number
+
+type TimeUnit = TimeUnit
+const TimeUnit: { readonly MINUTES: "MINUTES"; readonly SECONDS: "SECONDS"; }
+
+interface Transition
+    id?: string | undefined
+    precursor: number
+    product: number
+    range: number
+    rt: number
+
+class WarpModel
+    calibrate: (anchorSamples: SampleFile[], targetLists: Target[][]) => Promise<Target[]>
+    dispose: () => void
+    getKeys: () => string[]
+    getValue: (key: string) => string | undefined
+    getValues: () => string[]
+    predictRts: (file: SampleFile, targets: Target[]) => Promise<PredictedRt[]>
+
+function writeIon(file: SampleFile, options?: WriteIonOptions): Promise<Uint8Array | undefined>
+
+interface WriteIonOptions
+    blockSize?: number | undefined
+    f32Compress?: boolean | undefined
+    headers?: Header[] | undefined
+    level?: number | undefined
+    mzWindow?: number | undefined
+    out?: string | URL | undefined
+    overwrite?: boolean | undefined
+
+function writeMzml(file: SampleFile, options?: WriteMzmlOptions): Promise<Uint8Array | undefined>
+
+interface WriteMzmlOptions
+    out?: string | undefined
+    overwrite?: boolean | undefined

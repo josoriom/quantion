@@ -11,10 +11,10 @@ MZ_TOLERANCE = 0.005
 FILE_TOTAL = 34241
 HEADER_BYTES = 1024
 
-BYTES_TO_OPEN = 28326
+BYTES_TO_OPEN = 16911
 BYTES_NEVER_FETCHED = FILE_TOTAL - BYTES_TO_OPEN
-REQUESTS_TO_OPEN = 3
-CACHE_AFTER_OPEN = [(0, HEADER_BYTES), (0, 2822), (9761, 24480)]
+REQUESTS_TO_OPEN = 4
+CACHE_AFTER_OPEN = [(0, HEADER_BYTES), (0, 2822), (9761, 9598), (30774, 3467)]
 BYTES_FOR_ONE_QUERY = 0
 REQUESTS_FOR_ONE_QUERY = 0
 
@@ -95,19 +95,19 @@ class RemoteReading(unittest.TestCase):
         self.server.reset()
 
     def open_remote(self):
-        remote = support.quantion.parse_ion_remote(self.server.url)
+        remote = support.quantion.parse_ion(self.server.url)
         self.addCleanup(remote.dispose)
         return remote
 
     def open_local(self):
-        local = support.quantion.parse_ion_path(str(support.ION_FIXTURE))
+        local = support.quantion.parse_ion(str(support.ION_FIXTURE))
         self.addCleanup(local.dispose)
         return local
 
     def eic_of(self, file):
-        return support.quantion.calculate_eic(
-            file, MASS, FROM_RT, TO_RT, PPM_TOLERANCE, MZ_TOLERANCE
-        )
+        return support.quantion.calculate_eic(file, MASS, {
+            "from": FROM_RT, "to": TO_RT, "ppm_tolerance": PPM_TOLERANCE, "mz_tolerance": MZ_TOLERANCE,
+        })
 
     def test_the_fixture_is_the_size_the_counts_were_measured_on(self):
         self.assertEqual(support.ION_FIXTURE.stat().st_size, FILE_TOTAL)
@@ -116,7 +116,7 @@ class RemoteReading(unittest.TestCase):
         self.open_remote()
         self.assertEqual(self.server.bytes_sent, BYTES_TO_OPEN)
 
-    def test_opening_takes_three_requests(self):
+    def test_opening_takes_four_requests(self):
         self.open_remote()
         self.assertEqual(self.server.requests, REQUESTS_TO_OPEN)
 
@@ -149,10 +149,15 @@ class RemoteReading(unittest.TestCase):
         self.eic_of(remote)
         self.assertEqual(self.server.requests, 0)
 
+    def test_an_upper_case_scheme_opens_the_file(self):
+        remote = support.quantion.parse_ion(self.server.url.replace("http://", "HTTP://"))
+        self.addCleanup(remote.dispose)
+        self.assertEqual(self.server.requests, REQUESTS_TO_OPEN)
+
     def test_a_file_over_the_gap_is_opened_in_part(self):
         server = support.RangeServer(BIG_FIXTURE)
         self.addCleanup(server.stop)
-        remote = support.quantion.parse_ion_remote(server.url)
+        remote = support.quantion.parse_ion(server.url)
         self.addCleanup(remote.dispose)
         self.assertEqual(server.requests, BIG_REQUESTS_TO_OPEN)
         self.assertLess(server.bytes_sent, BIG_FIXTURE.stat().st_size)
@@ -191,11 +196,3 @@ class ParseIonDispatch(unittest.TestCase):
     def test_bytes_go_to_the_memory_reader(self):
         file = self.open_and_keep(support.ION_FIXTURE.read_bytes())
         self.assertFalse(hasattr(file, "_remote_source"))
-
-    def test_parse_ion_raw_refuses_a_path(self):
-        with self.assertRaises(TypeError):
-            support.quantion.parse_ion_raw(str(support.ION_FIXTURE))
-
-    def test_parse_ion_remote_refuses_a_path(self):
-        with self.assertRaises(ValueError):
-            support.quantion.parse_ion_remote(str(support.ION_FIXTURE))

@@ -1,45 +1,24 @@
+import * as sections from "./bridge";
 import {
-  PAYLOAD_CHROM_PEAKS,
   PAYLOAD_CONSENSUS_FEATURES,
-  PAYLOAD_EIC_PEAKS,
   PAYLOAD_FEATURES,
   PAYLOAD_FIT_RESULT,
-  PAYLOAD_FOUND_FEATURES,
   PAYLOAD_PEAKS,
-  SECTION_CHROM_FROM,
-  SECTION_CHROM_ID_BYTES,
-  SECTION_CHROM_ID_STARTS,
-  SECTION_CHROM_INDEX,
-  SECTION_CHROM_INTEGRAL,
-  SECTION_CHROM_INTENSITY,
-  SECTION_CHROM_RT,
-  SECTION_CHROM_TARGET_RT,
-  SECTION_CHROM_TIMESTAMP_BYTES,
-  SECTION_CHROM_TIMESTAMP_STARTS,
-  SECTION_CHROM_TO,
-  SECTION_CHROM_TOTAL_AREA,
+  PAYLOAD_MODEL_METADATA,
+  PAYLOAD_SCAN_METADATA,
+  PAYLOAD_WARP_TARGETS,
   SECTION_CONSENSUS_FREQUENCY,
+  SECTION_CONSENSUS_POINT_COUNT,
   SECTION_CONSENSUS_FROM,
   SECTION_CONSENSUS_INTEGRAL,
   SECTION_CONSENSUS_INTENSITY,
   SECTION_CONSENSUS_MZ,
   SECTION_CONSENSUS_RT,
   SECTION_CONSENSUS_TO,
-  SECTION_EIC_PEAK_FROM,
-  SECTION_EIC_PEAK_ID_BYTES,
-  SECTION_EIC_PEAK_ID_STARTS,
-  SECTION_EIC_PEAK_INTEGRAL,
-  SECTION_EIC_PEAK_INTENSITY,
-  SECTION_EIC_PEAK_MZ,
-  SECTION_EIC_PEAK_NOISE,
-  SECTION_EIC_PEAK_ORT,
-  SECTION_EIC_PEAK_RT,
-  SECTION_EIC_PEAK_TO,
   SECTION_FEATURE_FROM,
   SECTION_FEATURE_INTEGRAL,
   SECTION_FEATURE_INTENSITY,
   SECTION_FEATURE_MZ,
-  SECTION_FEATURE_NOISE,
   SECTION_FEATURE_POINT_COUNT,
   SECTION_FEATURE_RT,
   SECTION_FEATURE_TO,
@@ -47,39 +26,142 @@ import {
   SECTION_FIT_FWHM,
   SECTION_FIT_HEIGHT,
   SECTION_FIT_R2,
-  SECTION_FIT_SHAPE,
   SECTION_FIT_TAIL,
-  SECTION_FOUND_FROM,
-  SECTION_FOUND_ID_BYTES,
-  SECTION_FOUND_ID_STARTS,
-  SECTION_FOUND_INTEGRAL,
-  SECTION_FOUND_INTENSITY,
-  SECTION_FOUND_MZ,
-  SECTION_FOUND_NOISE,
-  SECTION_FOUND_POINT_COUNT,
-  SECTION_FOUND_RT,
-  SECTION_FOUND_TO,
   SECTION_PEAK_FROM,
   SECTION_PEAK_INTEGRAL,
   SECTION_PEAK_INTENSITY,
-  SECTION_PEAK_NOISE,
   SECTION_PEAK_POINT_COUNT,
-  SECTION_PEAK_R2,
   SECTION_PEAK_RT,
   SECTION_PEAK_TO,
+  SECTION_MODEL_METADATA_KEY_BYTES,
+  SECTION_MODEL_METADATA_KEY_STARTS,
+  SECTION_MODEL_METADATA_VALUE_BYTES,
+  SECTION_MODEL_METADATA_VALUE_STARTS,
+  SECTION_SCAN_METADATA_ACCESSION_BYTES,
+  SECTION_SCAN_METADATA_ACCESSION_MISSING,
+  SECTION_SCAN_METADATA_ACCESSION_STARTS,
+  SECTION_SCAN_METADATA_KIND_BYTES,
+  SECTION_SCAN_METADATA_KIND_STARTS,
+  SECTION_SCAN_METADATA_NAME_BYTES,
+  SECTION_SCAN_METADATA_NAME_STARTS,
+  SECTION_SCAN_METADATA_PATH_BYTES,
+  SECTION_SCAN_METADATA_PATH_STARTS,
+  SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES,
+  SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING,
+  SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS,
+  SECTION_SCAN_METADATA_UNIT_BYTES,
+  SECTION_SCAN_METADATA_UNIT_MISSING,
+  SECTION_SCAN_METADATA_UNIT_STARTS,
+  SECTION_SCAN_METADATA_VALUE_BYTES,
+  SECTION_SCAN_METADATA_VALUE_MISSING,
+  SECTION_SCAN_METADATA_VALUE_STARTS,
+  SECTION_WARP_TARGET_ID_BYTES,
+  SECTION_WARP_TARGET_ID_STARTS,
+  SECTION_WARP_TARGET_MZ,
+  SECTION_WARP_TARGET_RT,
   readCountSection,
   readF64Section,
   readBridge,
   readU32Section,
   readU8Section,
 } from "./bridge";
+import type { ScanParam } from "../types/types";
 
 type Column =
   | { name: string; id: number; kind: "number" }
   | { name: string; id: number; kind: "count" }
-  | { name: string; startsId: number; bytesId: number; kind: "text" };
+  | { name: string; startsId: number; bytesId: number; kind: "text" }
+  | {
+      name: string;
+      startsId: number;
+      bytesId: number;
+      missingId: number;
+      kind: "optional text";
+    }
+  | { name: string; startsId: number; valuesId: number; kind: "number list" };
 
 const RECORD_COLUMNS: Record<number, Column[]> = {
+  [sections.PAYLOAD_FEATURE_ANNOTATIONS]: [
+    { name: "mz", id: sections.SECTION_FEATURE_ANNOTATION_MZ, kind: "number" },
+    { name: "rt", id: sections.SECTION_FEATURE_ANNOTATION_RT, kind: "number" },
+    {
+      name: "label",
+      startsId: sections.SECTION_FEATURE_ANNOTATION_LABEL_STARTS,
+      bytesId: sections.SECTION_FEATURE_ANNOTATION_LABEL_BYTES,
+      missingId: sections.SECTION_FEATURE_ANNOTATION_LABEL_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "id",
+      startsId: sections.SECTION_FEATURE_ANNOTATION_ID_STARTS,
+      bytesId: sections.SECTION_FEATURE_ANNOTATION_ID_BYTES,
+      missingId: sections.SECTION_FEATURE_ANNOTATION_ID_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "database",
+      startsId: sections.SECTION_FEATURE_ANNOTATION_DATABASE_STARTS,
+      bytesId: sections.SECTION_FEATURE_ANNOTATION_DATABASE_BYTES,
+      missingId: sections.SECTION_FEATURE_ANNOTATION_DATABASE_MISSING,
+      kind: "optional text",
+    },
+    { name: "frequency", id: sections.SECTION_FEATURE_ANNOTATION_FREQUENCY, kind: "number" },
+    { name: "score", id: sections.SECTION_FEATURE_ANNOTATION_SCORE, kind: "number" },
+    { name: "cosine", id: sections.SECTION_FEATURE_ANNOTATION_COSINE, kind: "number" },
+  ],
+  [sections.PAYLOAD_FILE_ANNOTATIONS]: [
+    { name: "feature", id: sections.SECTION_FILE_ANNOTATION_FEATURE, kind: "count" },
+    { name: "file", id: sections.SECTION_FILE_ANNOTATION_FILE, kind: "count" },
+    { name: "scanIndex", id: sections.SECTION_FILE_ANNOTATION_SCAN_INDEX, kind: "number" },
+  ],
+  [sections.PAYLOAD_COMPOUND_MATCHES]: [
+    { name: "feature", id: sections.SECTION_COMPOUND_MATCH_FEATURE, kind: "count" },
+    { name: "file", id: sections.SECTION_COMPOUND_MATCH_FILE, kind: "count" },
+    {
+      name: "label",
+      startsId: sections.SECTION_COMPOUND_MATCH_LABEL_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_LABEL_BYTES,
+      kind: "text",
+    },
+    {
+      name: "id",
+      startsId: sections.SECTION_COMPOUND_MATCH_ID_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_ID_BYTES,
+      kind: "text",
+    },
+    {
+      name: "database",
+      startsId: sections.SECTION_COMPOUND_MATCH_DATABASE_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_DATABASE_BYTES,
+      kind: "text",
+    },
+    { name: "score", id: sections.SECTION_COMPOUND_MATCH_SCORE, kind: "number" },
+    { name: "cosine", id: sections.SECTION_COMPOUND_MATCH_COSINE, kind: "number" },
+    {
+      name: "mz",
+      startsId: sections.SECTION_COMPOUND_MATCH_MZ_STARTS,
+      valuesId: sections.SECTION_COMPOUND_MATCH_MZ_VALUES,
+      kind: "number list",
+    },
+    {
+      name: "intensity",
+      startsId: sections.SECTION_COMPOUND_MATCH_INTENSITY_STARTS,
+      valuesId: sections.SECTION_COMPOUND_MATCH_INTENSITY_VALUES,
+      kind: "number list",
+    },
+    {
+      name: "metadataNames",
+      startsId: sections.SECTION_COMPOUND_MATCH_METADATA_NAME_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_METADATA_NAME_BYTES,
+      kind: "text",
+    },
+    {
+      name: "metadataValues",
+      startsId: sections.SECTION_COMPOUND_MATCH_METADATA_VALUE_STARTS,
+      bytesId: sections.SECTION_COMPOUND_MATCH_METADATA_VALUE_BYTES,
+      kind: "text",
+    },
+  ],
   [PAYLOAD_PEAKS]: [
     { name: "from", id: SECTION_PEAK_FROM, kind: "number" },
     { name: "to", id: SECTION_PEAK_TO, kind: "number" },
@@ -87,8 +169,6 @@ const RECORD_COLUMNS: Record<number, Column[]> = {
     { name: "integral", id: SECTION_PEAK_INTEGRAL, kind: "number" },
     { name: "intensity", id: SECTION_PEAK_INTENSITY, kind: "number" },
     { name: "nPoints", id: SECTION_PEAK_POINT_COUNT, kind: "count" },
-    { name: "noise", id: SECTION_PEAK_NOISE, kind: "number" },
-    { name: "r2", id: SECTION_PEAK_R2, kind: "number" },
   ],
   [PAYLOAD_FEATURES]: [
     { name: "mz", id: SECTION_FEATURE_MZ, kind: "number" },
@@ -98,53 +178,13 @@ const RECORD_COLUMNS: Record<number, Column[]> = {
     { name: "intensity", id: SECTION_FEATURE_INTENSITY, kind: "number" },
     { name: "integral", id: SECTION_FEATURE_INTEGRAL, kind: "number" },
     { name: "nPoints", id: SECTION_FEATURE_POINT_COUNT, kind: "count" },
-    { name: "noise", id: SECTION_FEATURE_NOISE, kind: "number" },
-  ],
-  [PAYLOAD_CHROM_PEAKS]: [
-    { name: "index", id: SECTION_CHROM_INDEX, kind: "count" },
-    {
-      name: "id",
-      startsId: SECTION_CHROM_ID_STARTS,
-      bytesId: SECTION_CHROM_ID_BYTES,
-      kind: "text",
-    },
-    { name: "ort", id: SECTION_CHROM_TARGET_RT, kind: "number" },
-    { name: "rt", id: SECTION_CHROM_RT, kind: "number" },
-    { name: "from", id: SECTION_CHROM_FROM, kind: "number" },
-    { name: "to", id: SECTION_CHROM_TO, kind: "number" },
-    { name: "intensity", id: SECTION_CHROM_INTENSITY, kind: "number" },
-    { name: "integral", id: SECTION_CHROM_INTEGRAL, kind: "number" },
-    { name: "totalArea", id: SECTION_CHROM_TOTAL_AREA, kind: "number" },
-    {
-      name: "timestamp",
-      startsId: SECTION_CHROM_TIMESTAMP_STARTS,
-      bytesId: SECTION_CHROM_TIMESTAMP_BYTES,
-      kind: "text",
-    },
   ],
   [PAYLOAD_FIT_RESULT]: [
-    { name: "shape", id: SECTION_FIT_SHAPE, kind: "number" },
     { name: "height", id: SECTION_FIT_HEIGHT, kind: "number" },
     { name: "center", id: SECTION_FIT_CENTER, kind: "number" },
     { name: "fwhm", id: SECTION_FIT_FWHM, kind: "number" },
     { name: "tail", id: SECTION_FIT_TAIL, kind: "number" },
     { name: "r2", id: SECTION_FIT_R2, kind: "number" },
-  ],
-  [PAYLOAD_EIC_PEAKS]: [
-    {
-      name: "id",
-      startsId: SECTION_EIC_PEAK_ID_STARTS,
-      bytesId: SECTION_EIC_PEAK_ID_BYTES,
-      kind: "text",
-    },
-    { name: "mz", id: SECTION_EIC_PEAK_MZ, kind: "number" },
-    { name: "ort", id: SECTION_EIC_PEAK_ORT, kind: "number" },
-    { name: "rt", id: SECTION_EIC_PEAK_RT, kind: "number" },
-    { name: "from", id: SECTION_EIC_PEAK_FROM, kind: "number" },
-    { name: "to", id: SECTION_EIC_PEAK_TO, kind: "number" },
-    { name: "intensity", id: SECTION_EIC_PEAK_INTENSITY, kind: "number" },
-    { name: "integral", id: SECTION_EIC_PEAK_INTEGRAL, kind: "number" },
-    { name: "noise", id: SECTION_EIC_PEAK_NOISE, kind: "number" },
   ],
   [PAYLOAD_CONSENSUS_FEATURES]: [
     { name: "mz", id: SECTION_CONSENSUS_MZ, kind: "number" },
@@ -153,23 +193,80 @@ const RECORD_COLUMNS: Record<number, Column[]> = {
     { name: "to", id: SECTION_CONSENSUS_TO, kind: "number" },
     { name: "intensity", id: SECTION_CONSENSUS_INTENSITY, kind: "number" },
     { name: "integral", id: SECTION_CONSENSUS_INTEGRAL, kind: "number" },
+    { name: "nPoints", id: SECTION_CONSENSUS_POINT_COUNT, kind: "count" },
     { name: "frequency", id: SECTION_CONSENSUS_FREQUENCY, kind: "number" },
   ],
-  [PAYLOAD_FOUND_FEATURES]: [
+  [PAYLOAD_WARP_TARGETS]: [
     {
       name: "id",
-      startsId: SECTION_FOUND_ID_STARTS,
-      bytesId: SECTION_FOUND_ID_BYTES,
+      startsId: SECTION_WARP_TARGET_ID_STARTS,
+      bytesId: SECTION_WARP_TARGET_ID_BYTES,
       kind: "text",
     },
-    { name: "mz", id: SECTION_FOUND_MZ, kind: "number" },
-    { name: "rt", id: SECTION_FOUND_RT, kind: "number" },
-    { name: "from", id: SECTION_FOUND_FROM, kind: "number" },
-    { name: "to", id: SECTION_FOUND_TO, kind: "number" },
-    { name: "intensity", id: SECTION_FOUND_INTENSITY, kind: "number" },
-    { name: "integral", id: SECTION_FOUND_INTEGRAL, kind: "number" },
-    { name: "nPoints", id: SECTION_FOUND_POINT_COUNT, kind: "count" },
-    { name: "noise", id: SECTION_FOUND_NOISE, kind: "number" },
+    { name: "mz", id: SECTION_WARP_TARGET_MZ, kind: "number" },
+    { name: "rt", id: SECTION_WARP_TARGET_RT, kind: "number" },
+  ],
+  [PAYLOAD_MODEL_METADATA]: [
+    {
+      name: "key",
+      startsId: SECTION_MODEL_METADATA_KEY_STARTS,
+      bytesId: SECTION_MODEL_METADATA_KEY_BYTES,
+      kind: "text",
+    },
+    {
+      name: "value",
+      startsId: SECTION_MODEL_METADATA_VALUE_STARTS,
+      bytesId: SECTION_MODEL_METADATA_VALUE_BYTES,
+      kind: "text",
+    },
+  ],
+  [PAYLOAD_SCAN_METADATA]: [
+    {
+      name: "path",
+      startsId: SECTION_SCAN_METADATA_PATH_STARTS,
+      bytesId: SECTION_SCAN_METADATA_PATH_BYTES,
+      kind: "text",
+    },
+    {
+      name: "kind",
+      startsId: SECTION_SCAN_METADATA_KIND_STARTS,
+      bytesId: SECTION_SCAN_METADATA_KIND_BYTES,
+      kind: "text",
+    },
+    {
+      name: "accession",
+      startsId: SECTION_SCAN_METADATA_ACCESSION_STARTS,
+      bytesId: SECTION_SCAN_METADATA_ACCESSION_BYTES,
+      missingId: SECTION_SCAN_METADATA_ACCESSION_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "name",
+      startsId: SECTION_SCAN_METADATA_NAME_STARTS,
+      bytesId: SECTION_SCAN_METADATA_NAME_BYTES,
+      kind: "text",
+    },
+    {
+      name: "value",
+      startsId: SECTION_SCAN_METADATA_VALUE_STARTS,
+      bytesId: SECTION_SCAN_METADATA_VALUE_BYTES,
+      missingId: SECTION_SCAN_METADATA_VALUE_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "unit",
+      startsId: SECTION_SCAN_METADATA_UNIT_STARTS,
+      bytesId: SECTION_SCAN_METADATA_UNIT_BYTES,
+      missingId: SECTION_SCAN_METADATA_UNIT_MISSING,
+      kind: "optional text",
+    },
+    {
+      name: "unitAccession",
+      startsId: SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS,
+      bytesId: SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES,
+      missingId: SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING,
+      kind: "optional text",
+    },
   ],
 };
 
@@ -194,11 +291,23 @@ export function readRecords(buffer: ArrayBuffer): Record<string, unknown>[] {
     } else if (column.kind === "count") {
       const counts = readU32Section(bridge, column.id);
       values.set(column.name, (index) => counts[index]);
+    } else if (column.kind === "number list") {
+      const starts = readCountSection(bridge, column.startsId);
+      const numbers = readF64Section(bridge, column.valuesId);
+      values.set(column.name, (index) =>
+        numbers.slice(starts[index], starts[index + 1]),
+      );
     } else {
       const starts = readCountSection(bridge, column.startsId);
       const bytes = readU8Section(bridge, column.bytesId);
+      const missing =
+        column.kind === "optional text"
+          ? readU8Section(bridge, column.missingId)
+          : null;
       values.set(column.name, (index) =>
-        decoder.decode(bytes.subarray(starts[index], starts[index + 1])),
+        missing?.[index]
+          ? null
+          : decoder.decode(bytes.subarray(starts[index], starts[index + 1])),
       );
     }
   }
@@ -210,4 +319,8 @@ export function readRecords(buffer: ArrayBuffer): Record<string, unknown>[] {
     rows[index] = row;
   }
   return rows;
+}
+
+export function readScanMetadata(buffer: ArrayBuffer): ScanParam[] {
+  return readRecords(buffer) as unknown as ScanParam[];
 }

@@ -1,8 +1,11 @@
-use crate::utilities::{
-    calculate_eic::{SpectrumKind, lower_bound, upper_bound},
-    find_peaks::{FindPeaksOptions, PeakFilter, find_peaks},
-    mz_estimator::SampleMz,
-    structs::DataXY,
+use crate::{
+    traces::FindPeaksOptions,
+    utilities::{
+        calculate_eic::{SpectrumKind, lower_bound, upper_bound},
+        find_peaks::find_peaks,
+        mz_estimator::SampleMz,
+        structs::DataXY,
+    },
 };
 
 pub fn find_masses(
@@ -46,7 +49,7 @@ fn profile_masses(mz: &[f64], intensity: &[f64]) -> Vec<SampleMz> {
         x: mz.to_vec(),
         y: intensity.to_vec(),
     };
-    let peaks = find_peaks(&profile, Some(mz_peak_options()));
+    let peaks = find_peaks(&profile, &mz_peak_options());
 
     let mut masses = Vec::with_capacity(peaks.len());
     for peak in &peaks {
@@ -80,15 +83,10 @@ fn apex_in_range(mz: &[f64], intensity: &[f64], from: f64, to: f64) -> Option<Sa
 
 fn mz_peak_options() -> FindPeaksOptions {
     FindPeaksOptions {
-        boundaries: Some(Default::default()),
-        filter: Some(PeakFilter {
-            min_peak_width_points: Some(3),
-            auto_noise: Some(false),
-            auto_baseline: Some(false),
-            min_snr: Some(1.0),
-            ..Default::default()
-        }),
-        baseline: None,
-        artifact_filter: None,
+        min_peak_width_points: 3,
+        auto_noise: false,
+        auto_baseline: false,
+        min_snr: 1.0,
+        ..Default::default()
     }
 }

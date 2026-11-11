@@ -1,0 +1,81 @@
+{
+  "words": {
+    "path": ["path", "paths", "local", "locally", "disk", "laptop", "computer", "folder", "directory", "filename"],
+    "url": ["url", "urls", "http", "https", "link", "online", "remote", "web", "server", "internet"],
+    "bytes": ["bytes", "byte", "memory", "buffer", "raw", "blob", "uint8array"]
+  },
+  "functions": {
+    "parse_ion": {
+      "argument": "source",
+      "forms": {
+        "path": {
+          "label": "From a local path",
+          "python": "from quantion import parse_ion\n\nfile = parse_ion(\"sample.ion\")\nprint(file)",
+          "js": "import { parseIon } from \"quantion\";\n\nconst file = await parseIon(\"sample.ion\");\nconsole.log(file);",
+          "r": "library(quantion)\n\nsample <- parse_ion(\"sample.ion\")\nprint(sample)",
+          "rust": "use quantion::{ParseIonOptions, parse_ion};\n\nlet file = parse_ion(\"sample.ion\", ParseIonOptions::default())?;\nprintln!(\"opened sample.ion\");"
+        },
+        "url": {
+          "label": "From a URL",
+          "python": "from quantion import parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nfile = parse_ion(url)\nprint(file)",
+          "js": "import { parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst file = await parseIon(url);\nconsole.log(file);",
+          "r": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\nsample <- parse_ion(url)\nprint(sample)",
+          "rust": "use quantion::{ParseIonOptions, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet file = parse_ion(url, ParseIonOptions::default())?;\nprintln!(\"opened {url}\");"
+        },
+        "bytes": {
+          "label": "From bytes",
+          "python": "from urllib.request import urlopen\nfrom quantion import parse_ion\n\nurl = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\ndata = urlopen(url).read()\nfile = parse_ion(data)\nprint(file)",
+          "js": "import { parseIon } from \"quantion\";\n\nconst url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nconst response = await fetch(url);\nconst data = new Uint8Array(await response.arrayBuffer());\nconst file = await parseIon(data);\nconsole.log(file);",
+          "r": "library(quantion)\n\nurl <- \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\"\ndata <- curl::curl_fetch_memory(url)$content\nsample <- parse_ion(data)\nprint(sample)",
+          "rust": "use quantion::{ParseIonOptions, parse_ion};\n\nlet url = \"https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion\";\nlet data = ureq::get(url).call()?.body_mut().read_to_vec()?;\nlet file = parse_ion(data, ParseIonOptions::default())?;\nprintln!(\"opened the file\");"
+        }
+      }
+    },
+    "parse_mzml": {
+      "argument": "source",
+      "refused": { "url": "`parse_mzml` does not read URLs: it needs the whole file, so give it a path or bytes." },
+      "forms": {
+        "path": {
+          "label": "From a local path",
+          "python": "from quantion import parse_mzml\n\nfile = parse_mzml(\"sample.mzML\")\nprint(file)",
+          "js": "import { parseMzml } from \"quantion\";\n\nconst file = await parseMzml(\"sample.mzML\");\nconsole.log(file);",
+          "r": "library(quantion)\n\nsample <- parse_mzml(\"sample.mzML\")\nprint(sample)",
+          "rust": "use quantion::parse_mzml;\n\nlet file = parse_mzml(\"sample.mzML\")?;\nprintln!(\"opened the mzML file\");"
+        },
+        "bytes": {
+          "label": "From bytes",
+          "python": "from quantion import parse_mzml\n\nwith open(\"sample.mzML\", \"rb\") as handle:\n    data = handle.read()\nfile = parse_mzml(data)\nprint(file)",
+          "js": "import { readFileSync } from \"node:fs\";\nimport { parseMzml } from \"quantion\";\n\nconst data = new Uint8Array(readFileSync(\"sample.mzML\"));\nconst file = await parseMzml(data);\nconsole.log(file);",
+          "r": "library(quantion)\n\ndata <- readBin(\"sample.mzML\", what = \"raw\", n = file.size(\"sample.mzML\"))\nsample <- parse_mzml(data)\nprint(sample)",
+          "rust": "use quantion::parse_mzml;\n\nlet data = std::fs::read(\"sample.mzML\")?;\nlet file = parse_mzml(data)?;\nprintln!(\"opened the mzML file\");"
+        }
+      }
+    },
+    "load_model": {
+      "argument": "source",
+      "forms": {
+        "path": {
+          "label": "From a local path",
+          "python": "from quantion import load_model\n\nmodel = load_model(\"shift_model.onnx\")\nprint(model.get_value(\"points\"))",
+          "js": "import { loadModel } from \"quantion\";\n\nconst model = await loadModel(\"shift_model.onnx\");\nconsole.log(model.getValue(\"points\"));",
+          "r": "library(quantion)\n\nmodel <- load_model(\"shift_model.onnx\")\nprint(get_value(model, \"points\"))",
+          "rust": "use quantion::load_model;\n\nlet model = load_model(\"shift_model.onnx\")?;\nprintln!(\"{:?}\", model.get_value(\"points\"));"
+        },
+        "url": {
+          "label": "From a URL",
+          "python": "from quantion import load_model\n\nmodel = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")\nprint(model.get_value(\"points\"))",
+          "js": "import { loadModel } from \"quantion\";\n\nconst model = await loadModel(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\");\nconsole.log(model.getValue(\"points\"));",
+          "r": "library(quantion)\n\nmodel <- load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")\nprint(get_value(model, \"points\"))",
+          "rust": "use quantion::load_model;\n\nlet model = load_model(\"https://raw.githubusercontent.com/phenological/quantion/main/core/tests/fixtures/shift_model.onnx\")?;\nprintln!(\"{:?}\", model.get_value(\"points\"));"
+        },
+        "bytes": {
+          "label": "From bytes",
+          "python": "from quantion import load_model\n\nwith open(\"shift_model.onnx\", \"rb\") as handle:\n    data = handle.read()\nmodel = load_model(data)\nprint(model.get_value(\"points\"))",
+          "js": "import { readFileSync } from \"node:fs\";\nimport { loadModel } from \"quantion\";\n\nconst data = new Uint8Array(readFileSync(\"shift_model.onnx\"));\nconst model = await loadModel(data);\nconsole.log(model.getValue(\"points\"));",
+          "r": "library(quantion)\n\ndata <- readBin(\"shift_model.onnx\", what = \"raw\", n = file.size(\"shift_model.onnx\"))\nmodel <- load_model(data)\nprint(get_value(model, \"points\"))",
+          "rust": "use quantion::load_model;\n\nlet data = std::fs::read(\"shift_model.onnx\")?;\nlet model = load_model(data)?;\nprintln!(\"{:?}\", model.get_value(\"points\"));"
+        }
+      }
+    }
+  }
+}

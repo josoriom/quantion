@@ -28,10 +28,9 @@ describe("parseIon dispatch to backend primitives", () => {
       getPeak: jest.fn(),
       findNoiseLevel: jest.fn(),
       calculateBaseline: jest.fn(),
-      getPeaksFromEic: jest.fn(),
-      getPeaksFromChrom: jest.fn(),
+      findTargets: jest.fn(),
+      findTransitions: jest.fn(),
       findFeatures: jest.fn(),
-      findFeature: jest.fn(),
     } as any;
 
     setBackend(mockBackend);
@@ -79,7 +78,7 @@ describe("parseIon dispatch to backend primitives", () => {
 
     test("parseIon rejects a file: URL", async () => {
       await expect(parseIon(new URL("file:///data/file.ion"))).rejects.toThrow(
-        /only http and https/,
+        "parseIon: source must be an http(s) URL",
       );
       expect(mockBackend.parseIonRemote).not.toHaveBeenCalled();
       expect(mockBackend.parseIonPath).not.toHaveBeenCalled();
@@ -174,43 +173,39 @@ describe("parseIon dispatch to backend primitives", () => {
       const bytes = new Uint8Array([1, 2, 3]);
 
       await parseIon(path);
-      expect(
-        (mockBackend.parseIonPath as jest.Mock).mock.calls.length,
-      ).toBe(1);
-      expect(
-        (mockBackend.parseIonRemote as jest.Mock).mock.calls.length,
-      ).toBe(0);
-      expect(
-        (mockBackend.parseIonBuffer as jest.Mock).mock.calls.length,
-      ).toBe(0);
+      expect((mockBackend.parseIonPath as jest.Mock).mock.calls.length).toBe(1);
+      expect((mockBackend.parseIonRemote as jest.Mock).mock.calls.length).toBe(
+        0,
+      );
+      expect((mockBackend.parseIonBuffer as jest.Mock).mock.calls.length).toBe(
+        0,
+      );
 
       (mockBackend.parseIonPath as jest.Mock).mockClear();
       (mockBackend.parseIonRemote as jest.Mock).mockClear();
       (mockBackend.parseIonBuffer as jest.Mock).mockClear();
 
       await parseIon(url);
-      expect(
-        (mockBackend.parseIonPath as jest.Mock).mock.calls.length,
-      ).toBe(0);
-      expect((mockBackend.parseIonRemote as jest.Mock).mock.calls.length).toBe(1);
-      expect(
-        (mockBackend.parseIonBuffer as jest.Mock).mock.calls.length,
-      ).toBe(0);
+      expect((mockBackend.parseIonPath as jest.Mock).mock.calls.length).toBe(0);
+      expect((mockBackend.parseIonRemote as jest.Mock).mock.calls.length).toBe(
+        1,
+      );
+      expect((mockBackend.parseIonBuffer as jest.Mock).mock.calls.length).toBe(
+        0,
+      );
 
       (mockBackend.parseIonPath as jest.Mock).mockClear();
       (mockBackend.parseIonRemote as jest.Mock).mockClear();
       (mockBackend.parseIonBuffer as jest.Mock).mockClear();
 
       await parseIon(bytes);
-      expect(
-        (mockBackend.parseIonPath as jest.Mock).mock.calls.length,
-      ).toBe(0);
-      expect(
-        (mockBackend.parseIonRemote as jest.Mock).mock.calls.length,
-      ).toBe(0);
-      expect(
-        (mockBackend.parseIonBuffer as jest.Mock).mock.calls.length,
-      ).toBe(1);
+      expect((mockBackend.parseIonPath as jest.Mock).mock.calls.length).toBe(0);
+      expect((mockBackend.parseIonRemote as jest.Mock).mock.calls.length).toBe(
+        0,
+      );
+      expect((mockBackend.parseIonBuffer as jest.Mock).mock.calls.length).toBe(
+        1,
+      );
     });
   });
 });

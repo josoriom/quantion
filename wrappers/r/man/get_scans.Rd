@@ -1,52 +1,54 @@
 \name{get_scans}
 \alias{get_scans}
-\title{Get scans by RT or m/z query}
+\title{Read scans}
 \description{
-Fetches scans from a loaded file. Exactly one query mode must be provided per call.
+Read scans by retention time, by precursor m/z, or by both. Ranges return every scan inside them; when rt or mz is one value, you get the closest scan, as a list of one.
 }
 \usage{
-get_scans(
-  bin,
-  rt_from = NULL,
-  rt_to = NULL,
-  rt = NULL,
-  mz_from = NULL,
-  mz_to = NULL,
-  mz = NULL,
-  level = 1L
-)
+get_scans(file, rt = NULL, mz = NULL, options = get_scans_options())
 }
 \arguments{
-  \item{bin}{Sample file from \code{\link{parse_mzml}()} or \code{\link{parse_ion}()}.}
-  \item{rt_from}{RT range start (minutes). Use with \code{rt_to}.}
-  \item{rt_to}{RT range end (minutes). Use with \code{rt_from}.}
-  \item{rt}{Target RT — returns the single closest scan.}
-  \item{mz_from}{m/z range lower bound (Da). Use with \code{mz_to}.}
-  \item{mz_to}{m/z range upper bound (Da). Use with \code{mz_from}.}
-  \item{mz}{Target precursor m/z — returns the single closest scan.}
-  \item{level}{MS level to query (integer 0–255). Default 1.}
+  \item{file}{The sample to read, from parse_ion or parse_mzml. Type: \code{SampleFile}.}
+  \item{rt}{Which scans by retention time: a range or one value. Optional when mz is given. Type: \code{numeric(1) | c(from, to)}.}
+  \item{mz}{Which scans by precursor m/z: a range or one value. Give rt, mz or both. Type: \code{numeric(1) | c(from, to)}.}
+  \item{options}{Settings from \code{\link{get_scans_options}()}: \code{level = 1L}, \code{time_unit = "MINUTES"}, \code{arrays = list(key = "mz", accession = "MS:1000514"), list(key = "intensity", accession = "MS:1000515")}.
+    \href{https://phenological.github.io/quantion/?language=r#GetScansOptions}{GetScansOptions documentation}
+  }
 }
 \value{
-Range query (\code{rt_from}/\code{rt_to} or \code{mz_from}/\code{mz_to}): a list of scans,
-each with \code{rt}, \code{mz}, \code{intensity}, and metadata.
-
-Point query (\code{rt} or \code{mz}): a single scan list, or \code{NULL} if none found.
+The scans found, in rt order. Type: \code{data.frame of Scan}. Columns: \code{index}, \code{rt}, \code{mz}, \code{intensity}, \code{level}, \code{precursor_mz}, \code{base_peak_mz}, \code{base_peak_intensity}, \code{total_ion_current}, \code{polarity}, \code{x}, \code{y}, \code{z}.
+}
+\section{Warning}{
+It is best to write the argument names rt and mz to avoid confusion. Without names, rt comes before mz, so a number given without a name is taken as rt.
+}
+\section{Documentation}{
+\url{https://phenological.github.io/quantion/?language=r#get_scans}
 }
 \examples{
 \donttest{
-# All MS1 scans from 1.0 to 2.5 min
-scans <- get_scans(sample, rt_from = 1.0, rt_to = 2.5)
+if (curl::has_internet()) {
+  # example 1
+  library(quantion)
 
-# Closest MS1 scan to 1.8 min
-scan  <- get_scans(sample, rt = 1.8)
+  url <- "https://raw.githubusercontent.com/phenological/ion-files/main/data/aa_p21_LTR_20_b1_w20.ion"
+  sample <- parse_ion(url)
+  scans <- get_scans(sample, rt = c(2.3, 2.4))
+  closest <- get_scans(sample, rt = 143, options = get_scans_options(time_unit = "SECONDS"))
+  print(nrow(scans))
+  print(closest$mz)
 
-# MS2 scans with precursor m/z in 400–450 Da
-scans <- get_scans(sample, mz_from = 400.0, mz_to = 450.0, level = 2L)
+  # example 2
+  arrays <- list(list(key = "intensity", accession = "MS:1000515"))
+  options <- get_scans_options(level = 2L, arrays = arrays)
+  found <- get_scans(sample, mz = c(515.0, 515.01), options = options)
+  print(found$intensity)
 
-# Closest MS2 scan to precursor m/z 445.12 Da
-scan  <- get_scans(sample, mz = 445.12, level = 2L)
+  # example 3
+  nearest <- get_scans(sample, rt = c(2.3, 2.5), mz = 515.0, options = get_scans_options(level = 2L))
+  print(nearest$precursor_mz)
+}
 }
 }
 \seealso{
-\code{\link{calculate_eic}()}, \code{\link{parse_mzml}()}, \code{\link{parse_ion}()}
+\code{\link{get_scans_options}()}
 }

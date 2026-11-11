@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define QUANTION_ABI_VERSION 1
+#define QUANTION_ABI_VERSION 3
 
 #define QUANTION_BRIDGE_MAGIC 1112821329
 
@@ -25,15 +25,23 @@
 
 #define QUANTION_PAYLOAD_FEATURES 4
 
-#define QUANTION_PAYLOAD_CHROM_PEAKS 5
-
 #define QUANTION_PAYLOAD_FIT_RESULT 6
-
-#define QUANTION_PAYLOAD_EIC_PEAKS 7
 
 #define QUANTION_PAYLOAD_CONSENSUS_FEATURES 8
 
 #define QUANTION_PAYLOAD_FOUND_FEATURES 9
+
+#define QUANTION_PAYLOAD_WARP_TARGETS 10
+
+#define QUANTION_PAYLOAD_MODEL_METADATA 11
+
+#define QUANTION_PAYLOAD_SCAN_METADATA 12
+
+#define QUANTION_PAYLOAD_FEATURE_ANNOTATIONS 13
+
+#define QUANTION_PAYLOAD_FILE_ANNOTATIONS 14
+
+#define QUANTION_PAYLOAD_COMPOUND_MATCHES 15
 
 #define QUANTION_ELEMENT_F64 1
 
@@ -89,10 +97,6 @@
 
 #define QUANTION_SECTION_PEAK_POINT_COUNT 23
 
-#define QUANTION_SECTION_PEAK_NOISE 24
-
-#define QUANTION_SECTION_PEAK_R2 25
-
 #define QUANTION_SECTION_FEATURE_MZ 26
 
 #define QUANTION_SECTION_FEATURE_RT 27
@@ -107,32 +111,6 @@
 
 #define QUANTION_SECTION_FEATURE_POINT_COUNT 32
 
-#define QUANTION_SECTION_FEATURE_NOISE 33
-
-#define QUANTION_SECTION_CHROM_INDEX 34
-
-#define QUANTION_SECTION_CHROM_TARGET_RT 35
-
-#define QUANTION_SECTION_CHROM_RT 36
-
-#define QUANTION_SECTION_CHROM_FROM 37
-
-#define QUANTION_SECTION_CHROM_TO 38
-
-#define QUANTION_SECTION_CHROM_INTENSITY 39
-
-#define QUANTION_SECTION_CHROM_INTEGRAL 40
-
-#define QUANTION_SECTION_CHROM_TOTAL_AREA 41
-
-#define QUANTION_SECTION_CHROM_ID_STARTS 42
-
-#define QUANTION_SECTION_CHROM_ID_BYTES 43
-
-#define QUANTION_SECTION_CHROM_TIMESTAMP_STARTS 44
-
-#define QUANTION_SECTION_CHROM_TIMESTAMP_BYTES 45
-
 #define QUANTION_SECTION_FIT_SHAPE 46
 
 #define QUANTION_SECTION_FIT_HEIGHT 47
@@ -144,26 +122,6 @@
 #define QUANTION_SECTION_FIT_TAIL 50
 
 #define QUANTION_SECTION_FIT_R2 51
-
-#define QUANTION_SECTION_EIC_PEAK_ID_STARTS 52
-
-#define QUANTION_SECTION_EIC_PEAK_ID_BYTES 53
-
-#define QUANTION_SECTION_EIC_PEAK_MZ 54
-
-#define QUANTION_SECTION_EIC_PEAK_ORT 55
-
-#define QUANTION_SECTION_EIC_PEAK_RT 56
-
-#define QUANTION_SECTION_EIC_PEAK_FROM 57
-
-#define QUANTION_SECTION_EIC_PEAK_TO 58
-
-#define QUANTION_SECTION_EIC_PEAK_INTENSITY 59
-
-#define QUANTION_SECTION_EIC_PEAK_INTEGRAL 60
-
-#define QUANTION_SECTION_EIC_PEAK_NOISE 61
 
 #define QUANTION_SECTION_CONSENSUS_MZ 62
 
@@ -199,9 +157,143 @@
 
 #define QUANTION_SECTION_FOUND_NOISE 78
 
+#define QUANTION_SECTION_WARP_TARGET_ID_STARTS 79
+
+#define QUANTION_SECTION_WARP_TARGET_ID_BYTES 80
+
+#define QUANTION_SECTION_WARP_TARGET_MZ 81
+
+#define QUANTION_SECTION_WARP_TARGET_RT 82
+
+#define QUANTION_SECTION_MODEL_METADATA_KEY_STARTS 83
+
+#define QUANTION_SECTION_MODEL_METADATA_KEY_BYTES 84
+
+#define QUANTION_SECTION_MODEL_METADATA_VALUE_STARTS 85
+
+#define QUANTION_SECTION_MODEL_METADATA_VALUE_BYTES 86
+
+#define QUANTION_SECTION_CONSENSUS_POINT_COUNT 87
+
+#define QUANTION_SECTION_SCAN_ARRAY_STARTS 88
+
+#define QUANTION_SECTION_SCAN_ARRAY_VALUES 89
+
+#define QUANTION_SECTION_SCAN_INDEX 90
+
+#define QUANTION_SECTION_SCAN_METADATA_PATH_STARTS 91
+
+#define QUANTION_SECTION_SCAN_METADATA_PATH_BYTES 92
+
+#define QUANTION_SECTION_SCAN_METADATA_KIND_STARTS 93
+
+#define QUANTION_SECTION_SCAN_METADATA_KIND_BYTES 94
+
+#define QUANTION_SECTION_SCAN_METADATA_ACCESSION_STARTS 95
+
+#define QUANTION_SECTION_SCAN_METADATA_ACCESSION_BYTES 96
+
+#define QUANTION_SECTION_SCAN_METADATA_ACCESSION_MISSING 97
+
+#define QUANTION_SECTION_SCAN_METADATA_NAME_STARTS 98
+
+#define QUANTION_SECTION_SCAN_METADATA_NAME_BYTES 99
+
+#define QUANTION_SECTION_SCAN_METADATA_VALUE_STARTS 100
+
+#define QUANTION_SECTION_SCAN_METADATA_VALUE_BYTES 101
+
+#define QUANTION_SECTION_SCAN_METADATA_VALUE_MISSING 102
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_STARTS 103
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_BYTES 104
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_MISSING 105
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS 106
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES 107
+
+#define QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING 108
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_MZ 109
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_RT 110
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_STARTS 111
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_BYTES 112
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_MISSING 113
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_ID_STARTS 114
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_ID_BYTES 115
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_ID_MISSING 116
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_STARTS 117
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_BYTES 118
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_MISSING 119
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_FREQUENCY 120
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_SCORE 121
+
+#define QUANTION_SECTION_FEATURE_ANNOTATION_COSINE 122
+
+#define QUANTION_SECTION_FILE_ANNOTATION_FEATURE 123
+
+#define QUANTION_SECTION_FILE_ANNOTATION_FILE 124
+
+#define QUANTION_SECTION_FILE_ANNOTATION_SCAN_INDEX 125
+
+#define QUANTION_SECTION_COMPOUND_MATCH_FEATURE 126
+
+#define QUANTION_SECTION_COMPOUND_MATCH_FILE 127
+
+#define QUANTION_SECTION_COMPOUND_MATCH_LABEL_STARTS 128
+
+#define QUANTION_SECTION_COMPOUND_MATCH_LABEL_BYTES 129
+
+#define QUANTION_SECTION_COMPOUND_MATCH_ID_STARTS 130
+
+#define QUANTION_SECTION_COMPOUND_MATCH_ID_BYTES 131
+
+#define QUANTION_SECTION_COMPOUND_MATCH_DATABASE_STARTS 132
+
+#define QUANTION_SECTION_COMPOUND_MATCH_DATABASE_BYTES 133
+
+#define QUANTION_SECTION_COMPOUND_MATCH_SCORE 134
+
+#define QUANTION_SECTION_COMPOUND_MATCH_COSINE 135
+
+#define QUANTION_SECTION_COMPOUND_MATCH_MZ_STARTS 136
+
+#define QUANTION_SECTION_COMPOUND_MATCH_MZ_VALUES 137
+
+#define QUANTION_SECTION_COMPOUND_MATCH_INTENSITY_STARTS 138
+
+#define QUANTION_SECTION_COMPOUND_MATCH_INTENSITY_VALUES 139
+
+#define QUANTION_SECTION_COMPOUND_MATCH_METADATA_NAME_STARTS 140
+
+#define QUANTION_SECTION_COMPOUND_MATCH_METADATA_NAME_BYTES 141
+
+#define QUANTION_SECTION_COMPOUND_MATCH_METADATA_VALUE_STARTS 142
+
+#define QUANTION_SECTION_COMPOUND_MATCH_METADATA_VALUE_BYTES 143
+
 typedef struct ImageSession ImageSession;
 
+typedef struct ModelHandle ModelHandle;
+
 typedef struct ParsedFile ParsedFile;
+
+typedef struct WarpModelHandle WarpModelHandle;
 
 typedef struct Buf {
   uint8_t *ptr;
@@ -216,9 +308,9 @@ typedef struct CPeakOptions {
   double noise;
   int auto_noise;
   int auto_baseline;
-  int lambda;
   int max_iterations;
   int allow_overlap;
+  double lambda;
   double min_snr;
   double min_r2;
   int kernel_size;
@@ -317,144 +409,6 @@ int parse_ion_path(const char *path_ptr, uintptr_t max_cache_size, struct Parsed
 int plan_open(const uint8_t *header_ptr, uintptr_t header_len, struct Buf *out);
 
 /**
- * Convert a parsed file to mzML and write the result to `out`.
- *
- * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `out` must be a valid writable `Buf` pointer.
- */
-int bin_to_mzml(struct ParsedFile *h, struct Buf *out);
-
-/**
- * Convert a parsed file to binary and write the result to `out`.
- *
- * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `out` must be a valid writable `Buf` pointer.
- */
-int mzml_to_bin(struct ParsedFile *h,
-                struct Buf *out,
-                uint8_t compression_level,
-                uint8_t f32_compress);
-
-#if !(defined(QUANTION_TARGET_WASM32) && !defined(QUANTION_TARGET_WASI))
-int convert_mzml_file_to_ion_file(const char *input_path,
-                                  const char *output_path,
-                                  uint8_t compression_level,
-                                  uint8_t force_f32);
-#endif
-
-/**
- * Find one peak and write the result to `out`.
- *
- * # Safety
- * `x_ptr` and `y_ptr` must point to `len` readable `f64` values.
- * `options` must be null or point to a valid `CPeakOptions`.
- * `out` must be a valid writable `Buf` pointer.
- */
-int get_peak(const double *x_ptr,
-             const double *y_ptr,
-             uintptr_t len,
-             double rt,
-             double range,
-             const struct CPeakOptions *options,
-             struct Buf *out);
-
-/**
- * Fit a Gaussian or EMG model to a peak and write the parameters JSON to `out`.
- *
- * `shape` is 0 for Gaussian, 1 for EMG.
- *
- * # Safety
- * `x_ptr` and `y_ptr` must point to `len` readable `f64` values.
- * `out` must be a valid writable `Buf` pointer.
- */
-int fit_peak(const double *x_ptr,
-             const double *y_ptr,
-             uintptr_t len,
-             double rt,
-             double intensity,
-             int shape,
-             struct Buf *out);
-
-/**
- * Render a fitted peak model over `x` and write the y curve to `out_y`.
- *
- * `shape` is 0 for Gaussian, 1 for EMG. The output has the same length as `x`.
- *
- * # Safety
- * `x_ptr` must point to `len` readable `f64` values.
- * `out_y` must be a valid writable `Buf` pointer.
- */
-int draw_peak(const double *x_ptr,
-              uintptr_t len,
-              int shape,
-              double height,
-              double center,
-              double fwhm,
-              double tail,
-              struct Buf *out_y);
-
-/**
- * Find peaks from EIC data and write the result to `out`.
- *
- * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `rts_ptr`, `mzs_ptr`, and `ranges_ptr` must point to `n` readable `f64` values.
- * If IDs are provided, `ids_off` and `ids_len` must point to `n` readable `u32` values,
- * and `ids_buf` must point to `ids_buf_len` readable bytes.
- * `opts` must be null or point to a valid `CPeakOptions`.
- * `out` must be a valid writable `Buf` pointer.
- */
-int32_t get_peaks_from_eic(const struct ParsedFile *h,
-                           const double *rts_ptr,
-                           const double *mzs_ptr,
-                           const double *ranges_ptr,
-                           const uint32_t *ids_off,
-                           const uint32_t *ids_len,
-                           const uint8_t *ids_buf,
-                           uintptr_t ids_buf_len,
-                           uintptr_t n,
-                           double from,
-                           double to,
-                           const struct CPeakOptions *opts,
-                           uintptr_t cores,
-                           struct Buf *out);
-
-/**
- * Find peaks from chromatogram data and write the result to `out`.
- *
- * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `sample_indices` must point to `n` readable `u32` values.
- * `target_rts` and `half_widths` must point to `n` readable `f64` values.
- * `opts` must be null or point to a valid `CPeakOptions`.
- * `out` must be a valid writable `Buf` pointer.
- */
-int32_t get_peaks_from_chrom(struct ParsedFile *h,
-                             const uint32_t *sample_indices,
-                             const double *target_rts,
-                             const double *ranges,
-                             uintptr_t n,
-                             const struct CPeakOptions *opts,
-                             uintptr_t cores,
-                             struct Buf *out);
-
-/**
- * Find peaks and write the result to `out`.
- *
- * # Safety
- * `x_ptr` and `y_ptr` must point to `len` readable `f64` values.
- * `opts` must be null or point to a valid `CPeakOptions`.
- * `out` must be a valid writable `Buf` pointer.
- */
-int find_peaks(const double *x_ptr,
-               const double *y_ptr,
-               uintptr_t len,
-               const struct CPeakOptions *opts,
-               struct Buf *out);
-
-/**
  * Write the noise window width and the noise intensity for an intensity array.
  *
  * # Safety
@@ -466,74 +420,11 @@ int find_noise_level(const float *y_ptr,
                      uintptr_t *out_width,
                      double *out_intensity);
 
-/**
- * Calculate an EIC and write `x` and `y` to `out_x` and `out_y`.
- *
- * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `out_x` and `out_y` must be valid writable `Buf` pointers.
- */
-int calculate_eic(struct ParsedFile *h,
-                  double target,
-                  double from,
-                  double to,
-                  double ppm,
-                  double mz_tol,
-                  struct Buf *out_x,
-                  struct Buf *out_y);
-
-int plan_eic(struct ParsedFile *h,
-             double target,
-             double from,
-             double to,
-             double ppm,
-             double mz_tol,
-             struct Buf *out);
-
-int plan_scans(struct ParsedFile *h,
-               uint8_t query_type,
-               double from_value,
-               double to_value,
-               uint8_t level,
-               struct Buf *out);
-
 int plan_image(struct ParsedFile *h,
                double target,
                double tolerance,
                uint8_t level,
                struct Buf *out);
-
-/**
- * Get scans by query and write the result to `out`.
- *
- * `query_type`: 0=RtRange, 1=ClosestRt, 2=MzRange, 3=ClosestMz.
- * `from_value` and `to_value` are the range bounds for range queries (types 0 and 2).
- * For point queries (types 1 and 3), only `from_value` is used; `to_value` is ignored.
- *
- * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `out` must be a valid writable `Buf` pointer.
- */
-int get_scans(struct ParsedFile *h,
-              uint8_t query_type,
-              double from_value,
-              double to_value,
-              uint8_t level,
-              struct Buf *out);
-
-/**
- * Build a 2D ion image for a target m/z by summing intensity in `[target - tolerance, target + tolerance]`
- * per spectrum and scattering the mean into a position_x/position_y grid. Writes an ion image bridge to `out`.
- *
- * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `out` must be a valid writable `Buf` pointer.
- */
-int get_ion_image(struct ParsedFile *h,
-                  double target,
-                  double tolerance,
-                  uint8_t level,
-                  struct Buf *out);
 
 int image_begin(struct ParsedFile *h,
                 double target,
@@ -555,89 +446,503 @@ int image_finish(struct ImageSession *session, struct Buf *out);
 
 void image_free(struct ImageSession *session);
 
-#if !(defined(QUANTION_TARGET_WASM32) && !defined(QUANTION_TARGET_WASI))
 /**
- * Find features across all samples in `dir` and write the result to `out`.
+ * Match each feature against the library. `files` holds `file_count` open samples.
  *
  * # Safety
- * `dir` must point to a valid NUL-terminated C string.
- * `peak_opts` must be null or point to a valid `CPeakOptions`.
- * `out` must be a valid writable `Buf` pointer.
+ * `library` and every handle in `files` must be valid `ParsedFile`s; `model` a valid model.
+ * `mzs` and `rts` must point to `feature_count` values. `out` must be a valid writable `Buf`.
  */
-int get_features(const char *dir,
-                 double from,
-                 double to,
-                 double eic_ppm,
-                 double eic_mz,
-                 double grid_min_mz,
-                 double grid_max_mz,
-                 double grid_step,
-                 double align_ppm,
-                 double align_mz_absolute,
-                 double align_rt_tolerance,
-                 int min_samples,
-                 const struct CPeakOptions *peak_opts,
-                 int cores,
-                 struct Buf *out);
-#endif
+int annotate_features(struct ParsedFile *library,
+                      const struct ModelHandle *model,
+                      struct ParsedFile *const *files,
+                      uintptr_t file_count,
+                      const double *mzs,
+                      const double *rts,
+                      uintptr_t feature_count,
+                      uintptr_t matches,
+                      double ppm_tolerance,
+                      double mz_tolerance,
+                      double rt_range,
+                      double min_relative_intensity,
+                      struct Buf *out_features,
+                      struct Buf *out_files,
+                      struct Buf *out_matches);
 
 /**
- * Find features in a single sample and write the result to `out`.
+ * Plan the byte ranges `annotate_features` reads from one sample.
  *
  * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `peak_opts` must be null or point to a valid `CPeakOptions`.
- * `out` must be a valid writable `Buf` pointer.
+ * `file` must be a valid `ParsedFile`. `mzs` and `rts` must point to `feature_count` values.
+ * `out` must be a valid writable `Buf`.
  */
-int find_features(struct ParsedFile *h,
-                  double from,
-                  double to,
-                  double eic_ppm,
-                  double eic_mz,
-                  double grid_min_mz,
-                  double grid_max_mz,
-                  double grid_step,
-                  const struct CPeakOptions *peak_opts,
-                  int cores,
-                  struct Buf *out);
+int plan_annotate_samples(struct ParsedFile *file,
+                          const double *mzs,
+                          const double *rts,
+                          uintptr_t feature_count,
+                          uintptr_t matches,
+                          double ppm_tolerance,
+                          double mz_tolerance,
+                          double rt_range,
+                          double min_relative_intensity,
+                          struct Buf *out);
 
 /**
- * Calculate a baseline and write the result to `out`.
+ * Plan the byte ranges `annotate_features` reads from the library, for every sample at once.
  *
  * # Safety
- * `y` must point to `len` readable `f64` values.
+ * `library` and every handle in `files` must be valid `ParsedFile`s; `model` a valid model.
+ * `mzs` and `rts` must point to `feature_count` values. `out` must be a valid writable `Buf`.
+ */
+int plan_annotate_library(struct ParsedFile *library,
+                          const struct ModelHandle *model,
+                          struct ParsedFile *const *files,
+                          uintptr_t file_count,
+                          const double *mzs,
+                          const double *rts,
+                          uintptr_t feature_count,
+                          uintptr_t matches,
+                          double ppm_tolerance,
+                          double mz_tolerance,
+                          double rt_range,
+                          double min_relative_intensity,
+                          struct Buf *out);
+
+int model_load_path(const uint8_t *path_ptr,
+                    uintptr_t path_len,
+                    struct ModelHandle **out,
+                    struct Buf *message);
+
+int model_load_bytes(const uint8_t *model_ptr,
+                     uintptr_t model_len,
+                     struct ModelHandle **out,
+                     struct Buf *message);
+
+void model_free(struct ModelHandle *model);
+
+int model_metadata(const struct ModelHandle *model, struct Buf *out);
+
+/**
+ * Write the error of the last failed call on this thread to `out` as UTF-8 text:
+ * code, kind, function, argument and message, separated by the unit separator (0x1F).
+ *
+ * # Safety
  * `out` must be a valid writable `Buf` pointer.
+ */
+int quantion_last_error(struct Buf *out);
+
+/**
+ * Open an mzML file from a path.
+ *
+ * # Safety
+ * `path` must be a valid NUL-terminated string. `dest` must be a valid writable pointer.
+ */
+int parse_mzml_path(const char *path, struct ParsedFile **dest);
+
+/**
+ * Write a sample as .ion. A null `out_path` or a URL returns the bytes in `out`; a path writes a file.
+ * For a URL the headers are checked here and the caller uploads the bytes with its own HTTP client. `headers` holds name, value, name, value… each ending in a NUL byte.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out_path` must be null or NUL-terminated.
+ * `headers` must point to `headers_len` readable bytes. `out` must be a valid writable `Buf`.
+ */
+int write_ion(struct ParsedFile *handle,
+              const char *out_path,
+              uint8_t overwrite,
+              uint8_t level,
+              uint8_t f32_compress,
+              uint32_t block_size,
+              uint32_t mz_window,
+              const uint8_t *headers,
+              uintptr_t headers_len,
+              struct Buf *out);
+
+/**
+ * Write a sample as mzML. A null `out_path` returns the bytes in `out`.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out_path` must be null or NUL-terminated.
+ * `out` must be a valid writable `Buf`.
+ */
+int write_mzml(struct ParsedFile *handle, const char *out_path, uint8_t overwrite, struct Buf *out);
+
+/**
+ * Find every peak in a trace.
+ *
+ * # Safety
+ * `x` and `y` must point to `count` readable values. `options` must be null or valid.
+ * `out` must be a valid writable `Buf`.
+ */
+int find_peaks(const double *x,
+               const double *y,
+               uintptr_t count,
+               const struct CPeakOptions *options,
+               struct Buf *out);
+
+/**
+ * Find the one peak near `rt`. A `range` of 0 searches the whole trace.
+ *
+ * # Safety
+ * `x` and `y` must point to `count` readable values. `options` must be null or valid.
+ * `out` must be a valid writable `Buf`.
+ */
+int get_peak(const double *x,
+             const double *y,
+             uintptr_t count,
+             double rt,
+             double range,
+             const struct CPeakOptions *options,
+             struct Buf *out);
+
+/**
+ * Fit a curve to the peak at `rt`. `shape` is 0 for Gaussian, 1 for EMG.
+ * An `intensity` of 0 takes it from the peak found. No fit gives an empty record.
+ *
+ * # Safety
+ * `x` and `y` must point to `count` readable values. `out` must be a valid writable `Buf`.
+ */
+int fit_peak(const double *x,
+             const double *y,
+             uintptr_t count,
+             double rt,
+             int shape,
+             double intensity,
+             struct Buf *out);
+
+/**
+ * Draw peak curves into one chromatogram. `from` and `to` both 0 fit the range around the peaks.
+ *
+ * # Safety
+ * `heights`, `centers`, `fwhms` and `tails` must point to `count` readable values.
+ * `out_x` and `out_y` must be valid writable `Buf` pointers.
+ */
+int draw_peaks(const double *heights,
+               const double *centers,
+               const double *fwhms,
+               const double *tails,
+               uintptr_t count,
+               double from,
+               double to,
+               uintptr_t points,
+               struct Buf *out_x,
+               struct Buf *out_y);
+
+/**
+ * Estimate a baseline with airPLS.
+ *
+ * # Safety
+ * `y` must point to `count` readable values. `out` must be a valid writable `Buf`.
  */
 int calculate_baseline(const double *y,
-                       uintptr_t len,
-                       int lambda,
-                       int max_iterations,
+                       uintptr_t count,
+                       double lambda,
+                       uintptr_t max_iterations,
                        struct Buf *out);
 
 /**
- * Find a targeted feature for each ROI and write the result to `out`.
+ * Extract the EIC of one m/z. `time_unit` is 0 for minutes, 1 for seconds.
  *
  * # Safety
- * `h` must be a valid `ParsedFile` pointer from this library.
- * `target_rts`, `target_mzs`, and `half_widths` must point to `n` readable `f64` values.
- * If IDs are provided, `ids_off` and `ids_len` must point to `n` readable `u32` values,
- * and `ids_buf` must point to `ids_buf_len` readable bytes.
- * `peak_opts` must be null or point to a valid `CPeakOptions`.
- * `out` must be a valid writable `Buf` pointer.
+ * `handle` must be a valid `ParsedFile`. `out_x` and `out_y` must be valid writable `Buf`s.
  */
-int find_feature(const struct ParsedFile *h,
-                 const double *target_rts,
-                 const double *target_mzs,
-                 const double *half_widths,
-                 const uint32_t *ids_off,
-                 const uint32_t *ids_len,
-                 const uint8_t *ids_buf,
-                 uintptr_t ids_buf_len,
-                 uintptr_t n,
-                 uintptr_t cores,
-                 double seed_ppm,
-                 double seed_mz,
-                 double final_ppm,
-                 double final_mz,
-                 const struct CPeakOptions *peak_opts,
+int calculate_eic(struct ParsedFile *handle,
+                  double mz,
+                  double from,
+                  double to,
+                  double ppm_tolerance,
+                  double mz_tolerance,
+                  uint8_t time_unit,
+                  struct Buf *out_x,
+                  struct Buf *out_y);
+
+/**
+ * Plan the byte ranges `calculate_eic` reads from an .ion file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
+ */
+int plan_eic(struct ParsedFile *handle,
+             double mz,
+             double from,
+             double to,
+             double ppm_tolerance,
+             double mz_tolerance,
+             uint8_t time_unit,
+             struct Buf *out);
+
+/**
+ * Read scans by rt, by precursor m/z, or both. Each `*_kind`: 0 any, 1 range (`from` to `to`), 2 closest to `from`.
+ * `time_unit` is 0 for minutes, 1 for seconds.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
+ */
+int get_scans(struct ParsedFile *handle,
+              uint8_t rt_kind,
+              double rt_from,
+              double rt_to,
+              uint8_t mz_kind,
+              double mz_from,
+              double mz_to,
+              uint8_t level,
+              uint8_t time_unit,
+              struct Buf *out);
+
+/**
+ * Read chosen arrays of each scan. `accessions` holds the number of each array, such as 1000786.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `accessions` must hold `array_count` numbers. `out` must be a valid writable `Buf`.
+ */
+int get_scans_with_arrays(struct ParsedFile *handle,
+                          uint8_t rt_kind,
+                          double rt_from,
+                          double rt_to,
+                          uint8_t mz_kind,
+                          double mz_from,
+                          double mz_to,
+                          uint8_t level,
+                          uint8_t time_unit,
+                          const uint32_t *accessions,
+                          uintptr_t array_count,
+                          struct Buf *out);
+
+/**
+ * Plan the byte ranges `get_scans_with_arrays` reads from an .ion file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `accessions` must hold `array_count` numbers. `out` must be a valid writable `Buf`.
+ */
+int plan_scans_with_arrays(struct ParsedFile *handle,
+                           uint8_t rt_kind,
+                           double rt_from,
+                           double rt_to,
+                           uint8_t mz_kind,
+                           double mz_from,
+                           double mz_to,
+                           uint8_t level,
+                           uint8_t time_unit,
+                           const uint32_t *accessions,
+                           uintptr_t array_count,
+                           struct Buf *out);
+
+/**
+ * Plan the byte ranges `get_scans` reads from an .ion file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
+ */
+int plan_scans(struct ParsedFile *handle,
+               uint8_t rt_kind,
+               double rt_from,
+               double rt_to,
+               uint8_t mz_kind,
+               double mz_from,
+               double mz_to,
+               uint8_t level,
+               uint8_t time_unit,
+               struct Buf *out);
+
+/**
+ * Read the attributes, cvParams and userParams of one scan, one row each. `tags` holds tag names split by the unit separator 0x1F; null or empty keeps every tag.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `tags` must be null or NUL-terminated text. `out` must be a valid writable `Buf`.
+ */
+int get_scan_metadata(struct ParsedFile *handle,
+                      uintptr_t index,
+                      const char *tags,
+                      struct Buf *out);
+
+/**
+ * Plan the byte ranges `get_scan_metadata` reads from an .ion file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
+ */
+int plan_scan_metadata(struct ParsedFile *handle, uintptr_t index, struct Buf *out);
+
+/**
+ * Build the ion image of one m/z. Only .ion files.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
+ */
+int get_ion_image(struct ParsedFile *handle,
+                  double mz,
+                  double tolerance,
+                  uint8_t level,
+                  struct Buf *out);
+
+/**
+ * Find the peak of each target in its EIC. A NaN range means no range: the whole EIC is searched.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `rts`, `mzs` and `ranges` must point to `count` values.
+ * Ids follow the `read_ids` layout. `options` must be null or valid. `out` must be a valid writable `Buf`.
+ */
+int find_targets(struct ParsedFile *handle,
+                 const double *rts,
+                 const double *mzs,
+                 const double *ranges,
+                 const uint32_t *ids_offsets,
+                 const uint32_t *ids_lengths,
+                 const uint8_t *ids_text,
+                 uintptr_t ids_text_len,
+                 uintptr_t count,
+                 double from,
+                 double to,
+                 double ppm_tolerance,
+                 double mz_tolerance,
+                 uint8_t time_unit,
+                 const struct CPeakOptions *options,
+                 uintptr_t threads,
                  struct Buf *out);
+
+/**
+ * Plan the byte ranges `find_targets` reads from an .ion file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `mzs` must point to `count` values.
+ * `out` must be a valid writable `Buf`.
+ */
+int plan_find_targets(struct ParsedFile *handle,
+                      const double *mzs,
+                      uintptr_t count,
+                      double from,
+                      double to,
+                      double ppm_tolerance,
+                      double mz_tolerance,
+                      uint8_t time_unit,
+                      struct Buf *out);
+
+/**
+ * Find the peak of each SRM transition. Needs the whole file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. The number arrays must point to `count` values.
+ * Ids follow the `read_ids` layout. `options` must be null or valid. `out` must be a valid writable `Buf`.
+ */
+int find_transitions(struct ParsedFile *handle,
+                     const double *precursors,
+                     const double *products,
+                     const double *rts,
+                     const double *ranges,
+                     const uint32_t *ids_offsets,
+                     const uint32_t *ids_lengths,
+                     const uint8_t *ids_text,
+                     uintptr_t ids_text_len,
+                     uintptr_t count,
+                     const struct CPeakOptions *options,
+                     uintptr_t threads,
+                     struct Buf *out);
+
+/**
+ * Find every feature in one file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `options` must be null or valid. `out` must be a valid writable `Buf`.
+ */
+int find_features(struct ParsedFile *handle,
+                  double from,
+                  double to,
+                  double ppm_tolerance,
+                  double mz_tolerance,
+                  uint8_t time_unit,
+                  double grid_start,
+                  double grid_end,
+                  double grid_step_size,
+                  const struct CPeakOptions *options,
+                  uintptr_t threads,
+                  struct Buf *out);
+
+/**
+ * Plan the byte ranges `find_features` reads from an .ion file.
+ *
+ * # Safety
+ * `handle` must be a valid `ParsedFile`. `out` must be a valid writable `Buf`.
+ */
+int plan_find_features(struct ParsedFile *handle,
+                       double from,
+                       double to,
+                       double ppm_tolerance,
+                       double mz_tolerance,
+                       uint8_t time_unit,
+                       double grid_start,
+                       double grid_end,
+                       double grid_step_size,
+                       struct Buf *out);
+
+/**
+ * Remove 13C isotope peaks from a feature list. `features` holds 8 values per feature, in this order:
+ * mz, rt, from, to, intensity, integral, n_points, frequency (NaN when there is none).
+ *
+ * # Safety
+ * `features` must point to `count * 8` readable values. `out` must be a valid writable `Buf`.
+ */
+int deisotope_features(const double *features,
+                       uintptr_t count,
+                       double rt_tolerance,
+                       double mz_tolerance,
+                       struct Buf *out);
+
+#if !(defined(QUANTION_TARGET_WASM32) && !defined(QUANTION_TARGET_WASI))
+/**
+ * Find features in every file of a folder and match them.
+ *
+ * # Safety
+ * `directory` must be a valid NUL-terminated string. `options` must be null or valid.
+ * `out` must be a valid writable `Buf`.
+ */
+int match_features(const char *directory,
+                   double from,
+                   double to,
+                   double ppm_tolerance,
+                   double mz_tolerance,
+                   uint8_t time_unit,
+                   double grid_start,
+                   double grid_end,
+                   double grid_step_size,
+                   double grouping_ppm_tolerance,
+                   double grouping_mz_tolerance,
+                   double grouping_rt_tolerance,
+                   double grouping_min_frequency,
+                   const struct CPeakOptions *options,
+                   uintptr_t threads,
+                   struct Buf *out);
+#endif
+
+int warp_model_load(const struct ModelHandle *model,
+                    struct WarpModelHandle **out,
+                    struct Buf *message);
+
+void warp_model_free(struct WarpModelHandle *warp);
+
+int predict_rts_from_file(const struct WarpModelHandle *warp,
+                          const struct ParsedFile *h,
+                          const double *mzs_ptr,
+                          const double *rts_ptr,
+                          uintptr_t n,
+                          struct Buf *out);
+
+int plan_predict_rts(const struct WarpModelHandle *warp,
+                     struct ParsedFile *h,
+                     const double *mzs_ptr,
+                     const double *rts_ptr,
+                     uintptr_t n,
+                     struct Buf *out);
+
+int calibrate_rts(const struct WarpModelHandle *warp,
+                  const struct ParsedFile *const *files,
+                  uintptr_t file_count,
+                  const uintptr_t *list_lengths,
+                  uintptr_t list_count,
+                  const uint32_t *ids_off,
+                  const uint32_t *ids_len,
+                  const uint8_t *ids_buf,
+                  uintptr_t ids_buf_len,
+                  const double *mzs_ptr,
+                  const double *rts_ptr,
+                  uintptr_t target_count,
+                  struct Buf *out);

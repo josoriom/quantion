@@ -1,11 +1,13 @@
 import { describe, test, expect } from "@jest/globals";
-import { getIonSource, type IonSource } from "../utilities/ionSource";
+import { getIonSource as readSource } from "../utilities/ionSource";
+
+const getIonSource = (input: unknown) => readSource(input as never, "parseIon");
 
 describe("ionSource classifier", () => {
   describe("path source", () => {
     test("empty string throws", () => {
       expect(() => getIonSource("")).toThrow(
-        "path string must not be empty",
+        "parseIon: source must not be an empty path",
       );
     });
 
@@ -27,19 +29,19 @@ describe("ionSource classifier", () => {
 
     test("string with file scheme throws", () => {
       expect(() => getIonSource("file:///data/file.ion")).toThrow(
-        "only http and https URLs can be read remotely",
+        "parseIon: source must be a path or an http(s) URL",
       );
     });
 
     test("string with ftp scheme throws", () => {
       expect(() => getIonSource("ftp://example.com/file.ion")).toThrow(
-        "only http and https URLs can be read remotely",
+        "parseIon: source must be a path or an http(s) URL",
       );
     });
 
     test("string with s3 scheme throws", () => {
       expect(() => getIonSource("s3://bucket/file.ion")).toThrow(
-        "only http and https URLs can be read remotely",
+        "parseIon: source must be a path or an http(s) URL",
       );
     });
 
@@ -76,20 +78,20 @@ describe("ionSource classifier", () => {
 
     test("file URL throws", () => {
       expect(() => getIonSource(new URL("file:///data/file.ion"))).toThrow(
-        "only http and https URLs can be read remotely",
+        "parseIon: source must be an http(s) URL",
       );
     });
 
     test("ftp URL throws", () => {
       expect(() => getIonSource(new URL("ftp://example.com/file.ion"))).toThrow(
-        "only http and https URLs can be read remotely",
+        "parseIon: source must be an http(s) URL",
       );
     });
 
     test("data URL throws", () => {
-      expect(() => getIonSource(new URL("data:application/octet-stream,x"))).toThrow(
-        "only http and https URLs can be read remotely",
-      );
+      expect(() =>
+        getIonSource(new URL("data:application/octet-stream,x")),
+      ).toThrow("parseIon: source must be an http(s) URL");
     });
   });
 
@@ -116,25 +118,25 @@ describe("ionSource classifier", () => {
   describe("invalid input", () => {
     test("null throws", () => {
       expect(() => getIonSource(null as any)).toThrow(
-        "must be a path string, a URL, or a byte buffer",
+        "parseIon: source must be a path, a URL or bytes",
       );
     });
 
     test("undefined throws", () => {
       expect(() => getIonSource(undefined as any)).toThrow(
-        "must be a path string, a URL, or a byte buffer",
+        "parseIon: source must be a path, a URL or bytes",
       );
     });
 
     test("number throws", () => {
       expect(() => getIonSource(42 as any)).toThrow(
-        "must be a path string, a URL, or a byte buffer",
+        "parseIon: source must be a path, a URL or bytes",
       );
     });
 
     test("plain object throws", () => {
       expect(() => getIonSource({} as any)).toThrow(
-        "must be a path string, a URL, or a byte buffer",
+        "parseIon: source must be a path, a URL or bytes",
       );
     });
   });

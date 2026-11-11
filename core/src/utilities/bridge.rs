@@ -11,12 +11,16 @@ pub const QUANTION_PAYLOAD_SCANS: u16 = 1;
 pub const QUANTION_PAYLOAD_ION_IMAGE: u16 = 2;
 pub const QUANTION_PAYLOAD_PEAKS: u16 = 3;
 pub const QUANTION_PAYLOAD_FEATURES: u16 = 4;
-pub const QUANTION_PAYLOAD_CHROM_PEAKS: u16 = 5;
 
 pub const QUANTION_PAYLOAD_FIT_RESULT: u16 = 6;
-pub const QUANTION_PAYLOAD_EIC_PEAKS: u16 = 7;
 pub const QUANTION_PAYLOAD_CONSENSUS_FEATURES: u16 = 8;
 pub const QUANTION_PAYLOAD_FOUND_FEATURES: u16 = 9;
+pub const QUANTION_PAYLOAD_WARP_TARGETS: u16 = 10;
+pub const QUANTION_PAYLOAD_MODEL_METADATA: u16 = 11;
+pub const QUANTION_PAYLOAD_SCAN_METADATA: u16 = 12;
+pub const QUANTION_PAYLOAD_FEATURE_ANNOTATIONS: u16 = 13;
+pub const QUANTION_PAYLOAD_FILE_ANNOTATIONS: u16 = 14;
+pub const QUANTION_PAYLOAD_COMPOUND_MATCHES: u16 = 15;
 
 pub const QUANTION_ELEMENT_F64: u32 = 1;
 pub const QUANTION_ELEMENT_U32: u32 = 2;
@@ -48,8 +52,6 @@ pub const QUANTION_SECTION_PEAK_RT: u32 = 20;
 pub const QUANTION_SECTION_PEAK_INTEGRAL: u32 = 21;
 pub const QUANTION_SECTION_PEAK_INTENSITY: u32 = 22;
 pub const QUANTION_SECTION_PEAK_POINT_COUNT: u32 = 23;
-pub const QUANTION_SECTION_PEAK_NOISE: u32 = 24;
-pub const QUANTION_SECTION_PEAK_R2: u32 = 25;
 
 pub const QUANTION_SECTION_FEATURE_MZ: u32 = 26;
 pub const QUANTION_SECTION_FEATURE_RT: u32 = 27;
@@ -58,20 +60,6 @@ pub const QUANTION_SECTION_FEATURE_TO: u32 = 29;
 pub const QUANTION_SECTION_FEATURE_INTENSITY: u32 = 30;
 pub const QUANTION_SECTION_FEATURE_INTEGRAL: u32 = 31;
 pub const QUANTION_SECTION_FEATURE_POINT_COUNT: u32 = 32;
-pub const QUANTION_SECTION_FEATURE_NOISE: u32 = 33;
-
-pub const QUANTION_SECTION_CHROM_INDEX: u32 = 34;
-pub const QUANTION_SECTION_CHROM_TARGET_RT: u32 = 35;
-pub const QUANTION_SECTION_CHROM_RT: u32 = 36;
-pub const QUANTION_SECTION_CHROM_FROM: u32 = 37;
-pub const QUANTION_SECTION_CHROM_TO: u32 = 38;
-pub const QUANTION_SECTION_CHROM_INTENSITY: u32 = 39;
-pub const QUANTION_SECTION_CHROM_INTEGRAL: u32 = 40;
-pub const QUANTION_SECTION_CHROM_TOTAL_AREA: u32 = 41;
-pub const QUANTION_SECTION_CHROM_ID_STARTS: u32 = 42;
-pub const QUANTION_SECTION_CHROM_ID_BYTES: u32 = 43;
-pub const QUANTION_SECTION_CHROM_TIMESTAMP_STARTS: u32 = 44;
-pub const QUANTION_SECTION_CHROM_TIMESTAMP_BYTES: u32 = 45;
 
 pub const QUANTION_SECTION_FIT_SHAPE: u32 = 46;
 pub const QUANTION_SECTION_FIT_HEIGHT: u32 = 47;
@@ -79,17 +67,6 @@ pub const QUANTION_SECTION_FIT_CENTER: u32 = 48;
 pub const QUANTION_SECTION_FIT_FWHM: u32 = 49;
 pub const QUANTION_SECTION_FIT_TAIL: u32 = 50;
 pub const QUANTION_SECTION_FIT_R2: u32 = 51;
-
-pub const QUANTION_SECTION_EIC_PEAK_ID_STARTS: u32 = 52;
-pub const QUANTION_SECTION_EIC_PEAK_ID_BYTES: u32 = 53;
-pub const QUANTION_SECTION_EIC_PEAK_MZ: u32 = 54;
-pub const QUANTION_SECTION_EIC_PEAK_ORT: u32 = 55;
-pub const QUANTION_SECTION_EIC_PEAK_RT: u32 = 56;
-pub const QUANTION_SECTION_EIC_PEAK_FROM: u32 = 57;
-pub const QUANTION_SECTION_EIC_PEAK_TO: u32 = 58;
-pub const QUANTION_SECTION_EIC_PEAK_INTENSITY: u32 = 59;
-pub const QUANTION_SECTION_EIC_PEAK_INTEGRAL: u32 = 60;
-pub const QUANTION_SECTION_EIC_PEAK_NOISE: u32 = 61;
 
 pub const QUANTION_SECTION_CONSENSUS_MZ: u32 = 62;
 pub const QUANTION_SECTION_CONSENSUS_RT: u32 = 63;
@@ -110,6 +87,76 @@ pub const QUANTION_SECTION_FOUND_INTEGRAL: u32 = 76;
 pub const QUANTION_SECTION_FOUND_POINT_COUNT: u32 = 77;
 pub const QUANTION_SECTION_FOUND_NOISE: u32 = 78;
 
+pub const QUANTION_SECTION_WARP_TARGET_ID_STARTS: u32 = 79;
+pub const QUANTION_SECTION_WARP_TARGET_ID_BYTES: u32 = 80;
+pub const QUANTION_SECTION_WARP_TARGET_MZ: u32 = 81;
+pub const QUANTION_SECTION_WARP_TARGET_RT: u32 = 82;
+
+pub const QUANTION_SECTION_MODEL_METADATA_KEY_STARTS: u32 = 83;
+pub const QUANTION_SECTION_MODEL_METADATA_KEY_BYTES: u32 = 84;
+pub const QUANTION_SECTION_MODEL_METADATA_VALUE_STARTS: u32 = 85;
+pub const QUANTION_SECTION_MODEL_METADATA_VALUE_BYTES: u32 = 86;
+pub const QUANTION_SECTION_CONSENSUS_POINT_COUNT: u32 = 87;
+
+pub const QUANTION_SECTION_SCAN_ARRAY_STARTS: u32 = 88;
+pub const QUANTION_SECTION_SCAN_ARRAY_VALUES: u32 = 89;
+pub const QUANTION_SECTION_SCAN_INDEX: u32 = 90;
+
+pub const QUANTION_SECTION_SCAN_METADATA_PATH_STARTS: u32 = 91;
+pub const QUANTION_SECTION_SCAN_METADATA_PATH_BYTES: u32 = 92;
+pub const QUANTION_SECTION_SCAN_METADATA_KIND_STARTS: u32 = 93;
+pub const QUANTION_SECTION_SCAN_METADATA_KIND_BYTES: u32 = 94;
+pub const QUANTION_SECTION_SCAN_METADATA_ACCESSION_STARTS: u32 = 95;
+pub const QUANTION_SECTION_SCAN_METADATA_ACCESSION_BYTES: u32 = 96;
+pub const QUANTION_SECTION_SCAN_METADATA_ACCESSION_MISSING: u32 = 97;
+pub const QUANTION_SECTION_SCAN_METADATA_NAME_STARTS: u32 = 98;
+pub const QUANTION_SECTION_SCAN_METADATA_NAME_BYTES: u32 = 99;
+pub const QUANTION_SECTION_SCAN_METADATA_VALUE_STARTS: u32 = 100;
+pub const QUANTION_SECTION_SCAN_METADATA_VALUE_BYTES: u32 = 101;
+pub const QUANTION_SECTION_SCAN_METADATA_VALUE_MISSING: u32 = 102;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_STARTS: u32 = 103;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_BYTES: u32 = 104;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_MISSING: u32 = 105;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_STARTS: u32 = 106;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_BYTES: u32 = 107;
+pub const QUANTION_SECTION_SCAN_METADATA_UNIT_ACCESSION_MISSING: u32 = 108;
+
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_MZ: u32 = 109;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_RT: u32 = 110;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_STARTS: u32 = 111;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_BYTES: u32 = 112;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_LABEL_MISSING: u32 = 113;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_ID_STARTS: u32 = 114;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_ID_BYTES: u32 = 115;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_ID_MISSING: u32 = 116;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_STARTS: u32 = 117;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_BYTES: u32 = 118;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_DATABASE_MISSING: u32 = 119;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_FREQUENCY: u32 = 120;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_SCORE: u32 = 121;
+pub const QUANTION_SECTION_FEATURE_ANNOTATION_COSINE: u32 = 122;
+pub const QUANTION_SECTION_FILE_ANNOTATION_FEATURE: u32 = 123;
+pub const QUANTION_SECTION_FILE_ANNOTATION_FILE: u32 = 124;
+pub const QUANTION_SECTION_FILE_ANNOTATION_SCAN_INDEX: u32 = 125;
+pub const QUANTION_SECTION_COMPOUND_MATCH_FEATURE: u32 = 126;
+pub const QUANTION_SECTION_COMPOUND_MATCH_FILE: u32 = 127;
+pub const QUANTION_SECTION_COMPOUND_MATCH_LABEL_STARTS: u32 = 128;
+pub const QUANTION_SECTION_COMPOUND_MATCH_LABEL_BYTES: u32 = 129;
+pub const QUANTION_SECTION_COMPOUND_MATCH_ID_STARTS: u32 = 130;
+pub const QUANTION_SECTION_COMPOUND_MATCH_ID_BYTES: u32 = 131;
+pub const QUANTION_SECTION_COMPOUND_MATCH_DATABASE_STARTS: u32 = 132;
+pub const QUANTION_SECTION_COMPOUND_MATCH_DATABASE_BYTES: u32 = 133;
+pub const QUANTION_SECTION_COMPOUND_MATCH_SCORE: u32 = 134;
+pub const QUANTION_SECTION_COMPOUND_MATCH_COSINE: u32 = 135;
+pub const QUANTION_SECTION_COMPOUND_MATCH_MZ_STARTS: u32 = 136;
+pub const QUANTION_SECTION_COMPOUND_MATCH_MZ_VALUES: u32 = 137;
+pub const QUANTION_SECTION_COMPOUND_MATCH_INTENSITY_STARTS: u32 = 138;
+pub const QUANTION_SECTION_COMPOUND_MATCH_INTENSITY_VALUES: u32 = 139;
+pub const QUANTION_SECTION_COMPOUND_MATCH_METADATA_NAME_STARTS: u32 = 140;
+pub const QUANTION_SECTION_COMPOUND_MATCH_METADATA_NAME_BYTES: u32 = 141;
+pub const QUANTION_SECTION_COMPOUND_MATCH_METADATA_VALUE_STARTS: u32 = 142;
+pub const QUANTION_SECTION_COMPOUND_MATCH_METADATA_VALUE_BYTES: u32 = 143;
+
 const ALIGNMENT: u64 = 8;
 
 fn size_of_element(element_type: u32) -> Option<u64> {
@@ -123,7 +170,9 @@ fn size_of_element(element_type: u32) -> Option<u64> {
 }
 
 fn round_up(value: u64) -> Option<u64> {
-    value.checked_add(ALIGNMENT - 1).map(|sum| sum & !(ALIGNMENT - 1))
+    value
+        .checked_add(ALIGNMENT - 1)
+        .map(|sum| sum & !(ALIGNMENT - 1))
 }
 
 #[derive(Clone, Copy)]
@@ -181,8 +230,7 @@ impl BridgeBuilder {
         bytes[4..6].copy_from_slice(&QUANTION_BRIDGE_LAYOUT_VERSION.to_le_bytes());
         bytes[6..8].copy_from_slice(&self.payload_kind.to_le_bytes());
         bytes[8..12].copy_from_slice(&section_count.to_le_bytes());
-        bytes[12..16]
-            .copy_from_slice(&(QUANTION_BRIDGE_HEADER_BYTES as u32).to_le_bytes());
+        bytes[12..16].copy_from_slice(&(QUANTION_BRIDGE_HEADER_BYTES as u32).to_le_bytes());
         bytes[16..24].copy_from_slice(&total_bytes.to_le_bytes());
         bytes[24..32].copy_from_slice(&self.record_count.to_le_bytes());
 
@@ -229,7 +277,10 @@ impl Bridge {
     pub fn write_f64_at(&mut self, id: u32, element_offset: u64, values: &[f64]) {
         let section = self.find_section(id, QUANTION_ELEMENT_F64);
         let end = element_offset + values.len() as u64;
-        assert!(end <= section.element_count, "bridge f64 write out of range");
+        assert!(
+            end <= section.element_count,
+            "bridge f64 write out of range"
+        );
         let source = unsafe {
             slice::from_raw_parts(values.as_ptr() as *const u8, std::mem::size_of_val(values))
         };
@@ -272,6 +323,16 @@ impl Bridge {
         self.copy_into(section.byte_offset, source);
     }
 
+    pub fn write_u8_section(&mut self, id: u32, values: &[u8]) {
+        let section = self.find_section(id, QUANTION_ELEMENT_U8);
+        assert_eq!(
+            section.element_count,
+            values.len() as u64,
+            "bridge u8 section written with the wrong element count"
+        );
+        self.copy_into(section.byte_offset, values);
+    }
+
     pub fn write_text_section(&mut self, id: u32, values: &[&str]) {
         let section = self.find_section(id, QUANTION_ELEMENT_U8);
         let mut at = section.byte_offset;
@@ -298,9 +359,30 @@ impl Bridge {
 }
 
 pub enum Column<'a> {
-    Numbers { id: u32, values: &'a [f64] },
-    Counts { id: u32, values: &'a [u32] },
-    Text { starts_id: u32, bytes_id: u32, values: &'a [&'a str] },
+    Numbers {
+        id: u32,
+        values: &'a [f64],
+    },
+    Counts {
+        id: u32,
+        values: &'a [u32],
+    },
+    Text {
+        starts_id: u32,
+        bytes_id: u32,
+        values: &'a [&'a str],
+    },
+    OptionalText {
+        starts_id: u32,
+        bytes_id: u32,
+        missing_id: u32,
+        values: &'a [Option<&'a str>],
+    },
+    NumberLists {
+        starts_id: u32,
+        values_id: u32,
+        values: &'a [&'a [f64]],
+    },
 }
 
 pub fn build_record_bridge(
@@ -329,6 +411,32 @@ pub fn build_record_bridge(
                 builder.add_section(*starts_id, QUANTION_ELEMENT_U64, values.len() as u64 + 1);
                 builder.add_section(*bytes_id, QUANTION_ELEMENT_U8, total);
             }
+            Column::OptionalText {
+                starts_id,
+                bytes_id,
+                missing_id,
+                values,
+            } => {
+                let mut total: u64 = 0;
+                for text in values.iter().flatten() {
+                    total = total.checked_add(text.len() as u64)?;
+                }
+                builder.add_section(*starts_id, QUANTION_ELEMENT_U64, values.len() as u64 + 1);
+                builder.add_section(*bytes_id, QUANTION_ELEMENT_U8, total);
+                builder.add_section(*missing_id, QUANTION_ELEMENT_U8, values.len() as u64);
+            }
+            Column::NumberLists {
+                starts_id,
+                values_id,
+                values,
+            } => {
+                let mut total: u64 = 0;
+                for list in values.iter() {
+                    total = total.checked_add(list.len() as u64)?;
+                }
+                builder.add_section(*starts_id, QUANTION_ELEMENT_U64, values.len() as u64 + 1);
+                builder.add_section(*values_id, QUANTION_ELEMENT_F64, total);
+            }
         }
     }
     let mut bridge = builder.build()?;
@@ -351,6 +459,44 @@ pub fn build_record_bridge(
                 }
                 bridge.write_u64_section(*starts_id, &starts);
                 bridge.write_text_section(*bytes_id, values);
+            }
+            Column::OptionalText {
+                starts_id,
+                bytes_id,
+                missing_id,
+                values,
+            } => {
+                let texts: Vec<&str> = values.iter().map(|text| text.unwrap_or_default()).collect();
+                let missing: Vec<u8> = values.iter().map(|text| u8::from(text.is_none())).collect();
+                let mut starts = Vec::with_capacity(texts.len() + 1);
+                let mut next: u64 = 0;
+                starts.push(0u64);
+                for text in &texts {
+                    next += text.len() as u64;
+                    starts.push(next);
+                }
+                bridge.write_u64_section(*starts_id, &starts);
+                bridge.write_text_section(*bytes_id, &texts);
+                bridge.write_u8_section(*missing_id, &missing);
+            }
+            Column::NumberLists {
+                starts_id,
+                values_id,
+                values,
+            } => {
+                let mut starts = Vec::with_capacity(values.len() + 1);
+                let mut next: u64 = 0;
+                starts.push(0u64);
+                for list in values.iter() {
+                    next += list.len() as u64;
+                    starts.push(next);
+                }
+                let flat: Vec<f64> = values
+                    .iter()
+                    .flat_map(|list| list.iter().copied())
+                    .collect();
+                bridge.write_u64_section(*starts_id, &starts);
+                bridge.write_f64_section(*values_id, &flat);
             }
         }
     }

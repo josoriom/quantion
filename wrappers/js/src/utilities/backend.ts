@@ -1,11 +1,21 @@
 import type {
-  CentroidScan,
+  DataXY,
+  Feature,
+  FindPeaksOptions,
   IonImage,
   NoiseLevel,
-  PeakOptions,
+  Peak,
+  PeakParameters,
+  Scan,
+  ScanParam,
+  Target,
 } from "../types/types";
+import type { ModelEntry } from "../types/internal";
+import type { Complete } from "./options";
 
 export type FileHandle = unknown;
+export type ModelHandle = unknown;
+export type WarpModelHandle = unknown;
 export type MaybePromise<T> = T | Promise<T>;
 
 export interface ByteRangeResult {
@@ -13,150 +23,266 @@ export interface ByteRangeResult {
   length: bigint;
 }
 
+export interface PositionSettings {
+  kind: number;
+  from: number;
+  to: number;
+}
+
+export interface ScanQuerySettings {
+  rt: PositionSettings;
+  mz: PositionSettings;
+}
+
+export function getScanQueryValues(query: ScanQuerySettings): number[] {
+  return [
+    query.rt.kind,
+    query.rt.from,
+    query.rt.to,
+    query.mz.kind,
+    query.mz.from,
+    query.mz.to,
+  ];
+}
+
+export interface AnnotationSettings {
+  matches: number;
+  ppmTolerance: number;
+  mzTolerance: number;
+  rtRange: number;
+  minRelativeIntensity: number;
+}
+
+export interface AnnotationTables {
+  features: Record<string, unknown>[];
+  files: Record<string, unknown>[];
+  matches: Record<string, unknown>[];
+}
+
+export function getAnnotationValues(settings: AnnotationSettings): number[] {
+  return [
+    settings.matches,
+    settings.ppmTolerance,
+    settings.mzTolerance,
+    settings.rtRange,
+    settings.minRelativeIntensity,
+  ];
+}
+
+export interface EicSettings {
+  from: number;
+  to: number;
+  ppmTolerance: number;
+  mzTolerance: number;
+  timeUnit: number;
+}
+
+export interface GridSettings {
+  start: number;
+  end: number;
+  stepSize: number;
+}
+
+export interface GroupingSettings {
+  ppmTolerance: number;
+  mzTolerance: number;
+  rtTolerance: number;
+  minFrequency: number;
+}
+
+export interface TargetColumns {
+  rts: Float64Array;
+  mzs: Float64Array;
+  ranges: Float64Array;
+  ids: string[];
+}
+
+export interface TransitionColumns {
+  precursors: Float64Array;
+  products: Float64Array;
+  rts: Float64Array;
+  ranges: Float64Array;
+  ids: string[];
+}
+
+export interface PeakColumns {
+  heights: Float64Array;
+  centers: Float64Array;
+  fwhms: Float64Array;
+  tails: Float64Array;
+}
+
+export type PeakSettings = Complete<FindPeaksOptions>;
+
 export interface Backend {
   readonly ready: boolean;
   readonly handlesAreGcFinalized: boolean;
+  readonly canReadPaths: boolean;
 
   init(): Promise<void>;
 
-  parseMzML(data: Uint8Array): FileHandle;
-  parseBin(data: Uint8Array, maxCacheSize?: number): FileHandle;
-  parseIonPath(
-    path: string,
-    cacheSize: number,
-  ): FileHandle | Promise<FileHandle>;
-
+  parseMzmlBytes(data: Uint8Array): FileHandle;
+  parseMzmlPath(path: string): FileHandle;
+  parseIonPath(path: string, cacheSize: number): MaybePromise<FileHandle>;
   parseIonRemote(url: URL, cacheSize: number): Promise<FileHandle>;
   parseIonBuffer(
     bytes: Uint8Array,
     cacheSize: number,
-  ): FileHandle | Promise<FileHandle>;
+  ): MaybePromise<FileHandle>;
   freeFile(handle: FileHandle): void;
-  fileToMzml(handle: FileHandle): string;
-  fileToBin(
+
+  writeIon(
     handle: FileHandle,
+    out: string | null,
+    overwrite: boolean,
     level: number,
     f32Compress: boolean,
-  ): Uint8Array;
+    blockSize: number,
+    mzWindow: number,
+    headers: Uint8Array,
+  ): MaybePromise<Uint8Array | undefined>;
+  writeMzml(
+    handle: FileHandle,
+    out: string | null,
+    overwrite: boolean,
+  ): Uint8Array | undefined;
+
+  loadModelPath(path: string): ModelHandle;
+  loadModelBytes(bytes: Uint8Array): ModelHandle;
+  freeModel(model: ModelHandle): void;
+  modelMetadata(model: ModelHandle): ModelEntry[];
+  loadWarp(model: ModelHandle): WarpModelHandle;
+  freeWarpModel(warp: WarpModelHandle): void;
+  prefetchRts(
+    warp: WarpModelHandle,
+    handle: FileHandle,
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Promise<void>;
+  predictRts(
+    warp: WarpModelHandle,
+    handle: FileHandle,
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Float64Array;
+  calibrateRts(
+    warp: WarpModelHandle,
+    handles: FileHandle[],
+    listLengths: number[],
+    ids: string[],
+    mzs: Float64Array,
+    rts: Float64Array,
+  ): Target[];
 
   calculateEic(
     handle: FileHandle,
-    targetMz: number,
-    from: number,
-    to: number,
-    ppmTol: number,
-    mzTol: number,
-  ): MaybePromise<{ x: Float64Array; y: Float64Array }>;
+    mz: number,
+    eic: EicSettings,
+  ): MaybePromise<DataXY>;
 
   getScans(
     handle: FileHandle,
-    queryType: number,
-    a: number,
-    b: number,
+    query: ScanQuerySettings,
     level: number,
-  ): MaybePromise<CentroidScan[]>;
+    timeUnit: number,
+  ): MaybePromise<Scan[]>;
+
+  getScansWithArrays(
+    handle: FileHandle,
+    query: ScanQuerySettings,
+    level: number,
+    timeUnit: number,
+    accessions: Uint32Array,
+    keys: string[],
+  ): MaybePromise<Scan[]>;
+
+  getScanMetadata(
+    handle: FileHandle,
+    index: number,
+    tags: string[],
+  ): MaybePromise<ScanParam[]>;
 
   getIonImage(
     handle: FileHandle,
     mz: number,
     tolerance: number,
     level: number,
-    onProgress?: (fetched: number, total: number, heldBytes: number) => void,
+    onProgress: (fetched: number, total: number, heldBytes: number) => void,
   ): MaybePromise<IonImage>;
 
-  findPeaks(
-    x: Float64Array,
-    y: Float64Array,
-    opts: PeakOptions | undefined,
-  ): any;
-
+  findPeaks(x: Float64Array, y: Float64Array, options: PeakSettings): Peak[];
   getPeak(
     x: Float64Array,
     y: Float64Array,
     rt: number,
     range: number,
-    opts: PeakOptions | undefined,
-  ): any;
-
+    options: PeakSettings,
+  ): Peak;
+  fitPeak(
+    x: Float64Array,
+    y: Float64Array,
+    rt: number,
+    shape: number,
+    intensity: number,
+  ): PeakParameters | null;
+  drawPeaks(
+    peaks: PeakColumns,
+    from: number,
+    to: number,
+    points: number,
+  ): DataXY;
   findNoiseLevel(y: Float32Array): NoiseLevel;
-
   calculateBaseline(
     y: Float64Array,
     lambda: number,
     maxIterations: number,
   ): Float64Array;
 
-  getPeaksFromEic(
-    handle: FileHandle,
-    rts: Float64Array,
-    mzs: Float64Array,
-    ranges: Float64Array,
-    offsets: Uint32Array | null,
-    lengths: Uint32Array | null,
-    idBytes: Uint8Array | null,
-    idBytesLen: number,
+  deisotopeFeatures(
+    values: Float64Array,
     count: number,
-    from: number,
-    to: number,
-    opts: PeakOptions | undefined,
-    cores: number,
-  ): any;
+    rtTolerance: number,
+    mzTolerance: number,
+  ): Feature[];
 
-  getPeaksFromChrom(
+  findTargets(
     handle: FileHandle,
-    indices: Uint32Array,
-    rts: Float64Array,
-    windows: Float64Array,
-    count: number,
-    opts: PeakOptions | undefined,
-    cores: number,
-  ): any;
+    targets: TargetColumns,
+    eic: EicSettings,
+    options: PeakSettings,
+    threads: number,
+  ): MaybePromise<Peak[]>;
+
+  findTransitions(
+    handle: FileHandle,
+    targets: TransitionColumns,
+    options: PeakSettings,
+    threads: number,
+  ): Peak[];
 
   findFeatures?(
     handle: FileHandle,
-    from: number,
-    to: number,
-    eicPpm: number,
-    eicMz: number,
-    gridStart: number,
-    gridEnd: number,
-    gridStep: number,
-    opts: PeakOptions | undefined,
-    cores: number,
-  ): any;
+    eic: EicSettings,
+    grid: GridSettings,
+    options: PeakSettings,
+    threads: number,
+  ): MaybePromise<Feature[]>;
 
-  findFeature(
-    handle: FileHandle,
-    rts: Float64Array,
+  annotateFeatures(
+    library: FileHandle | null,
+    model: ModelHandle | null,
+    files: FileHandle[],
     mzs: Float64Array,
-    ranges: Float64Array,
-    offsets: Uint32Array | null,
-    lengths: Uint32Array | null,
-    idBytes: Uint8Array | null,
-    idBytesLen: number,
-    count: number,
-    cores: number,
-    scanPpm: number,
-    scanMz: number,
-    eicPpm: number,
-    eicMz: number,
-    opts: PeakOptions | undefined,
-  ): any;
+    rts: Float64Array,
+    settings: AnnotationSettings,
+  ): Promise<AnnotationTables>;
 
-  getFeatures?(
-    dirPath: string,
-    from: number,
-    to: number,
-    eicPpm: number,
-    eicMz: number,
-    gStart: number,
-    gEnd: number,
-    gStep: number,
-    groupPpm: number,
-    groupMz: number,
-    groupRt: number,
-    prevalence: number,
-    opts: PeakOptions | undefined,
-    cores: number,
-  ): any;
+  matchFeatures?(
+    directory: string,
+    eic: EicSettings,
+    grid: GridSettings,
+    grouping: GroupingSettings,
+    options: PeakSettings,
+    threads: number,
+  ): Feature[];
 }
